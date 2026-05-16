@@ -1,0 +1,7 @@
+package arimo;
+
+public class Main {
+    public static main() : Void {
+        IO.println("Hello from arimo!");
+    }
+}
