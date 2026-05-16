@@ -1,0 +1,1528 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.parser;
+
+import arimo.compiler.token.TokenKind;
+import arimo.compiler.token.Token;
+import arimo.compiler.ast.ArimoModule;
+import arimo.compiler.ast.type.TypeKind;
+import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.expr.ExprKind;
+import arimo.compiler.ast.expr.BinaryOp;
+import arimo.compiler.ast.expr.UnaryOp;
+import arimo.compiler.ast.expr.MatchPatternKind;
+import arimo.compiler.ast.expr.MatchPattern;
+import arimo.compiler.ast.expr.MatchArm;
+import arimo.compiler.ast.expr.StrPart;
+import arimo.compiler.ast.expr.Expr;
+import arimo.compiler.ast.stmt.StmtKind;
+import arimo.compiler.ast.stmt.ElseIfBranch;
+import arimo.compiler.ast.stmt.CatchClause;
+import arimo.compiler.ast.stmt.SwitchCase;
+import arimo.compiler.ast.stmt.Stmt;
+import arimo.compiler.ast.decl.Visibility;
+import arimo.compiler.ast.decl.GenericBound;
+import arimo.compiler.ast.decl.Param;
+import arimo.compiler.ast.decl.FieldDecl;
+import arimo.compiler.ast.decl.MethodDecl;
+import arimo.compiler.ast.decl.ConstructorDecl;
+import arimo.compiler.ast.decl.EnumVariant;
+import arimo.compiler.ast.decl.ExternFnDecl;
+import arimo.compiler.ast.item.ItemKind;
+import arimo.compiler.ast.item.ClassDecl;
+import arimo.compiler.ast.item.InterfaceDecl;
+import arimo.compiler.ast.item.EnumDecl;
+import arimo.compiler.ast.item.StructDecl;
+import arimo.compiler.ast.item.ExceptionDecl;
+import arimo.compiler.ast.item.TypeAliasDecl;
+import arimo.compiler.ast.item.ExternDecl;
+import arimo.compiler.ast.item.ExtensionDecl;
+import arimo.compiler.ast.item.UnionDecl;
+import arimo.compiler.ast.item.Item;
+
+public class Parser {
+    private tokens   : List<Token>;
+    private pos      : Integer;
+    private eofTok   : Token;
+    public  hasError : Boolean;
+
+    public constructor(tokens: List<Token>) {
+        this.tokens   = tokens;
+        this.pos      = 0;
+        this.hasError = false;
+        this.eofTok   = Token.ofSimple(TokenKind.EOF, 0, 0);
+    }
+
+    // ── Token access helpers ──────────────────────────────────────────────────
+
+    private peek() : Token {
+        if (this.pos >= this.tokens.length()) { return this.eofTok; }
+        return this.tokens.get(this.pos);
+    }
+
+    private peekAt(offset: Integer) : Token {
+        Integer p = this.pos + offset;
+        if (p >= this.tokens.length()) { return this.eofTok; }
+        return this.tokens.get(p);
+    }
+
+    private advance() : Token {
+        Token t = this.peek();
+        if (this.pos < this.tokens.length()) { this.pos++; }
+        return t;
+    }
+
+    private check(kind: Integer) : Boolean {
+        return this.peek().kind == kind;
+    }
+
+    private checkAny2(k1: Integer, k2: Integer) : Boolean {
+        Integer k = this.peek().kind;
+        return k == k1 || k == k2;
+    }
+
+    private eat(kind: Integer) : Token {
+        if (!this.check(kind)) {
+            Token t = this.peek();
+            IO.error("parse error at ${t.line}:${t.col} — expected token ${kind} got ${t.kind}");
+            this.hasError = true;
+            return this.eofTok;
+        }
+        return this.advance();
+    }
+
+    private eatIdent() : String {
+        if (!this.check(TokenKind.IDENT)) {
+            Token t = this.peek();
+            IO.error("parse error at ${t.line}:${t.col} — expected identifier");
+            this.hasError = true;
+            return "";
+        }
+        return this.advance().strVal;
+    }
+
+    private skipSemicolon() : Void {
+        if (this.check(TokenKind.SEMICOLON)) { this.advance(); }
+    }
+
+    // ── Type name from token kind ─────────────────────────────────────────────
+
+    private typeKindForToken(k: Integer) : Integer {
+        if (k == TokenKind.TYPE_INTEGER) { return TypeKind.INTEGER; }
+        if (k == TokenKind.TYPE_FLOAT)   { return TypeKind.FLOAT;   }
+        if (k == TokenKind.TYPE_BOOLEAN) { return TypeKind.BOOLEAN; }
+        if (k == TokenKind.TYPE_STRING)  { return TypeKind.STR;     }
+        if (k == TokenKind.TYPE_VOID)    { return TypeKind.VOID;    }
+        if (k == TokenKind.TYPE_U8)      { return TypeKind.U8;      }
+        if (k == TokenKind.TYPE_U16)     { return TypeKind.U16;     }
+        if (k == TokenKind.TYPE_U32)     { return TypeKind.U32;     }
+        if (k == TokenKind.TYPE_U64)     { return TypeKind.U64;     }
+        if (k == TokenKind.TYPE_I8)      { return TypeKind.I8;      }
+        if (k == TokenKind.TYPE_I16)     { return TypeKind.I16;     }
+        if (k == TokenKind.TYPE_I32)     { return TypeKind.I32;     }
+        if (k == TokenKind.TYPE_I64)     { return TypeKind.I64;     }
+        if (k == TokenKind.TYPE_NORETURN){ return TypeKind.NORETURN;}
+        return -1;
+    }
+
+    private isSimpleTypeToken(k: Integer) : Boolean {
+        return this.typeKindForToken(k) != -1;
+    }
+
+    // ── Type parsing ──────────────────────────────────────────────────────────
+
+    public parseType() : AstType {
+        AstType base = this.parseBaseType();
+        if (this.check(TokenKind.QUESTION)) {
+            this.advance();
+            return AstType.nullable(base);
+        }
+        return base;
+    }
+
+    private parseBaseType() : AstType {
+        Token t    = this.peek();
+        Integer k  = t.kind;
+        Integer sl = t.line;
+        Integer sc = t.col;
+
+        // Primitive / fixed-size types
+        Integer simpleKind = this.typeKindForToken(k);
+        if (simpleKind != -1) {
+            this.advance();
+            return AstType.simple(simpleKind);
+        }
+
+        // Exception keyword used as type name
+        if (k == TokenKind.TYPE_EXCEPTION) {
+            this.advance();
+            return AstType.named("Exception");
+        }
+
+        // Collection types with generic params
+        if (k == TokenKind.TYPE_LIST) {
+            this.advance();
+            this.eat(TokenKind.LT);
+            AstType inner = this.parseType();
+            this.eat(TokenKind.GT);
+            return AstType.list(inner);
+        }
+        if (k == TokenKind.TYPE_HASHMAP) {
+            this.advance();
+            this.eat(TokenKind.LT);
+            AstType key = this.parseType();
+            this.eat(TokenKind.COMMA);
+            AstType val = this.parseType();
+            this.eat(TokenKind.GT);
+            return AstType.hashmap(key, val);
+        }
+        if (k == TokenKind.TYPE_MAP) {
+            this.advance();
+            this.eat(TokenKind.LT);
+            AstType key = this.parseType();
+            this.eat(TokenKind.COMMA);
+            AstType val = this.parseType();
+            this.eat(TokenKind.GT);
+            return AstType.map(key, val);
+        }
+        if (k == TokenKind.TYPE_TREEMAP) {
+            this.advance();
+            this.eat(TokenKind.LT);
+            AstType key = this.parseType();
+            this.eat(TokenKind.COMMA);
+            AstType val = this.parseType();
+            this.eat(TokenKind.GT);
+            return AstType.treemap(key, val);
+        }
+        if (k == TokenKind.TYPE_PAIR) {
+            this.advance();
+            this.eat(TokenKind.LT);
+            AstType a = this.parseType();
+            this.eat(TokenKind.COMMA);
+            AstType b = this.parseType();
+            this.eat(TokenKind.GT);
+            return AstType.pair(a, b);
+        }
+        if (k == TokenKind.TYPE_RAWPTR) {
+            this.advance();
+            this.eat(TokenKind.LT);
+            AstType inner = this.parseType();
+            this.eat(TokenKind.GT);
+            return AstType.rawptr(inner);
+        }
+        if (k == TokenKind.TYPE_SLICE) {
+            this.advance();
+            this.eat(TokenKind.LT);
+            AstType inner = this.parseType();
+            this.eat(TokenKind.GT);
+            return AstType.slice(inner);
+        }
+        if (k == TokenKind.TYPE_ARRAY) {
+            this.advance();
+            this.eat(TokenKind.LT);
+            AstType inner = this.parseType();
+            this.eat(TokenKind.COMMA);
+            Integer size = this.eat(TokenKind.INT).intVal;
+            this.eat(TokenKind.GT);
+            return AstType.array(inner, size);
+        }
+
+        // Function pointer: (A, B) -> C
+        if (k == TokenKind.LPAREN) {
+            this.advance();
+            List<AstType> params = List();
+            while (!this.check(TokenKind.RPAREN) && !this.check(TokenKind.EOF)) {
+                params.append(this.parseType());
+                if (this.check(TokenKind.COMMA)) { this.advance(); }
+            }
+            this.eat(TokenKind.RPAREN);
+            this.eat(TokenKind.ARROW);
+            AstType ret = this.parseType();
+            return AstType.fnptr(params, ret);
+        }
+
+        // Named / generic
+        if (k == TokenKind.IDENT) {
+            String name = this.advance().strVal;
+            if (this.check(TokenKind.LT)) {
+                this.advance();
+                List<AstType> args = List();
+                while (!this.check(TokenKind.GT) && !this.check(TokenKind.EOF)) {
+                    args.append(this.parseType());
+                    if (this.check(TokenKind.COMMA)) { this.advance(); }
+                }
+                this.eat(TokenKind.GT);
+                return AstType.generic(name, args);
+            }
+            return AstType.named(name);
+        }
+
+        IO.error("parse error at ${sl}:${sc} — unexpected token in type: ${k}");
+        this.hasError = true;
+        this.advance();
+        return AstType.simple(TypeKind.VOID);
+    }
+
+    // ── Expression parsing (Pratt) ────────────────────────────────────────────
+
+    private infixPrec(kind: Integer) : Integer {
+        // Assignment (right-assoc handled separately)
+        if (kind == TokenKind.EQ)         { return 1; }
+        if (kind == TokenKind.PLUS_EQ)    { return 1; }
+        if (kind == TokenKind.MINUS_EQ)   { return 1; }
+        if (kind == TokenKind.STAR_EQ)    { return 1; }
+        if (kind == TokenKind.SLASH_EQ)   { return 1; }
+        // Null coalesce
+        if (kind == TokenKind.QUESTION_QUESTION) { return 2; }
+        // Ternary ?
+        if (kind == TokenKind.QUESTION)   { return 3; }
+        // Logical
+        if (kind == TokenKind.PIPE_PIPE)  { return 4; }
+        if (kind == TokenKind.AND_AND)    { return 5; }
+        // Equality
+        if (kind == TokenKind.EQ_EQ)      { return 6; }
+        if (kind == TokenKind.BANG_EQ)    { return 6; }
+        // Comparison
+        if (kind == TokenKind.LT)         { return 7; }
+        if (kind == TokenKind.LT_EQ)      { return 7; }
+        if (kind == TokenKind.GT)         { return 7; }
+        if (kind == TokenKind.GT_EQ)      { return 7; }
+        // Bitwise
+        if (kind == TokenKind.PIPE)       { return 8; }
+        if (kind == TokenKind.CARET)      { return 9; }
+        if (kind == TokenKind.AMP)        { return 10; }
+        if (kind == TokenKind.LT_LT)      { return 11; }
+        if (kind == TokenKind.GT_GT)      { return 11; }
+        // Additive
+        if (kind == TokenKind.PLUS)       { return 12; }
+        if (kind == TokenKind.MINUS)      { return 12; }
+        // Multiplicative
+        if (kind == TokenKind.STAR)       { return 13; }
+        if (kind == TokenKind.SLASH)      { return 13; }
+        if (kind == TokenKind.PERCENT)    { return 13; }
+        return 0;
+    }
+
+    private infixOp(kind: Integer) : Integer {
+        if (kind == TokenKind.EQ)         { return BinaryOp.ASSIGN;     }
+        if (kind == TokenKind.PLUS_EQ)    { return BinaryOp.ADD_ASSIGN; }
+        if (kind == TokenKind.MINUS_EQ)   { return BinaryOp.SUB_ASSIGN; }
+        if (kind == TokenKind.STAR_EQ)    { return BinaryOp.MUL_ASSIGN; }
+        if (kind == TokenKind.SLASH_EQ)   { return BinaryOp.DIV_ASSIGN; }
+        if (kind == TokenKind.PIPE_PIPE)  { return BinaryOp.OR;         }
+        if (kind == TokenKind.AND_AND)    { return BinaryOp.AND;        }
+        if (kind == TokenKind.EQ_EQ)      { return BinaryOp.EQ;         }
+        if (kind == TokenKind.BANG_EQ)    { return BinaryOp.NE;         }
+        if (kind == TokenKind.LT)         { return BinaryOp.LT;         }
+        if (kind == TokenKind.LT_EQ)      { return BinaryOp.LE;         }
+        if (kind == TokenKind.GT)         { return BinaryOp.GT;         }
+        if (kind == TokenKind.GT_EQ)      { return BinaryOp.GE;         }
+        if (kind == TokenKind.PIPE)       { return BinaryOp.BITOR;      }
+        if (kind == TokenKind.CARET)      { return BinaryOp.XOR;        }
+        if (kind == TokenKind.AMP)        { return BinaryOp.BITAND;     }
+        if (kind == TokenKind.LT_LT)      { return BinaryOp.SHL;        }
+        if (kind == TokenKind.GT_GT)      { return BinaryOp.SHR;        }
+        if (kind == TokenKind.PLUS)       { return BinaryOp.ADD;        }
+        if (kind == TokenKind.MINUS)      { return BinaryOp.SUB;        }
+        if (kind == TokenKind.STAR)       { return BinaryOp.MUL;        }
+        if (kind == TokenKind.SLASH)      { return BinaryOp.DIV;        }
+        if (kind == TokenKind.PERCENT)    { return BinaryOp.MOD;        }
+        return -1;
+    }
+
+    public parseExpr(minPrec: Integer) : Expr {
+        Expr left = this.parsePrimary();
+
+        Boolean cont = true;
+        while (cont) {
+            Integer k    = this.peek().kind;
+            Integer prec = this.infixPrec(k);
+            if (prec == 0 || prec <= minPrec) { cont = false; }
+            else {
+                Integer sl = this.peek().line;
+                Integer sc = this.peek().col;
+
+                // Ternary
+                if (k == TokenKind.QUESTION) {
+                    this.advance();
+                    Expr then_ = this.parseExpr(0);
+                    this.eat(TokenKind.COLON);
+                    Expr else_ = this.parseExpr(0);
+                    left = Expr.ternary(left, then_, else_, sl, sc);
+                }
+                // Null coalesce
+                else if (k == TokenKind.QUESTION_QUESTION) {
+                    this.advance();
+                    Expr right = this.parseExpr(prec);
+                    left = Expr.nullCoalesce(left, right, sl, sc);
+                }
+                // Assignment (right-assoc: re-parse at same prec)
+                else if (k == TokenKind.EQ || k == TokenKind.PLUS_EQ ||
+                         k == TokenKind.MINUS_EQ || k == TokenKind.STAR_EQ ||
+                         k == TokenKind.SLASH_EQ) {
+                    this.advance();
+                    Integer op    = this.infixOp(k);
+                    Expr right = this.parseExpr(prec - 1);
+                    left = Expr.binop(op, left, right, sl, sc);
+                }
+                // Normal left-assoc binary
+                else {
+                    this.advance();
+                    Integer op = this.infixOp(k);
+                    Expr right = this.parseExpr(prec);
+                    left = Expr.binop(op, left, right, sl, sc);
+                }
+            }
+        }
+        return left;
+    }
+
+    private parseArgs() : List<Expr> {
+        this.eat(TokenKind.LPAREN);
+        List<Expr> args = List();
+        while (!this.check(TokenKind.RPAREN) && !this.check(TokenKind.EOF)) {
+            args.append(this.parseExpr(0));
+            if (this.check(TokenKind.COMMA)) { this.advance(); }
+        }
+        this.eat(TokenKind.RPAREN);
+        return args;
+    }
+
+    private parseStringInterp(sl: Integer, sc: Integer) : Expr {
+        List<StrPart> parts = List();
+        // Current token is STR or DOLLAR_LBRACE (start of string)
+        if (this.check(TokenKind.STR)) {
+            String text = this.advance().strVal;
+            if (!this.check(TokenKind.DOLLAR_LBRACE)) {
+                // Simple string literal
+                return Expr.strLit(text, sl, sc);
+            }
+            if (text.length() > 0) { parts.append(StrPart.text(text)); }
+        }
+        // Collect interp segments
+        while (this.check(TokenKind.DOLLAR_LBRACE)) {
+            this.advance();
+            Expr e = this.parseExpr(0);
+            this.eat(TokenKind.INTERP_END);
+            parts.append(StrPart.interp(e));
+            if (this.check(TokenKind.STR)) {
+                String txt = this.advance().strVal;
+                if (txt.length() > 0) { parts.append(StrPart.text(txt)); }
+            }
+        }
+        return Expr.strInterp(parts, sl, sc);
+    }
+
+    private parseLambda(sl: Integer, sc: Integer) : Expr {
+        // Already consumed LPAREN
+        List<String> params   = List();
+        List<AstType> paramTys = List();
+        while (!this.check(TokenKind.RPAREN) && !this.check(TokenKind.EOF)) {
+            params.append(this.eatIdent());
+            if (this.check(TokenKind.COMMA)) { this.advance(); }
+        }
+        this.eat(TokenKind.RPAREN);
+        this.eat(TokenKind.ARROW);
+        Expr body = this.parseExpr(0);
+        return Expr.lambda(params, paramTys, body, sl, sc);
+    }
+
+    private isLambdaStart() : Boolean {
+        // ( ) -> or ( ident ) -> or ( ident , ident ) ->
+        if (!this.check(TokenKind.LPAREN)) { return false; }
+        Integer save = this.pos;
+        this.advance(); // consume (
+        Integer depth = 1;
+        Boolean ok = false;
+        while (depth > 0 && !this.check(TokenKind.EOF)) {
+            Integer k = this.peek().kind;
+            if (k == TokenKind.LPAREN)  { depth++; this.advance(); }
+            else if (k == TokenKind.RPAREN) {
+                depth--;
+                this.advance();
+                if (depth == 0) {
+                    if (this.check(TokenKind.ARROW)) { ok = true; }
+                }
+            }
+            else { this.advance(); }
+        }
+        this.pos = save;
+        return ok;
+    }
+
+    private parsePrimary() : Expr {
+        Token t    = this.peek();
+        Integer sl = t.line;
+        Integer sc = t.col;
+        Integer k  = t.kind;
+
+        // Null literal
+        if (k == TokenKind.NULL) {
+            this.advance();
+            return Expr.nullLit(sl, sc);
+        }
+
+        // Int literal
+        if (k == TokenKind.INT) {
+            Integer v = this.advance().intVal;
+            return Expr.intLit(v, sl, sc);
+        }
+
+        // Float literal
+        if (k == TokenKind.FLOAT) {
+            Float v = this.advance().floatVal;
+            return Expr.floatLit(v, sl, sc);
+        }
+
+        // Bool literal
+        if (k == TokenKind.BOOL) {
+            Boolean v = this.advance().boolVal;
+            return Expr.boolLit(v, sl, sc);
+        }
+
+        // String (possibly interpolated)
+        if (k == TokenKind.STR || k == TokenKind.DOLLAR_LBRACE) {
+            return this.parseStringInterp(sl, sc);
+        }
+
+        // this
+        if (k == TokenKind.THIS) {
+            this.advance();
+            Expr obj = Expr.thisExpr(sl, sc);
+            return this.parseSuffix(obj);
+        }
+
+        // super
+        if (k == TokenKind.SUPER) {
+            this.advance();
+            Expr obj = Expr.superExpr(sl, sc);
+            return this.parseSuffix(obj);
+        }
+
+        // Unary prefix: !, -, ~, ++, --
+        if (k == TokenKind.BANG) {
+            this.advance();
+            return Expr.unary(UnaryOp.NOT, this.parsePrimary(), sl, sc);
+        }
+        if (k == TokenKind.MINUS) {
+            this.advance();
+            return Expr.unary(UnaryOp.NEG, this.parsePrimary(), sl, sc);
+        }
+        if (k == TokenKind.TILDE) {
+            this.advance();
+            return Expr.unary(UnaryOp.BITNOT, this.parsePrimary(), sl, sc);
+        }
+        if (k == TokenKind.PLUS_PLUS) {
+            this.advance();
+            return Expr.unary(UnaryOp.PRE_INC, this.parsePrimary(), sl, sc);
+        }
+        if (k == TokenKind.MINUS_MINUS) {
+            this.advance();
+            return Expr.unary(UnaryOp.PRE_DEC, this.parsePrimary(), sl, sc);
+        }
+
+        // await
+        if (k == TokenKind.AWAIT) {
+            this.advance();
+            Expr inner = this.parsePrimary();
+            return Expr.await_(inner, sl, sc);
+        }
+
+        // Lambda: (params) -> body
+        if (this.isLambdaStart()) {
+            this.advance(); // consume (
+            return this.parseLambda(sl, sc);
+        }
+
+        // Grouped expression: (expr)
+        if (k == TokenKind.LPAREN) {
+            this.advance();
+            Expr inner = this.parseExpr(0);
+            this.eat(TokenKind.RPAREN);
+            return this.parseSuffix(inner);
+        }
+
+        // match expression
+        if (k == TokenKind.MATCH) {
+            this.advance();
+            Expr subject = this.parseExpr(0);
+            this.eat(TokenKind.LBRACE);
+            List<MatchArm> arms = List();
+            while (!this.check(TokenKind.RBRACE) && !this.check(TokenKind.EOF)) {
+                MatchPattern pat = this.parseMatchPattern();
+                this.eat(TokenKind.FAT_ARROW);
+                Expr body = this.parseExpr(0);
+                if (this.check(TokenKind.COMMA)) { this.advance(); }
+                arms.append(MatchArm(pat, body));
+            }
+            this.eat(TokenKind.RBRACE);
+            return Expr.match_(subject, arms, sl, sc);
+        }
+
+        // Built-in stubs (IO, Math, Time, Memory) — parsed as static call or field
+        if (k == TokenKind.STD_IO || k == TokenKind.STD_MATH ||
+            k == TokenKind.STD_TIME || k == TokenKind.STD_MEMORY) {
+            String cls = this.stubName(k);
+            this.advance();
+            Expr obj = Expr.ident(cls, sl, sc);
+            return this.parseSuffix(obj);
+        }
+
+        // Identifier: variable, constructor call, or static call
+        if (k == TokenKind.IDENT) {
+            String name = this.advance().strVal;
+            // Constructor or static call: Name(args) or Name.method(args)
+            if (this.check(TokenKind.LPAREN)) {
+                List<Expr> args = this.parseArgs();
+                Expr call = Expr.ctorCall(name, args, sl, sc);
+                return this.parseSuffix(call);
+            }
+            Expr base = Expr.ident(name, sl, sc);
+            return this.parseSuffix(base);
+        }
+
+        // Type keywords used as receiver (e.g. Integer.sizeOf())
+        if (this.isSimpleTypeToken(k)) {
+            String name = this.typeTokenName(k);
+            this.advance();
+            Expr base = Expr.ident(name, sl, sc);
+            return this.parseSuffix(base);
+        }
+
+        IO.error("parse error at ${sl}:${sc} — unexpected token in expression: ${k}");
+        this.hasError = true;
+        this.advance();
+        return Expr.nullLit(sl, sc);
+    }
+
+    private stubName(k: Integer) : String {
+        if (k == TokenKind.STD_IO)     { return "IO";     }
+        if (k == TokenKind.STD_MATH)   { return "Math";   }
+        if (k == TokenKind.STD_TIME)   { return "Time";   }
+        if (k == TokenKind.STD_MEMORY) { return "Memory"; }
+        return "";
+    }
+
+    private typeTokenName(k: Integer) : String {
+        if (k == TokenKind.TYPE_INTEGER) { return "Integer"; }
+        if (k == TokenKind.TYPE_FLOAT)   { return "Float";   }
+        if (k == TokenKind.TYPE_BOOLEAN) { return "Boolean"; }
+        if (k == TokenKind.TYPE_STRING)  { return "String";  }
+        if (k == TokenKind.TYPE_U8)      { return "u8";      }
+        if (k == TokenKind.TYPE_U16)     { return "u16";     }
+        if (k == TokenKind.TYPE_U32)     { return "u32";     }
+        if (k == TokenKind.TYPE_U64)     { return "u64";     }
+        if (k == TokenKind.TYPE_I8)      { return "i8";      }
+        if (k == TokenKind.TYPE_I16)     { return "i16";     }
+        if (k == TokenKind.TYPE_I32)     { return "i32";     }
+        if (k == TokenKind.TYPE_I64)     { return "i64";     }
+        return "Unknown";
+    }
+
+    // Parse .field, .method(), [index], ?., ++, -- after an expression
+    private parseSuffix(base: Expr) : Expr {
+        Expr e = base;
+        Boolean cont = true;
+        while (cont) {
+            Integer sl = this.peek().line;
+            Integer sc = this.peek().col;
+            Integer k  = this.peek().kind;
+
+            if (k == TokenKind.DOT) {
+                this.advance();
+                String member = "";
+                if (this.check(TokenKind.IDENT)) {
+                    member = this.advance().strVal;
+                } else {
+                    IO.error("parse error at ${sl}:${sc} — expected member name after '.'");
+                    this.hasError = true;
+                    cont = false;
+                }
+                if (this.check(TokenKind.LPAREN)) {
+                    List<Expr> args = this.parseArgs();
+                    e = Expr.methodCall(e, member, args, sl, sc);
+                } else {
+                    e = Expr.fieldAccess(e, member, sl, sc);
+                }
+            }
+            else if (k == TokenKind.QUESTION_DOT) {
+                this.advance();
+                String member = this.eatIdent();
+                List<Expr> args = null;
+                if (this.check(TokenKind.LPAREN)) {
+                    args = this.parseArgs();
+                }
+                e = Expr.nullSafe(e, member, args, sl, sc);
+            }
+            else if (k == TokenKind.LBRACKET) {
+                this.advance();
+                Expr idx = this.parseExpr(0);
+                this.eat(TokenKind.RBRACKET);
+                e = Expr.index(e, idx, sl, sc);
+            }
+            else if (k == TokenKind.PLUS_PLUS) {
+                this.advance();
+                e = Expr.unary(UnaryOp.POST_INC, e, sl, sc);
+            }
+            else if (k == TokenKind.MINUS_MINUS) {
+                this.advance();
+                e = Expr.unary(UnaryOp.POST_DEC, e, sl, sc);
+            }
+            else if (k == TokenKind.AS) {
+                this.advance();
+                AstType ty = this.parseType();
+                e = Expr.cast(e, ty, sl, sc);
+            }
+            else {
+                cont = false;
+            }
+        }
+        return e;
+    }
+
+    // ── Match pattern ─────────────────────────────────────────────────────────
+
+    private parseMatchPattern() : MatchPattern {
+        // Wildcard
+        if (this.check(TokenKind.IDENT) && this.peek().strVal == "_") {
+            this.advance();
+            return MatchPattern.wildcard();
+        }
+
+        // String literal
+        if (this.check(TokenKind.STR)) {
+            String s = this.advance().strVal;
+            return MatchPattern.ofStrLit(s);
+        }
+
+        // Integer literal
+        if (this.check(TokenKind.INT)) {
+            Integer n = this.advance().intVal;
+            return MatchPattern.ofIntLit(n);
+        }
+
+        // EnumName.Variant or EnumName.Variant(bindings) or just binding name
+        if (this.check(TokenKind.IDENT)) {
+            String first = this.advance().strVal;
+            if (this.check(TokenKind.DOT)) {
+                this.advance();
+                String variant = this.eatIdent();
+                List<String> bindings = List();
+                if (this.check(TokenKind.LPAREN)) {
+                    this.advance();
+                    while (!this.check(TokenKind.RPAREN) && !this.check(TokenKind.EOF)) {
+                        bindings.append(this.eatIdent());
+                        if (this.check(TokenKind.COMMA)) { this.advance(); }
+                    }
+                    this.eat(TokenKind.RPAREN);
+                }
+                return MatchPattern.variant(first, variant, bindings);
+            }
+            return MatchPattern.binding(first);
+        }
+
+        IO.error("parse error — unexpected token in match pattern");
+        this.hasError = true;
+        return MatchPattern.wildcard();
+    }
+
+    // ── Statement parsing ─────────────────────────────────────────────────────
+
+    public parseBlock() : List<Stmt> {
+        this.eat(TokenKind.LBRACE);
+        List<Stmt> stmts = List();
+        while (!this.check(TokenKind.RBRACE) && !this.check(TokenKind.EOF)) {
+            Stmt s = this.parseStmt();
+            if (s != null) { stmts.append(s); }
+        }
+        this.eat(TokenKind.RBRACE);
+        return stmts;
+    }
+
+    private looksLikeVarDecl() : Boolean {
+        Integer k = this.peek().kind;
+        if (this.isSimpleTypeToken(k)) { return true; }
+        if (k == TokenKind.TYPE_LIST || k == TokenKind.TYPE_HASHMAP ||
+            k == TokenKind.TYPE_MAP  || k == TokenKind.TYPE_TREEMAP ||
+            k == TokenKind.TYPE_PAIR || k == TokenKind.TYPE_RAWPTR  ||
+            k == TokenKind.TYPE_ARRAY || k == TokenKind.TYPE_SLICE  ||
+            k == TokenKind.TYPE_EXCEPTION) { return true; }
+        if (k == TokenKind.IDENT) {
+            Integer nk = this.peekAt(1).kind;
+            return nk == TokenKind.IDENT;
+        }
+        return false;
+    }
+
+    public parseStmt() : Stmt {
+        Token t    = this.peek();
+        Integer sl = t.line;
+        Integer sc = t.col;
+        Integer k  = t.kind;
+
+        // return
+        if (k == TokenKind.RETURN) {
+            this.advance();
+            Expr e = null;
+            if (!this.check(TokenKind.SEMICOLON) && !this.check(TokenKind.RBRACE)) {
+                e = this.parseExpr(0);
+            }
+            this.skipSemicolon();
+            return Stmt.return_(e, sl, sc);
+        }
+
+        // throw
+        if (k == TokenKind.THROW) {
+            this.advance();
+            Expr e = this.parseExpr(0);
+            this.skipSemicolon();
+            return Stmt.throw_(e, sl, sc);
+        }
+
+        // break
+        if (k == TokenKind.BREAK) {
+            this.advance();
+            this.skipSemicolon();
+            return Stmt.break_(sl, sc);
+        }
+
+        // continue
+        if (k == TokenKind.CONTINUE) {
+            this.advance();
+            this.skipSemicolon();
+            return Stmt.continue_(sl, sc);
+        }
+
+        // defer
+        if (k == TokenKind.DEFER) {
+            this.advance();
+            Expr e = this.parseExpr(0);
+            this.skipSemicolon();
+            return Stmt.defer_(e, sl, sc);
+        }
+
+        // if
+        if (k == TokenKind.IF) {
+            this.advance();
+            this.eat(TokenKind.LPAREN);
+            Expr cond = this.parseExpr(0);
+            this.eat(TokenKind.RPAREN);
+            List<Stmt> then_ = this.parseBlock();
+            List<ElseIfBranch> elseIfs = List();
+            List<Stmt> else_ = null;
+            while (this.check(TokenKind.ELSE)) {
+                this.advance();
+                if (this.check(TokenKind.IF)) {
+                    this.advance();
+                    this.eat(TokenKind.LPAREN);
+                    Expr eic = this.parseExpr(0);
+                    this.eat(TokenKind.RPAREN);
+                    List<Stmt> eib = this.parseBlock();
+                    elseIfs.append(ElseIfBranch(eic, eib));
+                } else {
+                    else_ = this.parseBlock();
+                }
+            }
+            return Stmt.if_(cond, then_, elseIfs, else_, sl, sc);
+        }
+
+        // while
+        if (k == TokenKind.WHILE) {
+            this.advance();
+            this.eat(TokenKind.LPAREN);
+            Expr cond = this.parseExpr(0);
+            this.eat(TokenKind.RPAREN);
+            List<Stmt> body = this.parseBlock();
+            return Stmt.while_(cond, body, sl, sc);
+        }
+
+        // for
+        if (k == TokenKind.FOR) {
+            this.advance();
+            this.eat(TokenKind.LPAREN);
+            // Determine: for-each or C-style
+            // for (Type name : iter) or for (Type name in iter) or for (Type name = init; cond; step)
+            AstType ty   = this.parseType();
+            String  name = this.eatIdent();
+            if (this.check(TokenKind.COLON) || (this.check(TokenKind.IDENT) && this.peek().strVal == "in")) {
+                this.advance(); // consume : or 'in'
+                Expr iter = this.parseExpr(0);
+                this.eat(TokenKind.RPAREN);
+                List<Stmt> body = this.parseBlock();
+                return Stmt.forEach(ty, name, iter, body, sl, sc);
+            }
+            // C-style: already parsed Type name, now expect = init ; cond ; step
+            this.eat(TokenKind.EQ);
+            Expr initVal = this.parseExpr(0);
+            Stmt init    = Stmt.varDecl(ty, name, initVal, sl, sc);
+            this.eat(TokenKind.SEMICOLON);
+            Expr cond = this.parseExpr(0);
+            this.eat(TokenKind.SEMICOLON);
+            Expr step = this.parseExpr(0);
+            this.eat(TokenKind.RPAREN);
+            List<Stmt> body = this.parseBlock();
+            return Stmt.for_(init, cond, step, body, sl, sc);
+        }
+
+        // switch
+        if (k == TokenKind.SWITCH) {
+            this.advance();
+            this.eat(TokenKind.LPAREN);
+            Expr expr = this.parseExpr(0);
+            this.eat(TokenKind.RPAREN);
+            this.eat(TokenKind.LBRACE);
+            List<SwitchCase> cases = List();
+            while (!this.check(TokenKind.RBRACE) && !this.check(TokenKind.EOF)) {
+                if (this.check(TokenKind.DEFAULT)) {
+                    this.advance();
+                    this.eat(TokenKind.COLON);
+                    List<Stmt> cbody = this.parseCaseBody();
+                    cases.append(SwitchCase.default_(cbody));
+                } else {
+                    this.eat(TokenKind.CASE);
+                    Expr pat = this.parseExpr(0);
+                    this.eat(TokenKind.COLON);
+                    List<Stmt> cbody = this.parseCaseBody();
+                    cases.append(SwitchCase.case_(pat, cbody));
+                }
+            }
+            this.eat(TokenKind.RBRACE);
+            return Stmt.switch_(expr, cases, sl, sc);
+        }
+
+        // try/catch/finally
+        if (k == TokenKind.TRY) {
+            this.advance();
+            List<Stmt> tryBody = this.parseBlock();
+            List<CatchClause> catches = List();
+            while (this.check(TokenKind.CATCH)) {
+                this.advance();
+                this.eat(TokenKind.LPAREN);
+                AstType exTy = this.parseType();
+                String exName = this.eatIdent();
+                this.eat(TokenKind.RPAREN);
+                List<Stmt> cbody = this.parseBlock();
+                catches.append(CatchClause(exTy, exName, cbody));
+            }
+            List<Stmt> finally_ = null;
+            if (this.check(TokenKind.FINALLY)) {
+                this.advance();
+                finally_ = this.parseBlock();
+            }
+            return Stmt.try_(tryBody, catches, finally_, sl, sc);
+        }
+
+        // asm block
+        if (k == TokenKind.ASM) {
+            this.advance();
+            this.eat(TokenKind.LBRACE);
+            String asmText = "";
+            while (!this.check(TokenKind.RBRACE) && !this.check(TokenKind.EOF)) {
+                if (this.check(TokenKind.STR)) {
+                    asmText = asmText.concat(this.advance().strVal).concat("\n");
+                } else {
+                    this.advance();
+                }
+            }
+            this.eat(TokenKind.RBRACE);
+            return Stmt.asm_(asmText, sl, sc);
+        }
+
+        // volatile var decl
+        if (k == TokenKind.VOLATILE) {
+            this.advance();
+            AstType ty   = this.parseType();
+            String  name2 = this.eatIdent();
+            Expr init = null;
+            if (this.check(TokenKind.EQ)) { this.advance(); init = this.parseExpr(0); }
+            this.skipSemicolon();
+            return Stmt.volatileVarDecl(ty, name2, init, sl, sc);
+        }
+
+        // var decl: Type name = expr; or Type name;
+        if (this.looksLikeVarDecl()) {
+            AstType ty   = this.parseType();
+            String  name3 = this.eatIdent();
+            Expr init = null;
+            if (this.check(TokenKind.EQ)) { this.advance(); init = this.parseExpr(0); }
+            this.skipSemicolon();
+            return Stmt.varDecl(ty, name3, init, sl, sc);
+        }
+
+        // Expression statement
+        Expr e = this.parseExpr(0);
+        this.skipSemicolon();
+        return Stmt.exprStmt(e, sl, sc);
+    }
+
+    private parseCaseBody() : List<Stmt> {
+        List<Stmt> stmts = List();
+        while (!this.check(TokenKind.CASE) &&
+               !this.check(TokenKind.DEFAULT) &&
+               !this.check(TokenKind.RBRACE) &&
+               !this.check(TokenKind.EOF)) {
+            Stmt s = this.parseStmt();
+            if (s != null) { stmts.append(s); }
+        }
+        return stmts;
+    }
+
+    // ── Annotation parsing ────────────────────────────────────────────────────
+
+    private parseAnnotations() : List<String> {
+        List<String> annots = List();
+        while (this.check(TokenKind.AT)) {
+            this.advance();
+            String name = this.eatIdent();
+            // Optional argument: @Deprecated("msg") or @Align(16)
+            if (this.check(TokenKind.LPAREN)) {
+                this.advance();
+                while (!this.check(TokenKind.RPAREN) && !this.check(TokenKind.EOF)) {
+                    this.advance();
+                }
+                this.eat(TokenKind.RPAREN);
+            }
+            annots.append(name);
+        }
+        return annots;
+    }
+
+    // ── Generic bounds ────────────────────────────────────────────────────────
+
+    private parseGenericBounds() : List<GenericBound> {
+        List<GenericBound> bounds = List();
+        if (!this.check(TokenKind.LT)) { return bounds; }
+        this.advance();
+        while (!this.check(TokenKind.GT) && !this.check(TokenKind.EOF)) {
+            String name = this.eatIdent();
+            GenericBound gb = GenericBound(name);
+            if (this.check(TokenKind.COLON)) {
+                this.advance();
+                gb.bounds.append(this.eatIdent());
+                while (this.check(TokenKind.PLUS)) {
+                    this.advance();
+                    gb.bounds.append(this.eatIdent());
+                }
+            }
+            bounds.append(gb);
+            if (this.check(TokenKind.COMMA)) { this.advance(); }
+        }
+        this.eat(TokenKind.GT);
+        return bounds;
+    }
+
+    // ── Parameter list ────────────────────────────────────────────────────────
+
+    private parseParams() : List<Param> {
+        List<Param> params = List();
+        this.eat(TokenKind.LPAREN);
+        while (!this.check(TokenKind.RPAREN) && !this.check(TokenKind.EOF)) {
+            Boolean isVariadic = false;
+            if (this.check(TokenKind.ELLIPSIS)) { this.advance(); isVariadic = true; }
+            AstType ty   = this.parseType();
+            String  name = this.eatIdent();
+            Param p = Param(name, ty);
+            p.isVariadic = isVariadic;
+            // Default value
+            if (this.check(TokenKind.EQ)) {
+                this.advance();
+                p.default_ = this.parseExpr(0);
+            }
+            params.append(p);
+            if (this.check(TokenKind.COMMA)) { this.advance(); }
+        }
+        this.eat(TokenKind.RPAREN);
+        return params;
+    }
+
+    // ── Method declaration ────────────────────────────────────────────────────
+
+    private parseMethod(vis: Integer, isStatic: Boolean, isAbstract: Boolean,
+                        isDefault: Boolean, isOverride: Boolean,
+                        isAsync: Boolean, isOperator: Boolean) : MethodDecl {
+        String name = "";
+        if (isOperator) {
+            // operator token follows
+            name = "operator_" + this.operatorSymbol();
+        } else {
+            name = this.eatIdent();
+        }
+        MethodDecl m = MethodDecl(vis, name);
+        m.isStatic   = isStatic;
+        m.isAbstract = isAbstract;
+        m.isDefault  = isDefault;
+        m.isOverride = isOverride;
+        m.isAsync    = isAsync;
+        m.isOperator = isOperator;
+        m.params     = this.parseParams();
+        if (this.check(TokenKind.COLON)) {
+            this.advance();
+            m.returnTy = this.parseType();
+        }
+        if (this.check(TokenKind.LBRACE)) {
+            m.body = this.parseBlock();
+        } else {
+            this.skipSemicolon();
+        }
+        return m;
+    }
+
+    private operatorSymbol() : String {
+        Integer k = this.peek().kind;
+        this.advance();
+        if (k == TokenKind.PLUS)    { return "add";  }
+        if (k == TokenKind.MINUS)   { return "sub";  }
+        if (k == TokenKind.STAR)    { return "mul";  }
+        if (k == TokenKind.SLASH)   { return "div";  }
+        if (k == TokenKind.PERCENT) { return "mod";  }
+        if (k == TokenKind.EQ_EQ)   { return "eq";   }
+        if (k == TokenKind.BANG_EQ) { return "ne";   }
+        if (k == TokenKind.LT)      { return "lt";   }
+        if (k == TokenKind.GT)      { return "gt";   }
+        if (k == TokenKind.LT_EQ)   { return "le";   }
+        if (k == TokenKind.GT_EQ)   { return "ge";   }
+        return "op";
+    }
+
+    // ── Field declaration ─────────────────────────────────────────────────────
+
+    private parseField(vis: Integer, isStatic: Boolean, isReadonly: Boolean) : FieldDecl {
+        String name = this.eatIdent();
+        this.eat(TokenKind.COLON);
+        AstType ty = this.parseType();
+        FieldDecl f = FieldDecl(vis, name, ty);
+        f.isStatic   = isStatic;
+        f.isReadonly = isReadonly;
+        if (this.check(TokenKind.EQ)) {
+            this.advance();
+            f.init = this.parseExpr(0);
+        }
+        this.skipSemicolon();
+        return f;
+    }
+
+    // ── Class body members ────────────────────────────────────────────────────
+
+    private parseClassBody(classDecl: ClassDecl) : Void {
+        this.eat(TokenKind.LBRACE);
+        while (!this.check(TokenKind.RBRACE) && !this.check(TokenKind.EOF)) {
+            List<String> annots = this.parseAnnotations();
+
+            Integer vis      = Visibility.PRIVATE;
+            Boolean isStatic = false;
+            Boolean isAbstract = false;
+            Boolean isOverride = false;
+            Boolean isReadonly = false;
+            Boolean isAsync  = false;
+            Boolean isOperator = false;
+            Boolean isDefault  = false;
+
+            // Visibility
+            if (this.check(TokenKind.PUBLIC))    { this.advance(); vis = Visibility.PUBLIC;    }
+            else if (this.check(TokenKind.PRIVATE))   { this.advance(); vis = Visibility.PRIVATE;   }
+            else if (this.check(TokenKind.PROTECTED)) { this.advance(); vis = Visibility.PROTECTED; }
+            else if (this.check(TokenKind.INTERNAL))  { this.advance(); vis = Visibility.INTERNAL;  }
+
+            // Modifiers
+            Boolean contMod = true;
+            while (contMod) {
+                if (this.check(TokenKind.STATIC))   { this.advance(); isStatic   = true; }
+                else if (this.check(TokenKind.ABSTRACT)) { this.advance(); isAbstract = true; }
+                else if (this.check(TokenKind.OVERRIDE)) { this.advance(); isOverride = true; }
+                else if (this.check(TokenKind.READONLY)) { this.advance(); isReadonly = true; }
+                else if (this.check(TokenKind.ASYNC))    { this.advance(); isAsync    = true; }
+                else if (this.check(TokenKind.DEFAULT))  { this.advance(); isDefault  = true; }
+                else if (this.check(TokenKind.OPERATOR)) { this.advance(); isOperator = true; }
+                else { contMod = false; }
+            }
+
+            // Constructor
+            if (this.check(TokenKind.CONSTRUCTOR)) {
+                this.advance();
+                List<Param> params = this.parseParams();
+                List<Stmt> body = this.parseBlock();
+                classDecl.ctor = ConstructorDecl(vis, params, body);
+            }
+            // Method or field
+            else if (isOperator || this.peek().kind == TokenKind.IDENT) {
+                // Disambiguate: field has "name : Type" pattern, method has "name(params)"
+                if (!isOperator && this.peekAt(1).kind == TokenKind.COLON) {
+                    classDecl.fields.append(this.parseField(vis, isStatic, isReadonly));
+                } else {
+                    classDecl.methods.append(
+                        this.parseMethod(vis, isStatic, isAbstract, isDefault, isOverride, isAsync, isOperator)
+                    );
+                }
+            }
+            else {
+                // Skip unknown token
+                this.advance();
+            }
+        }
+        this.eat(TokenKind.RBRACE);
+    }
+
+    // ── Item parsing ──────────────────────────────────────────────────────────
+
+    private parseClassDecl(vis: Integer, isAbstract: Boolean, isManual: Boolean,
+                           isSealed: Boolean, isImmutable: Boolean) : Item {
+        String name = this.eatIdent();
+        ClassDecl c = ClassDecl(vis, name);
+        c.isAbstract  = isAbstract;
+        c.isManual    = isManual;
+        c.isSealed    = isSealed;
+        c.isImmutable = isImmutable;
+        c.generics    = this.parseGenericBounds();
+        if (this.check(TokenKind.EXTENDS)) {
+            this.advance();
+            c.extends_ = this.eatIdent();
+        }
+        if (this.check(TokenKind.IMPLEMENTS)) {
+            this.advance();
+            c.implements_.append(this.eatIdent());
+            while (this.check(TokenKind.COMMA)) {
+                this.advance();
+                c.implements_.append(this.eatIdent());
+            }
+        }
+        this.parseClassBody(c);
+        return Item.fromClass(c);
+    }
+
+    private parseInterfaceDecl(vis: Integer) : Item {
+        String name = this.eatIdent();
+        InterfaceDecl iface = InterfaceDecl(vis, name);
+        iface.generics = this.parseGenericBounds();
+        this.eat(TokenKind.LBRACE);
+        while (!this.check(TokenKind.RBRACE) && !this.check(TokenKind.EOF)) {
+            List<String> annots = this.parseAnnotations();
+            Boolean isDefault   = false;
+            if (this.check(TokenKind.DEFAULT)) { this.advance(); isDefault = true; }
+            MethodDecl m = this.parseMethod(Visibility.PUBLIC, false, !isDefault, isDefault, false, false, false);
+            iface.methods.append(m);
+        }
+        this.eat(TokenKind.RBRACE);
+        return Item.fromInterface(iface);
+    }
+
+    private parseEnumDecl(vis: Integer) : Item {
+        String name = this.eatIdent();
+        EnumDecl e = EnumDecl(vis, name);
+        this.eat(TokenKind.LBRACE);
+        // Variants first (until we hit a method-like token or })
+        Boolean inVariants = true;
+        while (!this.check(TokenKind.RBRACE) && !this.check(TokenKind.EOF)) {
+            Integer k = this.peek().kind;
+            // Method starts with visibility or modifier keyword
+            if (k == TokenKind.PUBLIC || k == TokenKind.PRIVATE ||
+                k == TokenKind.PROTECTED || k == TokenKind.INTERNAL ||
+                k == TokenKind.STATIC || k == TokenKind.ABSTRACT) {
+                inVariants = false;
+            }
+            if (!inVariants) {
+                List<String> an = this.parseAnnotations();
+                Integer mvis = Visibility.PUBLIC;
+                if (this.check(TokenKind.PUBLIC))  { this.advance(); }
+                Boolean mStatic = false;
+                if (this.check(TokenKind.STATIC))  { this.advance(); mStatic = true; }
+                MethodDecl m = this.parseMethod(mvis, mStatic, false, false, false, false, false);
+                e.methods.append(m);
+            } else {
+                // Variant
+                String varName = this.eatIdent();
+                EnumVariant v = EnumVariant(varName);
+                if (this.check(TokenKind.LPAREN)) {
+                    this.advance();
+                    while (!this.check(TokenKind.RPAREN) && !this.check(TokenKind.EOF)) {
+                        v.data.append(this.parseType());
+                        if (this.check(TokenKind.COMMA)) { this.advance(); }
+                    }
+                    this.eat(TokenKind.RPAREN);
+                }
+                e.variants.append(v);
+                if (this.check(TokenKind.COMMA) || this.check(TokenKind.SEMICOLON)) {
+                    this.advance();
+                }
+            }
+        }
+        this.eat(TokenKind.RBRACE);
+        return Item.fromEnum(e);
+    }
+
+    private parseStructDecl(vis: Integer, isPacked: Boolean) : Item {
+        String name = this.eatIdent();
+        StructDecl s = StructDecl(vis, name);
+        s.isPacked = isPacked;
+        this.eat(TokenKind.LBRACE);
+        while (!this.check(TokenKind.RBRACE) && !this.check(TokenKind.EOF)) {
+            List<String> an = this.parseAnnotations();
+            Integer mvis = Visibility.PUBLIC;
+            Boolean isSt = false;
+            Boolean isRo = false;
+            if (this.check(TokenKind.PUBLIC))    { this.advance(); mvis = Visibility.PUBLIC; }
+            else if (this.check(TokenKind.PRIVATE)) { this.advance(); mvis = Visibility.PRIVATE; }
+            if (this.check(TokenKind.STATIC))   { this.advance(); isSt = true; }
+            if (this.check(TokenKind.READONLY)) { this.advance(); isRo = true; }
+            // Field or method
+            if (this.check(TokenKind.OPERATOR)) {
+                this.advance();
+                s.methods.append(this.parseMethod(mvis, false, false, false, false, false, true));
+            } else if (this.peekAt(1).kind == TokenKind.COLON) {
+                s.fields.append(this.parseField(mvis, isSt, isRo));
+            } else {
+                s.methods.append(this.parseMethod(mvis, isSt, false, false, false, false, false));
+            }
+        }
+        this.eat(TokenKind.RBRACE);
+        return Item.fromStruct(s);
+    }
+
+    private parseExceptionDecl(vis: Integer, isManual: Boolean) : Item {
+        String name = this.eatIdent();
+        String ext  = "Exception";
+        if (this.check(TokenKind.EXTENDS)) {
+            this.advance();
+            ext = this.eatIdent();
+        }
+        ExceptionDecl ex = ExceptionDecl(vis, name, ext);
+        ex.isManual = isManual;
+        this.parseExceptionBody(ex);
+        return Item.fromException(ex);
+    }
+
+    private parseExceptionBody(ex: ExceptionDecl) : Void {
+        this.eat(TokenKind.LBRACE);
+        while (!this.check(TokenKind.RBRACE) && !this.check(TokenKind.EOF)) {
+            List<String> annots = this.parseAnnotations();
+            Integer vis      = Visibility.PRIVATE;
+            Boolean isStatic = false;
+            Boolean isOverride = false;
+            Boolean isReadonly = false;
+            Boolean isAsync  = false;
+            if (this.check(TokenKind.PUBLIC))    { this.advance(); vis = Visibility.PUBLIC;    }
+            else if (this.check(TokenKind.PRIVATE))   { this.advance(); vis = Visibility.PRIVATE;   }
+            else if (this.check(TokenKind.PROTECTED)) { this.advance(); vis = Visibility.PROTECTED; }
+            Boolean contMod = true;
+            while (contMod) {
+                if (this.check(TokenKind.STATIC))   { this.advance(); isStatic   = true; }
+                else if (this.check(TokenKind.OVERRIDE)) { this.advance(); isOverride = true; }
+                else if (this.check(TokenKind.READONLY)) { this.advance(); isReadonly = true; }
+                else if (this.check(TokenKind.ASYNC))    { this.advance(); isAsync    = true; }
+                else { contMod = false; }
+            }
+            if (this.check(TokenKind.CONSTRUCTOR)) {
+                this.advance();
+                List<Param> params = this.parseParams();
+                List<Stmt> body = this.parseBlock();
+                ex.ctor = ConstructorDecl(vis, params, body);
+            } else if (this.peekAt(1).kind == TokenKind.COLON) {
+                ex.fields.append(this.parseField(vis, isStatic, isReadonly));
+            } else {
+                ex.methods.append(
+                    this.parseMethod(vis, isStatic, false, false, isOverride, isAsync, false)
+                );
+            }
+        }
+        this.eat(TokenKind.RBRACE);
+    }
+
+    private parseExternDecl() : Item {
+        // extern "C" { decls }
+        String abi = "C";
+        if (this.check(TokenKind.STR)) { abi = this.advance().strVal; }
+        ExternDecl ext = ExternDecl(abi);
+        this.eat(TokenKind.LBRACE);
+        while (!this.check(TokenKind.RBRACE) && !this.check(TokenKind.EOF)) {
+            String fname = this.eatIdent();
+            ExternFnDecl fn = ExternFnDecl(fname);
+            fn.params = this.parseParams();
+            // Handle ellipsis (variadic) — already handled inside parseParams
+            if (this.check(TokenKind.COLON)) {
+                this.advance();
+                fn.returnTy = this.parseType();
+            }
+            this.skipSemicolon();
+            ext.decls.append(fn);
+        }
+        this.eat(TokenKind.RBRACE);
+        return Item.fromExtern(ext);
+    }
+
+    private parseExtensionDecl() : Item {
+        // extend TypeName { methods }
+        String target = this.eatIdent();
+        ExtensionDecl ex = ExtensionDecl(target);
+        this.eat(TokenKind.LBRACE);
+        while (!this.check(TokenKind.RBRACE) && !this.check(TokenKind.EOF)) {
+            List<String> an = this.parseAnnotations();
+            Integer mvis = Visibility.PUBLIC;
+            Boolean mSt  = false;
+            if (this.check(TokenKind.PUBLIC))  { this.advance(); }
+            if (this.check(TokenKind.STATIC))  { this.advance(); mSt = true; }
+            ex.methods.append(this.parseMethod(mvis, mSt, false, false, false, false, false));
+        }
+        this.eat(TokenKind.RBRACE);
+        return Item.fromExtension(ex);
+    }
+
+    private parseUnionDecl(vis: Integer) : Item {
+        String name = this.eatIdent();
+        UnionDecl u = UnionDecl(vis, name);
+        this.eat(TokenKind.LBRACE);
+        while (!this.check(TokenKind.RBRACE) && !this.check(TokenKind.EOF)) {
+            List<String> an = this.parseAnnotations();
+            String fname = this.eatIdent();
+            this.eat(TokenKind.COLON);
+            AstType ty = this.parseType();
+            FieldDecl f = FieldDecl(Visibility.PUBLIC, fname, ty);
+            u.fields.append(f);
+            this.skipSemicolon();
+        }
+        this.eat(TokenKind.RBRACE);
+        return Item.fromUnion(u);
+    }
+
+    private parseTypeAliasDecl() : Item {
+        String name = this.eatIdent();
+        this.eat(TokenKind.EQ);
+        AstType ty = this.parseType();
+        this.skipSemicolon();
+        return Item.fromAlias(TypeAliasDecl(name, ty));
+    }
+
+    public parseItem() : Item {
+        List<String> annots = this.parseAnnotations();
+
+        Boolean isManual    = false;
+        Boolean isSealed    = false;
+        Boolean isImmutable = false;
+        Boolean isPacked    = false;
+
+        // Check @ManualMemory, @Packed, @Sealed, @Immutable from annotations
+        Integer ai = 0;
+        while (ai < annots.length()) {
+            String an = annots.get(ai);
+            if (an == "ManualMemory") { isManual    = true; }
+            if (an == "Sealed")       { isSealed    = true; }
+            if (an == "Immutable")    { isImmutable = true; }
+            if (an == "Packed")       { isPacked    = true; }
+            ai++;
+        }
+
+        Integer vis      = Visibility.PUBLIC;
+        Boolean isAbstract = false;
+
+        // Visibility
+        if (this.check(TokenKind.PUBLIC))    { this.advance(); vis = Visibility.PUBLIC;    }
+        else if (this.check(TokenKind.PRIVATE))   { this.advance(); vis = Visibility.PRIVATE;   }
+        else if (this.check(TokenKind.PROTECTED)) { this.advance(); vis = Visibility.PROTECTED; }
+        else if (this.check(TokenKind.INTERNAL))  { this.advance(); vis = Visibility.INTERNAL;  }
+
+        if (this.check(TokenKind.ABSTRACT)) { this.advance(); isAbstract = true; }
+
+        // Dispatch on item kind keyword
+        if (this.check(TokenKind.CLASS)) {
+            this.advance();
+            return this.parseClassDecl(vis, isAbstract, isManual, isSealed, isImmutable);
+        }
+        if (this.check(TokenKind.INTERFACE)) {
+            this.advance();
+            return this.parseInterfaceDecl(vis);
+        }
+        if (this.check(TokenKind.ENUM)) {
+            this.advance();
+            return this.parseEnumDecl(vis);
+        }
+        if (this.check(TokenKind.STRUCT)) {
+            this.advance();
+            return this.parseStructDecl(vis, isPacked);
+        }
+        // exception keyword (parsed as Ident by lexer) or "class ... extends Exception"
+        if (this.check(TokenKind.IDENT) && this.peek().strVal == "exception") {
+            this.advance();
+            return this.parseExceptionDecl(vis, isManual);
+        }
+        if (this.check(TokenKind.EXTERN)) {
+            this.advance();
+            return this.parseExternDecl();
+        }
+        if (this.check(TokenKind.EXTEND)) {
+            this.advance();
+            return this.parseExtensionDecl();
+        }
+        if (this.check(TokenKind.UNION)) {
+            this.advance();
+            return this.parseUnionDecl(vis);
+        }
+        if (this.check(TokenKind.KW_TYPE)) {
+            this.advance();
+            return this.parseTypeAliasDecl();
+        }
+
+        Token t = this.peek();
+        IO.error("parse error at ${t.line}:${t.col} — unexpected token at top level: ${t.kind}");
+        this.hasError = true;
+        this.advance();
+        return Item.fromClass(ClassDecl(Visibility.PUBLIC, "Error"));
+    }
+
+    // ── Top-level parse ───────────────────────────────────────────────────────
+
+    public parse() : ArimoModule {
+        ArimoModule mod = ArimoModule("");
+
+        // package / module declaration
+        if (this.check(TokenKind.PACKAGE)) {
+            this.advance();
+            String path = this.parseDottedName();
+            mod.path = path;
+            this.skipSemicolon();
+        }
+
+        // imports
+        while (this.check(TokenKind.IMPORT)) {
+            this.advance();
+            String imp = this.parseDottedName();
+            mod.imports.append(imp);
+            this.skipSemicolon();
+        }
+
+        // top-level items
+        while (!this.check(TokenKind.EOF)) {
+            Item item = this.parseItem();
+            mod.items.append(item);
+        }
+
+        return mod;
+    }
+
+    private parseDottedName() : String {
+        String name = this.eatIdent();
+        while (this.check(TokenKind.DOT)) {
+            this.advance();
+            if (this.check(TokenKind.STAR)) {
+                this.advance();
+                name = name.concat(".*");
+            } else {
+                name = name.concat(".").concat(this.eatIdent());
+            }
+        }
+        return name;
+    }
+}

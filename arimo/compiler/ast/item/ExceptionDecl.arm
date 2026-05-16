@@ -24,6 +24,7 @@ import arimo.compiler.ast.decl.ConstructorDecl;
 
 public class ExceptionDecl {
     public vis      : Integer;
+    public isManual : Boolean;
     public name     : String;
     public extends_ : String;
     public fields   : List<FieldDecl>;
@@ -32,6 +33,7 @@ public class ExceptionDecl {
 
     public constructor(vis: Integer, name: String, extends_: String) {
         this.vis      = vis;
+        this.isManual = false;
         this.name     = name;
         this.extends_ = extends_;
         this.fields   = List();
