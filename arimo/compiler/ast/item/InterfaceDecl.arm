@@ -15,3 +15,22 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+
+package arimo.compiler.ast.item;
+
+import arimo.compiler.ast.decl.GenericBound;
+import arimo.compiler.ast.decl.MethodDecl;
+
+public class InterfaceDecl {
+    public vis      : Integer;
+    public name     : String;
+    public generics : List<GenericBound>;
+    public methods  : List<MethodDecl>;
+
+    public constructor(vis: Integer, name: String) {
+        this.vis      = vis;
+        this.name     = name;
+        this.generics = List();
+        this.methods  = List();
+    }
+}

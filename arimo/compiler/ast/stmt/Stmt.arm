@@ -1,0 +1,211 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.ast.stmt;
+
+import arimo.compiler.ast.stmt.StmtKind;
+import arimo.compiler.ast.stmt.ElseIfBranch;
+import arimo.compiler.ast.stmt.CatchClause;
+import arimo.compiler.ast.stmt.SwitchCase;
+import arimo.compiler.ast.expr.Expr;
+import arimo.compiler.ast.type.AstType;
+
+public class Stmt {
+    public kind        : Integer;
+    public line        : Integer;
+    public col         : Integer;
+
+    // ── VarDecl ───────────────────────────────────────────────────────────────
+    public isVolatile  : Boolean;
+    public ty          : AstType;
+    public name        : String;
+    public initExpr    : Expr;
+
+    // ── ExprStmt / Return / Throw / Defer ────────────────────────────────────
+    public expr        : Expr;
+
+    // ── If ────────────────────────────────────────────────────────────────────
+    public cond        : Expr;
+    public thenBody    : List<Stmt>;
+    public elseIfs     : List<ElseIfBranch>;
+    public elseBody    : List<Stmt>;
+
+    // ── While / Block ─────────────────────────────────────────────────────────
+    public body        : List<Stmt>;
+
+    // ── ForEach ───────────────────────────────────────────────────────────────
+    public iterTy      : AstType;
+    public iterName    : String;
+    public iterable    : Expr;
+
+    // ── For (C-style) ─────────────────────────────────────────────────────────
+    public forInit     : Stmt;
+    public forCond     : Expr;
+    public forStep     : Expr;
+    public forBody     : List<Stmt>;
+
+    // ── Switch ────────────────────────────────────────────────────────────────
+    public switchExpr  : Expr;
+    public cases       : List<SwitchCase>;
+
+    // ── TryCatch ──────────────────────────────────────────────────────────────
+    public tryBody     : List<Stmt>;
+    public catches     : List<CatchClause>;
+    public finallyBody : List<Stmt>;
+
+    // ── Asm ───────────────────────────────────────────────────────────────────
+    public asmText     : String;
+
+    public constructor(kind: Integer, line: Integer, col: Integer) {
+        this.kind        = kind;
+        this.line        = line;
+        this.col         = col;
+        this.isVolatile  = false;
+        this.ty          = null;
+        this.name        = "";
+        this.initExpr    = null;
+        this.expr        = null;
+        this.cond        = null;
+        this.thenBody    = null;
+        this.elseIfs     = null;
+        this.elseBody    = null;
+        this.body        = null;
+        this.iterTy      = null;
+        this.iterName    = "";
+        this.iterable    = null;
+        this.forInit     = null;
+        this.forCond     = null;
+        this.forStep     = null;
+        this.forBody     = null;
+        this.switchExpr  = null;
+        this.cases       = null;
+        this.tryBody     = null;
+        this.catches     = null;
+        this.finallyBody = null;
+        this.asmText     = "";
+    }
+
+    // ── Factory methods ───────────────────────────────────────────────────────
+
+    public static varDecl(ty: AstType, name: String, init: Expr, line: Integer, col: Integer) : Stmt {
+        Stmt s = Stmt(StmtKind.VAR_DECL, line, col);
+        s.ty       = ty;
+        s.name     = name;
+        s.initExpr = init;
+        return s;
+    }
+
+    public static volatileVarDecl(ty: AstType, name: String, init: Expr, line: Integer, col: Integer) : Stmt {
+        Stmt s = Stmt.varDecl(ty, name, init, line, col);
+        s.isVolatile = true;
+        return s;
+    }
+
+    public static exprStmt(e: Expr, line: Integer, col: Integer) : Stmt {
+        Stmt s = Stmt(StmtKind.EXPR, line, col);
+        s.expr = e;
+        return s;
+    }
+
+    public static return_(e: Expr, line: Integer, col: Integer) : Stmt {
+        Stmt s = Stmt(StmtKind.RETURN, line, col);
+        s.expr = e;
+        return s;
+    }
+
+    public static throw_(e: Expr, line: Integer, col: Integer) : Stmt {
+        Stmt s = Stmt(StmtKind.THROW, line, col);
+        s.expr = e;
+        return s;
+    }
+
+    public static if_(cond: Expr, then_: List<Stmt>, elseIfs: List<ElseIfBranch>, else_: List<Stmt>, line: Integer, col: Integer) : Stmt {
+        Stmt s = Stmt(StmtKind.IF, line, col);
+        s.cond     = cond;
+        s.thenBody = then_;
+        s.elseIfs  = elseIfs;
+        s.elseBody = else_;
+        return s;
+    }
+
+    public static while_(cond: Expr, body: List<Stmt>, line: Integer, col: Integer) : Stmt {
+        Stmt s = Stmt(StmtKind.WHILE, line, col);
+        s.cond = cond;
+        s.body = body;
+        return s;
+    }
+
+    public static forEach(ty: AstType, varName: String, iter: Expr, body: List<Stmt>, line: Integer, col: Integer) : Stmt {
+        Stmt s = Stmt(StmtKind.FOR_EACH, line, col);
+        s.iterTy   = ty;
+        s.iterName = varName;
+        s.iterable = iter;
+        s.body     = body;
+        return s;
+    }
+
+    public static for_(init: Stmt, cond: Expr, step: Expr, body: List<Stmt>, line: Integer, col: Integer) : Stmt {
+        Stmt s = Stmt(StmtKind.FOR, line, col);
+        s.forInit = init;
+        s.forCond = cond;
+        s.forStep = step;
+        s.forBody = body;
+        return s;
+    }
+
+    public static switch_(e: Expr, cases: List<SwitchCase>, line: Integer, col: Integer) : Stmt {
+        Stmt s = Stmt(StmtKind.SWITCH, line, col);
+        s.switchExpr = e;
+        s.cases      = cases;
+        return s;
+    }
+
+    public static try_(tryBody: List<Stmt>, catches: List<CatchClause>, finally_: List<Stmt>, line: Integer, col: Integer) : Stmt {
+        Stmt s = Stmt(StmtKind.TRY, line, col);
+        s.tryBody     = tryBody;
+        s.catches     = catches;
+        s.finallyBody = finally_;
+        return s;
+    }
+
+    public static break_(line: Integer, col: Integer) : Stmt {
+        return Stmt(StmtKind.BREAK, line, col);
+    }
+
+    public static continue_(line: Integer, col: Integer) : Stmt {
+        return Stmt(StmtKind.CONTINUE, line, col);
+    }
+
+    public static block(body: List<Stmt>, line: Integer, col: Integer) : Stmt {
+        Stmt s = Stmt(StmtKind.BLOCK, line, col);
+        s.body = body;
+        return s;
+    }
+
+    public static asm_(text: String, line: Integer, col: Integer) : Stmt {
+        Stmt s = Stmt(StmtKind.ASM, line, col);
+        s.asmText = text;
+        return s;
+    }
+
+    public static defer_(e: Expr, line: Integer, col: Integer) : Stmt {
+        Stmt s = Stmt(StmtKind.DEFER, line, col);
+        s.expr = e;
+        return s;
+    }
+}

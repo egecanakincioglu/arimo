@@ -1,0 +1,55 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.ast.type;
+
+public class TypeKind {
+    // ── Primitives ────────────────────────────────────────────────────────────
+    public static readonly INTEGER  : Integer = 1;
+    public static readonly FLOAT    : Integer = 2;
+    public static readonly BOOLEAN  : Integer = 3;
+    public static readonly STR      : Integer = 4;
+    public static readonly VOID     : Integer = 5;
+    public static readonly NORETURN : Integer = 6;
+
+    // ── Fixed-size integers ───────────────────────────────────────────────────
+    public static readonly U8       : Integer = 7;
+    public static readonly U16      : Integer = 8;
+    public static readonly U32      : Integer = 9;
+    public static readonly U64      : Integer = 10;
+    public static readonly I8       : Integer = 11;
+    public static readonly I16      : Integer = 12;
+    public static readonly I32      : Integer = 13;
+    public static readonly I64      : Integer = 14;
+
+    // ── Collection types ──────────────────────────────────────────────────────
+    public static readonly LIST     : Integer = 20;
+    public static readonly MAP      : Integer = 21;
+    public static readonly HASHMAP  : Integer = 22;
+    public static readonly TREEMAP  : Integer = 23;
+    public static readonly PAIR     : Integer = 24;
+
+    // ── Composite and reference types ─────────────────────────────────────────
+    public static readonly NAMED    : Integer = 30;
+    public static readonly NULLABLE : Integer = 31;
+    public static readonly GENERIC  : Integer = 32;
+    public static readonly RAWPTR   : Integer = 33;
+    public static readonly ARRAY    : Integer = 34;
+    public static readonly SLICE    : Integer = 35;
+    public static readonly FNPTR    : Integer = 36;
+}

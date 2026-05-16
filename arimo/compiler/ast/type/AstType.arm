@@ -1,0 +1,128 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.ast.type;
+
+import arimo.compiler.ast.type.TypeKind;
+
+public class AstType {
+    public kind      : Integer;
+    public name      : String;
+    public inner     : AstType;
+    public key       : AstType;
+    public val       : AstType;
+    public typeArgs  : List<AstType>;
+    public arraySize : Integer;
+    public fnParams  : List<AstType>;
+    public fnRet     : AstType;
+
+    public constructor(kind: Integer) {
+        this.kind      = kind;
+        this.name      = "";
+        this.inner     = null;
+        this.key       = null;
+        this.val       = null;
+        this.typeArgs  = null;
+        this.arraySize = 0;
+        this.fnParams  = null;
+        this.fnRet     = null;
+    }
+
+    public static simple(kind: Integer) : AstType {
+        return AstType(kind);
+    }
+
+    public static named(n: String) : AstType {
+        AstType t = AstType(TypeKind.NAMED);
+        t.name = n;
+        return t;
+    }
+
+    public static nullable(inner: AstType) : AstType {
+        AstType t = AstType(TypeKind.NULLABLE);
+        t.inner = inner;
+        return t;
+    }
+
+    public static list(elem: AstType) : AstType {
+        AstType t = AstType(TypeKind.LIST);
+        t.inner = elem;
+        return t;
+    }
+
+    public static rawptr(elem: AstType) : AstType {
+        AstType t = AstType(TypeKind.RAWPTR);
+        t.inner = elem;
+        return t;
+    }
+
+    public static slice(elem: AstType) : AstType {
+        AstType t = AstType(TypeKind.SLICE);
+        t.inner = elem;
+        return t;
+    }
+
+    public static hashmap(k: AstType, v: AstType) : AstType {
+        AstType t = AstType(TypeKind.HASHMAP);
+        t.key = k;
+        t.val = v;
+        return t;
+    }
+
+    public static map(k: AstType, v: AstType) : AstType {
+        AstType t = AstType(TypeKind.MAP);
+        t.key = k;
+        t.val = v;
+        return t;
+    }
+
+    public static treemap(k: AstType, v: AstType) : AstType {
+        AstType t = AstType(TypeKind.TREEMAP);
+        t.key = k;
+        t.val = v;
+        return t;
+    }
+
+    public static pair(a: AstType, b: AstType) : AstType {
+        AstType t = AstType(TypeKind.PAIR);
+        t.key = a;
+        t.val = b;
+        return t;
+    }
+
+    public static generic(n: String, args: List<AstType>) : AstType {
+        AstType t = AstType(TypeKind.GENERIC);
+        t.name     = n;
+        t.typeArgs = args;
+        return t;
+    }
+
+    public static array(elem: AstType, size: Integer) : AstType {
+        AstType t = AstType(TypeKind.ARRAY);
+        t.inner     = elem;
+        t.arraySize = size;
+        return t;
+    }
+
+    public static fnptr(params: List<AstType>, ret: AstType) : AstType {
+        AstType t = AstType(TypeKind.FNPTR);
+        t.fnParams = params;
+        t.fnRet    = ret;
+        return t;
+    }
+}

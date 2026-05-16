@@ -16,10 +16,50 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-package arimo;
+package arimo.compiler;
+
+import arimo.compiler.token.TokenKind;
+import arimo.compiler.token.Token;
+import arimo.compiler.lexer.Lexer;
+import arimo.compiler.ast.ArimoModule;
+import arimo.compiler.ast.type.TypeKind;
+import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.expr.ExprKind;
+import arimo.compiler.ast.expr.BinaryOp;
+import arimo.compiler.ast.expr.UnaryOp;
+import arimo.compiler.ast.expr.MatchPatternKind;
+import arimo.compiler.ast.expr.MatchPattern;
+import arimo.compiler.ast.expr.MatchArm;
+import arimo.compiler.ast.expr.StrPart;
+import arimo.compiler.ast.expr.Expr;
+import arimo.compiler.ast.stmt.StmtKind;
+import arimo.compiler.ast.stmt.ElseIfBranch;
+import arimo.compiler.ast.stmt.CatchClause;
+import arimo.compiler.ast.stmt.SwitchCase;
+import arimo.compiler.ast.stmt.Stmt;
+import arimo.compiler.ast.decl.Visibility;
+import arimo.compiler.ast.decl.GenericBound;
+import arimo.compiler.ast.decl.Param;
+import arimo.compiler.ast.decl.FieldDecl;
+import arimo.compiler.ast.decl.MethodDecl;
+import arimo.compiler.ast.decl.ConstructorDecl;
+import arimo.compiler.ast.decl.EnumVariant;
+import arimo.compiler.ast.decl.ExternFnDecl;
+import arimo.compiler.ast.item.ItemKind;
+import arimo.compiler.ast.item.ClassDecl;
+import arimo.compiler.ast.item.InterfaceDecl;
+import arimo.compiler.ast.item.EnumDecl;
+import arimo.compiler.ast.item.StructDecl;
+import arimo.compiler.ast.item.ExceptionDecl;
+import arimo.compiler.ast.item.TypeAliasDecl;
+import arimo.compiler.ast.item.ExternDecl;
+import arimo.compiler.ast.item.ExtensionDecl;
+import arimo.compiler.ast.item.UnionDecl;
+import arimo.compiler.ast.item.Item;
 
 public class Main {
     public static main() : Void {
-        IO.println("Hello from arimo!");
+        IO.println("arc-arimo stage 1 compiler");
+        IO.println("Paketler yuklu, derleyici baslatiliyor...");
     }
 }

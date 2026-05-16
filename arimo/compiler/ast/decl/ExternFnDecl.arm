@@ -15,3 +15,22 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+
+package arimo.compiler.ast.decl;
+
+import arimo.compiler.ast.decl.Param;
+import arimo.compiler.ast.type.AstType;
+
+public class ExternFnDecl {
+    public name       : String;
+    public params     : List<Param>;
+    public returnTy   : AstType;
+    public isVariadic : Boolean;
+
+    public constructor(name: String) {
+        this.name       = name;
+        this.params     = List();
+        this.returnTy   = null;
+        this.isVariadic = false;
+    }
+}

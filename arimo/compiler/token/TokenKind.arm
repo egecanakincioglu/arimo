@@ -1,0 +1,163 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.token;
+
+public class TokenKind {
+    // ── Literals ──────────────────────────────────────────────────────────────
+    public static readonly INT               : Integer = 1;
+    public static readonly FLOAT             : Integer = 2;
+    public static readonly BOOL              : Integer = 3;
+    public static readonly STR               : Integer = 4;
+    public static readonly IDENT             : Integer = 5;
+
+    // ── Declaration keywords ──────────────────────────────────────────────────
+    public static readonly PACKAGE           : Integer = 10;
+    public static readonly IMPORT            : Integer = 11;
+    public static readonly PUBLIC            : Integer = 12;
+    public static readonly PRIVATE           : Integer = 13;
+    public static readonly PROTECTED         : Integer = 14;
+    public static readonly INTERNAL          : Integer = 15;
+    public static readonly CLASS             : Integer = 16;
+    public static readonly STRUCT            : Integer = 17;
+    public static readonly ABSTRACT         : Integer = 18;
+    public static readonly INTERFACE         : Integer = 19;
+    public static readonly ENUM              : Integer = 20;
+    public static readonly EXTENDS           : Integer = 21;
+    public static readonly IMPLEMENTS        : Integer = 22;
+    public static readonly EXTEND            : Integer = 23;
+    public static readonly OPERATOR          : Integer = 24;
+    public static readonly STATIC            : Integer = 25;
+    public static readonly READONLY          : Integer = 26;
+    public static readonly OVERRIDE          : Integer = 27;
+    public static readonly CONSTRUCTOR       : Integer = 28;
+    public static readonly SUPER             : Integer = 29;
+    public static readonly THIS              : Integer = 30;
+
+    // ── Type keywords ─────────────────────────────────────────────────────────
+    public static readonly TYPE_INTEGER      : Integer = 40;
+    public static readonly TYPE_FLOAT        : Integer = 41;
+    public static readonly TYPE_BOOLEAN      : Integer = 42;
+    public static readonly TYPE_STRING       : Integer = 43;
+    public static readonly TYPE_VOID         : Integer = 44;
+    public static readonly TYPE_LIST         : Integer = 45;
+    public static readonly TYPE_MAP          : Integer = 46;
+    public static readonly TYPE_HASHMAP      : Integer = 47;
+    public static readonly TYPE_TREEMAP      : Integer = 48;
+    public static readonly TYPE_PAIR         : Integer = 49;
+    public static readonly TYPE_EXCEPTION    : Integer = 50;
+    public static readonly TYPE_RAWPTR       : Integer = 51;
+    public static readonly TYPE_ARRAY        : Integer = 52;
+    public static readonly TYPE_SLICE        : Integer = 53;
+    public static readonly TYPE_U8           : Integer = 54;
+    public static readonly TYPE_U16          : Integer = 55;
+    public static readonly TYPE_U32          : Integer = 56;
+    public static readonly TYPE_U64          : Integer = 57;
+    public static readonly TYPE_I8           : Integer = 58;
+    public static readonly TYPE_I16          : Integer = 59;
+    public static readonly TYPE_I32          : Integer = 60;
+    public static readonly TYPE_I64          : Integer = 61;
+    public static readonly TYPE_NORETURN     : Integer = 62;
+
+    // ── Built-in stubs ────────────────────────────────────────────────────────
+    public static readonly STD_IO            : Integer = 70;
+    public static readonly STD_MATH          : Integer = 71;
+    public static readonly STD_TIME          : Integer = 72;
+    public static readonly STD_MEMORY        : Integer = 73;
+
+    // ── Control flow ──────────────────────────────────────────────────────────
+    public static readonly IF                : Integer = 80;
+    public static readonly ELSE              : Integer = 81;
+    public static readonly WHILE             : Integer = 82;
+    public static readonly FOR               : Integer = 83;
+    public static readonly RETURN            : Integer = 84;
+    public static readonly BREAK             : Integer = 85;
+    public static readonly CONTINUE          : Integer = 86;
+    public static readonly SWITCH            : Integer = 87;
+    public static readonly CASE              : Integer = 88;
+    public static readonly MATCH             : Integer = 89;
+    public static readonly THROW             : Integer = 90;
+    public static readonly TRY               : Integer = 91;
+    public static readonly CATCH             : Integer = 92;
+    public static readonly FINALLY           : Integer = 93;
+    public static readonly NULL              : Integer = 94;
+    public static readonly AS                : Integer = 95;
+    public static readonly KW_TYPE           : Integer = 96;
+    public static readonly VOLATILE          : Integer = 97;
+    public static readonly UNION             : Integer = 98;
+    public static readonly EXTERN            : Integer = 99;
+    public static readonly ASM               : Integer = 100;
+    public static readonly DEFER             : Integer = 101;
+    public static readonly ASYNC             : Integer = 102;
+    public static readonly AWAIT             : Integer = 103;
+    public static readonly DEFAULT           : Integer = 104;
+
+    // ── Arithmetic & assignment operators ─────────────────────────────────────
+    public static readonly PLUS              : Integer = 110;
+    public static readonly MINUS             : Integer = 111;
+    public static readonly STAR              : Integer = 112;
+    public static readonly SLASH             : Integer = 113;
+    public static readonly PERCENT           : Integer = 114;
+    public static readonly EQ                : Integer = 115;
+    public static readonly EQ_EQ             : Integer = 116;
+    public static readonly BANG              : Integer = 117;
+    public static readonly BANG_EQ           : Integer = 118;
+    public static readonly LT                : Integer = 119;
+    public static readonly LT_EQ             : Integer = 120;
+    public static readonly GT                : Integer = 121;
+    public static readonly GT_EQ             : Integer = 122;
+    public static readonly AND_AND           : Integer = 123;
+    public static readonly PIPE_PIPE         : Integer = 124;
+    public static readonly PLUS_PLUS         : Integer = 125;
+    public static readonly MINUS_MINUS       : Integer = 126;
+    public static readonly PLUS_EQ           : Integer = 127;
+    public static readonly MINUS_EQ          : Integer = 128;
+    public static readonly STAR_EQ           : Integer = 129;
+    public static readonly SLASH_EQ          : Integer = 130;
+    public static readonly ARROW             : Integer = 131;
+    public static readonly FAT_ARROW         : Integer = 132;
+    public static readonly QUESTION          : Integer = 133;
+    public static readonly QUESTION_DOT      : Integer = 134;
+    public static readonly QUESTION_QUESTION : Integer = 135;
+    public static readonly AMP               : Integer = 136;
+    public static readonly PIPE              : Integer = 137;
+    public static readonly CARET             : Integer = 138;
+    public static readonly TILDE             : Integer = 139;
+    public static readonly LT_LT             : Integer = 140;
+    public static readonly GT_GT             : Integer = 141;
+
+    // ── Delimiters ────────────────────────────────────────────────────────────
+    public static readonly LPAREN            : Integer = 150;
+    public static readonly RPAREN            : Integer = 151;
+    public static readonly LBRACE            : Integer = 152;
+    public static readonly RBRACE            : Integer = 153;
+    public static readonly LBRACKET          : Integer = 154;
+    public static readonly RBRACKET          : Integer = 155;
+    public static readonly COMMA             : Integer = 156;
+    public static readonly SEMICOLON         : Integer = 157;
+    public static readonly COLON             : Integer = 158;
+    public static readonly DOT               : Integer = 159;
+    public static readonly DOLLAR_LBRACE     : Integer = 160;
+    public static readonly INTERP_END        : Integer = 161;
+    public static readonly AT                : Integer = 162;
+    public static readonly ELLIPSIS          : Integer = 163;
+
+    // ── Special ───────────────────────────────────────────────────────────────
+    public static readonly EOF               : Integer = 200;
+    public static readonly UNKNOWN           : Integer = 201;
+}

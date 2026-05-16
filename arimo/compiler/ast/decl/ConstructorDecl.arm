@@ -15,3 +15,21 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+
+package arimo.compiler.ast.decl;
+
+import arimo.compiler.ast.decl.Visibility;
+import arimo.compiler.ast.decl.Param;
+import arimo.compiler.ast.stmt.Stmt;
+
+public class ConstructorDecl {
+    public vis    : Integer;
+    public params : List<Param>;
+    public body   : List<Stmt>;
+
+    public constructor(vis: Integer, params: List<Param>, body: List<Stmt>) {
+        this.vis    = vis;
+        this.params = params;
+        this.body   = body;
+    }
+}

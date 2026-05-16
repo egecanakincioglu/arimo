@@ -1,0 +1,259 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.ast.expr;
+
+import arimo.compiler.ast.expr.ExprKind;
+import arimo.compiler.ast.expr.BinaryOp;
+import arimo.compiler.ast.expr.UnaryOp;
+import arimo.compiler.ast.expr.StrPart;
+import arimo.compiler.ast.expr.MatchArm;
+import arimo.compiler.ast.type.AstType;
+
+public class Expr {
+    public kind      : Integer;
+    public line      : Integer;
+    public col       : Integer;
+
+    // ── Literal values ────────────────────────────────────────────────────────
+    public intVal    : Integer;
+    public floatVal  : Float;
+    public boolVal   : Boolean;
+    public strVal    : String;
+
+    // ── String interpolation ──────────────────────────────────────────────────
+    public parts     : List<StrPart>;
+
+    // ── Binary / unary operator ───────────────────────────────────────────────
+    public op        : Integer;
+    public left      : Expr;
+    public right     : Expr;
+    public operand   : Expr;
+
+    // ── Field and method access ───────────────────────────────────────────────
+    public object    : Expr;
+    public field     : String;
+    public method    : String;
+
+    // ── Calls (static, constructor, method) ──────────────────────────────────
+    public class_    : String;
+    public args      : List<Expr>;
+
+    // ── Cast ─────────────────────────────────────────────────────────────────
+    public castTy    : AstType;
+
+    // ── Ternary ───────────────────────────────────────────────────────────────
+    public cond      : Expr;
+    public then_     : Expr;
+    public else_     : Expr;
+
+    // ── Lambda ────────────────────────────────────────────────────────────────
+    public params    : List<String>;
+    public paramTys  : List<AstType>;
+    public body      : Expr;
+
+    // ── Index ─────────────────────────────────────────────────────────────────
+    public index     : Expr;
+
+    // ── Match ─────────────────────────────────────────────────────────────────
+    public matchExpr : Expr;
+    public arms      : List<MatchArm>;
+
+    public constructor(kind: Integer, line: Integer, col: Integer) {
+        this.kind      = kind;
+        this.line      = line;
+        this.col       = col;
+        this.intVal    = 0;
+        this.floatVal  = 0.0;
+        this.boolVal   = false;
+        this.strVal    = "";
+        this.parts     = null;
+        this.op        = 0;
+        this.left      = null;
+        this.right     = null;
+        this.operand   = null;
+        this.object    = null;
+        this.field     = "";
+        this.method    = "";
+        this.class_    = "";
+        this.args      = null;
+        this.castTy    = null;
+        this.cond      = null;
+        this.then_     = null;
+        this.else_     = null;
+        this.params    = null;
+        this.paramTys  = null;
+        this.body      = null;
+        this.index     = null;
+        this.matchExpr = null;
+        this.arms      = null;
+    }
+
+    // ── Factory methods ───────────────────────────────────────────────────────
+
+    public static intLit(n: Integer, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.INT_LIT, line, col);
+        e.intVal = n;
+        return e;
+    }
+
+    public static floatLit(f: Float, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.FLOAT_LIT, line, col);
+        e.floatVal = f;
+        return e;
+    }
+
+    public static boolLit(b: Boolean, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.BOOL_LIT, line, col);
+        e.boolVal = b;
+        return e;
+    }
+
+    public static strLit(s: String, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.STR_LIT, line, col);
+        e.strVal = s;
+        return e;
+    }
+
+    public static nullLit(line: Integer, col: Integer) : Expr {
+        return Expr(ExprKind.NULL_LIT, line, col);
+    }
+
+    public static strInterp(parts: List<StrPart>, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.STR_INTERP, line, col);
+        e.parts = parts;
+        return e;
+    }
+
+    public static ident(name: String, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.IDENT, line, col);
+        e.strVal = name;
+        return e;
+    }
+
+    public static thisExpr(line: Integer, col: Integer) : Expr {
+        return Expr(ExprKind.THIS, line, col);
+    }
+
+    public static superExpr(line: Integer, col: Integer) : Expr {
+        return Expr(ExprKind.SUPER, line, col);
+    }
+
+    public static fieldAccess(obj: Expr, f: String, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.FIELD, line, col);
+        e.object = obj;
+        e.field  = f;
+        return e;
+    }
+
+    public static nullSafe(obj: Expr, f: String, args: List<Expr>, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.NULL_SAFE, line, col);
+        e.object = obj;
+        e.field  = f;
+        e.args   = args;
+        return e;
+    }
+
+    public static methodCall(obj: Expr, m: String, args: List<Expr>, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.METHOD, line, col);
+        e.object = obj;
+        e.method = m;
+        e.args   = args;
+        return e;
+    }
+
+    public static staticCall(cls: String, m: String, args: List<Expr>, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.STATIC_CALL, line, col);
+        e.class_ = cls;
+        e.method = m;
+        e.args   = args;
+        return e;
+    }
+
+    public static ctorCall(cls: String, args: List<Expr>, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.CTOR, line, col);
+        e.class_ = cls;
+        e.args   = args;
+        return e;
+    }
+
+    public static binop(op: Integer, l: Expr, r: Expr, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.BINOP, line, col);
+        e.op    = op;
+        e.left  = l;
+        e.right = r;
+        return e;
+    }
+
+    public static unary(op: Integer, operand: Expr, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.UNARY, line, col);
+        e.op      = op;
+        e.operand = operand;
+        return e;
+    }
+
+    public static cast(operand: Expr, ty: AstType, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.CAST, line, col);
+        e.operand = operand;
+        e.castTy  = ty;
+        return e;
+    }
+
+    public static ternary(cond: Expr, then_: Expr, else_: Expr, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.TERNARY, line, col);
+        e.cond  = cond;
+        e.then_ = then_;
+        e.else_ = else_;
+        return e;
+    }
+
+    public static lambda(params: List<String>, types: List<AstType>, body: Expr, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.LAMBDA, line, col);
+        e.params   = params;
+        e.paramTys = types;
+        e.body     = body;
+        return e;
+    }
+
+    public static index(obj: Expr, idx: Expr, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.INDEX, line, col);
+        e.object = obj;
+        e.index  = idx;
+        return e;
+    }
+
+    public static await_(inner: Expr, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.AWAIT, line, col);
+        e.operand = inner;
+        return e;
+    }
+
+    public static match_(subject: Expr, arms: List<MatchArm>, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.MATCH, line, col);
+        e.matchExpr = subject;
+        e.arms      = arms;
+        return e;
+    }
+
+    public static nullCoalesce(l: Expr, r: Expr, line: Integer, col: Integer) : Expr {
+        Expr e = Expr(ExprKind.NULL_COALESCE, line, col);
+        e.left  = l;
+        e.right = r;
+        return e;
+    }
+}

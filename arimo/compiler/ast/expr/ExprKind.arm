@@ -1,0 +1,45 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.ast.expr;
+
+public class ExprKind {
+    public static readonly INT_LIT       : Integer = 1;
+    public static readonly FLOAT_LIT     : Integer = 2;
+    public static readonly BOOL_LIT      : Integer = 3;
+    public static readonly STR_LIT       : Integer = 4;
+    public static readonly NULL_LIT      : Integer = 5;
+    public static readonly STR_INTERP    : Integer = 6;
+    public static readonly IDENT         : Integer = 7;
+    public static readonly THIS          : Integer = 8;
+    public static readonly SUPER         : Integer = 9;
+    public static readonly FIELD         : Integer = 10;
+    public static readonly NULL_SAFE     : Integer = 11;
+    public static readonly METHOD        : Integer = 12;
+    public static readonly STATIC_CALL   : Integer = 13;
+    public static readonly CTOR          : Integer = 14;
+    public static readonly BINOP         : Integer = 15;
+    public static readonly UNARY         : Integer = 16;
+    public static readonly CAST          : Integer = 17;
+    public static readonly TERNARY       : Integer = 18;
+    public static readonly LAMBDA        : Integer = 19;
+    public static readonly INDEX         : Integer = 20;
+    public static readonly AWAIT         : Integer = 21;
+    public static readonly MATCH         : Integer = 22;
+    public static readonly NULL_COALESCE : Integer = 23;
+}

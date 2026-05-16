@@ -1,0 +1,110 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.ast.item;
+
+import arimo.compiler.ast.item.ItemKind;
+import arimo.compiler.ast.item.ClassDecl;
+import arimo.compiler.ast.item.InterfaceDecl;
+import arimo.compiler.ast.item.EnumDecl;
+import arimo.compiler.ast.item.StructDecl;
+import arimo.compiler.ast.item.ExceptionDecl;
+import arimo.compiler.ast.item.TypeAliasDecl;
+import arimo.compiler.ast.item.ExternDecl;
+import arimo.compiler.ast.item.ExtensionDecl;
+import arimo.compiler.ast.item.UnionDecl;
+
+public class Item {
+    public kind       : Integer;
+    public classDecl  : ClassDecl;
+    public ifaceDecl  : InterfaceDecl;
+    public enumDecl   : EnumDecl;
+    public structDecl : StructDecl;
+    public exDecl     : ExceptionDecl;
+    public aliasDecl  : TypeAliasDecl;
+    public externDecl : ExternDecl;
+    public extDecl    : ExtensionDecl;
+    public unionDecl  : UnionDecl;
+
+    public constructor(kind: Integer) {
+        this.kind       = kind;
+        this.classDecl  = null;
+        this.ifaceDecl  = null;
+        this.enumDecl   = null;
+        this.structDecl = null;
+        this.exDecl     = null;
+        this.aliasDecl  = null;
+        this.externDecl = null;
+        this.extDecl    = null;
+        this.unionDecl  = null;
+    }
+
+    public static fromClass(c: ClassDecl) : Item {
+        Item i = Item(ItemKind.CLASS);
+        i.classDecl = c;
+        return i;
+    }
+
+    public static fromInterface(f: InterfaceDecl) : Item {
+        Item i = Item(ItemKind.INTERFACE);
+        i.ifaceDecl = f;
+        return i;
+    }
+
+    public static fromEnum(e: EnumDecl) : Item {
+        Item i = Item(ItemKind.ENUM);
+        i.enumDecl = e;
+        return i;
+    }
+
+    public static fromStruct(s: StructDecl) : Item {
+        Item i = Item(ItemKind.STRUCT);
+        i.structDecl = s;
+        return i;
+    }
+
+    public static fromException(e: ExceptionDecl) : Item {
+        Item i = Item(ItemKind.EXCEPTION);
+        i.exDecl = e;
+        return i;
+    }
+
+    public static fromAlias(a: TypeAliasDecl) : Item {
+        Item i = Item(ItemKind.ALIAS);
+        i.aliasDecl = a;
+        return i;
+    }
+
+    public static fromExtern(e: ExternDecl) : Item {
+        Item i = Item(ItemKind.EXTERN);
+        i.externDecl = e;
+        return i;
+    }
+
+    public static fromExtension(e: ExtensionDecl) : Item {
+        Item i = Item(ItemKind.EXTENSION);
+        i.extDecl = e;
+        return i;
+    }
+
+    public static fromUnion(u: UnionDecl) : Item {
+        Item i = Item(ItemKind.UNION);
+        i.unionDecl = u;
+        return i;
+    }
+}

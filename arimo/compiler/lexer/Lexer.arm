@@ -1,0 +1,480 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.lexer;
+
+import arimo.compiler.token.TokenKind;
+import arimo.compiler.token.Token;
+
+public class Lexer {
+    private source : String;
+    private pos    : Integer;
+    private len    : Integer;
+    private line   : Integer;
+    private col    : Integer;
+
+    public constructor(source: String) {
+        this.source = source;
+        this.pos    = 0;
+        this.len    = source.length();
+        this.line   = 1;
+        this.col    = 1;
+    }
+
+    // ── Character access ──────────────────────────────────────────────────────
+
+    private peek() : String {
+        if (this.pos >= this.len) { return ""; }
+        return this.source.substring(this.pos, this.pos + 1);
+    }
+
+    private peekAt(offset: Integer) : String {
+        Integer p = this.pos + offset;
+        if (p >= this.len) { return ""; }
+        return this.source.substring(p, p + 1);
+    }
+
+    private advance() : String {
+        if (this.pos >= this.len) { return ""; }
+        String ch = this.source.substring(this.pos, this.pos + 1);
+        this.pos++;
+        if (ch == "\n") { this.line++; this.col = 1; }
+        else            { this.col++; }
+        return ch;
+    }
+
+    // ── Character classification ──────────────────────────────────────────────
+
+    private isDigit(ch: String) : Boolean {
+        return "0123456789".contains(ch);
+    }
+
+    private isHexDigit(ch: String) : Boolean {
+        return "0123456789abcdefABCDEF".contains(ch);
+    }
+
+    private isBinDigit(ch: String) : Boolean {
+        return ch == "0" || ch == "1";
+    }
+
+    private isAlpha(ch: String) : Boolean {
+        return "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_".contains(ch);
+    }
+
+    private isAlphaNum(ch: String) : Boolean {
+        return this.isAlpha(ch) || this.isDigit(ch);
+    }
+
+    private isWhitespace(ch: String) : Boolean {
+        return ch == " " || ch == "\t" || ch == "\r" || ch == "\n";
+    }
+
+    // ── Whitespace and comment skipping ───────────────────────────────────────
+
+    private skipWhitespaceAndComments() : Void {
+        Boolean cont = true;
+        while (cont) {
+            String ch = this.peek();
+            if (ch == "") {
+                cont = false;
+            } else if (this.isWhitespace(ch)) {
+                this.advance();
+            } else if (ch == "/") {
+                String next = this.peekAt(1);
+                if (next == "/") {
+                    while (this.peek() != "\n" && this.peek() != "") {
+                        this.advance();
+                    }
+                } else if (next == "*") {
+                    this.advance();
+                    this.advance();
+                    Boolean done = false;
+                    while (!done) {
+                        String c = this.advance();
+                        if (c == "") {
+                            done = true;
+                        } else if (c == "*" && this.peek() == "/") {
+                            this.advance();
+                            done = true;
+                        }
+                    }
+                } else {
+                    cont = false;
+                }
+            } else {
+                cont = false;
+            }
+        }
+    }
+
+    // ── Number parsing helpers ────────────────────────────────────────────────
+
+    private hexCharVal(ch: String) : Integer {
+        return "0123456789abcdef".indexOf(ch.toLower());
+    }
+
+    private hexToInt(s: String) : Integer {
+        Integer result = 0;
+        Integer i = 0;
+        while (i < s.length()) {
+            result = result * 16 + this.hexCharVal(s.substring(i, i + 1));
+            i++;
+        }
+        return result;
+    }
+
+    private binToInt(s: String) : Integer {
+        Integer result = 0;
+        Integer i = 0;
+        while (i < s.length()) {
+            result = result * 2;
+            if (s.substring(i, i + 1) == "1") { result = result + 1; }
+            i++;
+        }
+        return result;
+    }
+
+    // ── Number lexing ─────────────────────────────────────────────────────────
+
+    private readNumber(first: String, sl: Integer, sc: Integer) : Token {
+        if (first == "0") {
+            String next = this.peek();
+            if (next == "x" || next == "X") {
+                this.advance();
+                String hex = "";
+                while (this.isHexDigit(this.peek()) || this.peek() == "_") {
+                    String c = this.advance();
+                    if (c != "_") { hex = hex.concat(c); }
+                }
+                return Token.ofInt(this.hexToInt(hex), sl, sc);
+            }
+            if (next == "b" || next == "B") {
+                this.advance();
+                String bin = "";
+                while (this.isBinDigit(this.peek()) || this.peek() == "_") {
+                    String c = this.advance();
+                    if (c != "_") { bin = bin.concat(c); }
+                }
+                return Token.ofInt(this.binToInt(bin), sl, sc);
+            }
+        }
+
+        String num      = first;
+        Boolean isFloat = false;
+        Boolean cont    = true;
+        while (cont) {
+            String ch = this.peek();
+            if (this.isDigit(ch) || ch == "_") {
+                String c = this.advance();
+                if (c != "_") { num = num.concat(c); }
+            } else if (ch == "." && !isFloat) {
+                if (this.isDigit(this.peekAt(1))) {
+                    isFloat = true;
+                    num = num.concat(this.advance());
+                } else {
+                    cont = false;
+                }
+            } else {
+                cont = false;
+            }
+        }
+
+        if (isFloat) { return Token.ofFloat(num.parseFloat(), sl, sc); }
+        return Token.ofInt(num.parseInt(), sl, sc);
+    }
+
+    // ── Identifier and keyword lexing ─────────────────────────────────────────
+
+    private readIdent(first: String, sl: Integer, sc: Integer) : Token {
+        String word = first;
+        while (this.isAlphaNum(this.peek())) {
+            word = word.concat(this.advance());
+        }
+
+        if (word == "true")        { return Token.ofBool(true,  sl, sc); }
+        if (word == "false")       { return Token.ofBool(false, sl, sc); }
+
+        if (word == "package")     { return Token.ofSimple(TokenKind.PACKAGE,      sl, sc); }
+        if (word == "import")      { return Token.ofSimple(TokenKind.IMPORT,       sl, sc); }
+        if (word == "public")      { return Token.ofSimple(TokenKind.PUBLIC,       sl, sc); }
+        if (word == "private")     { return Token.ofSimple(TokenKind.PRIVATE,      sl, sc); }
+        if (word == "protected")   { return Token.ofSimple(TokenKind.PROTECTED,    sl, sc); }
+        if (word == "internal")    { return Token.ofSimple(TokenKind.INTERNAL,     sl, sc); }
+        if (word == "class")       { return Token.ofSimple(TokenKind.CLASS,        sl, sc); }
+        if (word == "struct")      { return Token.ofSimple(TokenKind.STRUCT,       sl, sc); }
+        if (word == "abstract")    { return Token.ofSimple(TokenKind.ABSTRACT,     sl, sc); }
+        if (word == "interface")   { return Token.ofSimple(TokenKind.INTERFACE,    sl, sc); }
+        if (word == "enum")        { return Token.ofSimple(TokenKind.ENUM,         sl, sc); }
+        if (word == "extends")     { return Token.ofSimple(TokenKind.EXTENDS,      sl, sc); }
+        if (word == "implements")  { return Token.ofSimple(TokenKind.IMPLEMENTS,   sl, sc); }
+        if (word == "extend")      { return Token.ofSimple(TokenKind.EXTEND,       sl, sc); }
+        if (word == "operator")    { return Token.ofSimple(TokenKind.OPERATOR,     sl, sc); }
+        if (word == "static")      { return Token.ofSimple(TokenKind.STATIC,       sl, sc); }
+        if (word == "readonly")    { return Token.ofSimple(TokenKind.READONLY,     sl, sc); }
+        if (word == "override")    { return Token.ofSimple(TokenKind.OVERRIDE,     sl, sc); }
+        if (word == "constructor") { return Token.ofSimple(TokenKind.CONSTRUCTOR,  sl, sc); }
+        if (word == "super")       { return Token.ofSimple(TokenKind.SUPER,        sl, sc); }
+        if (word == "this")        { return Token.ofSimple(TokenKind.THIS,         sl, sc); }
+
+        if (word == "Integer")   { return Token.ofSimple(TokenKind.TYPE_INTEGER,   sl, sc); }
+        if (word == "Float")     { return Token.ofSimple(TokenKind.TYPE_FLOAT,     sl, sc); }
+        if (word == "Boolean")   { return Token.ofSimple(TokenKind.TYPE_BOOLEAN,   sl, sc); }
+        if (word == "String")    { return Token.ofSimple(TokenKind.TYPE_STRING,    sl, sc); }
+        if (word == "Void")      { return Token.ofSimple(TokenKind.TYPE_VOID,      sl, sc); }
+        if (word == "List")      { return Token.ofSimple(TokenKind.TYPE_LIST,      sl, sc); }
+        if (word == "Map")       { return Token.ofSimple(TokenKind.TYPE_MAP,       sl, sc); }
+        if (word == "HashMap")   { return Token.ofSimple(TokenKind.TYPE_HASHMAP,   sl, sc); }
+        if (word == "TreeMap")   { return Token.ofSimple(TokenKind.TYPE_TREEMAP,   sl, sc); }
+        if (word == "Pair")      { return Token.ofSimple(TokenKind.TYPE_PAIR,      sl, sc); }
+        if (word == "Exception") { return Token.ofSimple(TokenKind.TYPE_EXCEPTION, sl, sc); }
+        if (word == "RawPtr")    { return Token.ofSimple(TokenKind.TYPE_RAWPTR,    sl, sc); }
+        if (word == "Array")     { return Token.ofSimple(TokenKind.TYPE_ARRAY,     sl, sc); }
+        if (word == "Slice")     { return Token.ofSimple(TokenKind.TYPE_SLICE,     sl, sc); }
+        if (word == "u8")        { return Token.ofSimple(TokenKind.TYPE_U8,        sl, sc); }
+        if (word == "u16")       { return Token.ofSimple(TokenKind.TYPE_U16,       sl, sc); }
+        if (word == "u32")       { return Token.ofSimple(TokenKind.TYPE_U32,       sl, sc); }
+        if (word == "u64")       { return Token.ofSimple(TokenKind.TYPE_U64,       sl, sc); }
+        if (word == "i8")        { return Token.ofSimple(TokenKind.TYPE_I8,        sl, sc); }
+        if (word == "i16")       { return Token.ofSimple(TokenKind.TYPE_I16,       sl, sc); }
+        if (word == "i32")       { return Token.ofSimple(TokenKind.TYPE_I32,       sl, sc); }
+        if (word == "i64")       { return Token.ofSimple(TokenKind.TYPE_I64,       sl, sc); }
+        if (word == "noreturn")  { return Token.ofSimple(TokenKind.TYPE_NORETURN,  sl, sc); }
+
+        if (word == "IO")     { return Token.ofSimple(TokenKind.STD_IO,     sl, sc); }
+        if (word == "Math")   { return Token.ofSimple(TokenKind.STD_MATH,   sl, sc); }
+        if (word == "Time")   { return Token.ofSimple(TokenKind.STD_TIME,   sl, sc); }
+        if (word == "Memory") { return Token.ofSimple(TokenKind.STD_MEMORY, sl, sc); }
+
+        if (word == "if")       { return Token.ofSimple(TokenKind.IF,       sl, sc); }
+        if (word == "else")     { return Token.ofSimple(TokenKind.ELSE,     sl, sc); }
+        if (word == "while")    { return Token.ofSimple(TokenKind.WHILE,    sl, sc); }
+        if (word == "for")      { return Token.ofSimple(TokenKind.FOR,      sl, sc); }
+        if (word == "return")   { return Token.ofSimple(TokenKind.RETURN,   sl, sc); }
+        if (word == "break")    { return Token.ofSimple(TokenKind.BREAK,    sl, sc); }
+        if (word == "continue") { return Token.ofSimple(TokenKind.CONTINUE, sl, sc); }
+        if (word == "switch")   { return Token.ofSimple(TokenKind.SWITCH,   sl, sc); }
+        if (word == "case")     { return Token.ofSimple(TokenKind.CASE,     sl, sc); }
+        if (word == "match")    { return Token.ofSimple(TokenKind.MATCH,    sl, sc); }
+        if (word == "throw")    { return Token.ofSimple(TokenKind.THROW,    sl, sc); }
+        if (word == "try")      { return Token.ofSimple(TokenKind.TRY,      sl, sc); }
+        if (word == "catch")    { return Token.ofSimple(TokenKind.CATCH,    sl, sc); }
+        if (word == "finally")  { return Token.ofSimple(TokenKind.FINALLY,  sl, sc); }
+        if (word == "null")     { return Token.ofSimple(TokenKind.NULL,     sl, sc); }
+        if (word == "as")       { return Token.ofSimple(TokenKind.AS,       sl, sc); }
+        if (word == "type")     { return Token.ofSimple(TokenKind.KW_TYPE,  sl, sc); }
+        if (word == "volatile") { return Token.ofSimple(TokenKind.VOLATILE, sl, sc); }
+        if (word == "union")    { return Token.ofSimple(TokenKind.UNION,    sl, sc); }
+        if (word == "extern")   { return Token.ofSimple(TokenKind.EXTERN,   sl, sc); }
+        if (word == "asm")      { return Token.ofSimple(TokenKind.ASM,      sl, sc); }
+        if (word == "defer")    { return Token.ofSimple(TokenKind.DEFER,    sl, sc); }
+        if (word == "async")    { return Token.ofSimple(TokenKind.ASYNC,    sl, sc); }
+        if (word == "await")    { return Token.ofSimple(TokenKind.AWAIT,    sl, sc); }
+        if (word == "default")  { return Token.ofSimple(TokenKind.DEFAULT,  sl, sc); }
+
+        return Token.ofIdent(word, sl, sc);
+    }
+
+    // ── String and interpolation lexing ───────────────────────────────────────
+
+    private readString(tokens: List<Token>) : Void {
+        String buf   = "";
+        Boolean done = false;
+        while (!done) {
+            String ch = this.advance();
+            if (ch == "") {
+                if (buf.length() > 0) {
+                    tokens.append(Token.ofStr(buf, this.line, this.col));
+                }
+                done = true;
+            } else if (ch == "\"") {
+                tokens.append(Token.ofStr(buf, this.line, this.col));
+                done = true;
+            } else if (ch == "$" && this.peek() == "{") {
+                this.advance();
+                if (buf.length() > 0) {
+                    tokens.append(Token.ofStr(buf, this.line, this.col));
+                    buf = "";
+                }
+                tokens.append(Token.ofSimple(TokenKind.DOLLAR_LBRACE, this.line, this.col));
+                this.tokenizeInterpolation(tokens);
+                tokens.append(Token.ofSimple(TokenKind.INTERP_END, this.line, this.col));
+            } else if (ch == "\\") {
+                String esc = this.advance();
+                if      (esc == "n")  { buf = buf.concat("\n"); }
+                else if (esc == "t")  { buf = buf.concat("\t"); }
+                else if (esc == "\"") { buf = buf.concat("\""); }
+                else if (esc == "\\") { buf = buf.concat("\\"); }
+                else if (esc == "$")  { buf = buf.concat("$");  }
+                else if (esc == "r")  { buf = buf.concat("\r"); }
+                else                  { buf = buf.concat(esc);  }
+            } else {
+                buf = buf.concat(ch);
+            }
+        }
+    }
+
+    private tokenizeInterpolation(tokens: List<Token>) : Void {
+        Integer depth = 1;
+        Boolean done  = false;
+        while (!done) {
+            this.skipWhitespaceAndComments();
+            Integer sl = this.line;
+            Integer sc = this.col;
+            String ch  = this.peek();
+
+            if (ch == "") {
+                done = true;
+            } else if (ch == "\"") {
+                this.advance();
+                this.readString(tokens);
+            } else if (ch == "{") {
+                depth++;
+                this.advance();
+                tokens.append(Token.ofSimple(TokenKind.LBRACE, sl, sc));
+            } else if (ch == "}") {
+                depth--;
+                this.advance();
+                if (depth == 0) {
+                    done = true;
+                } else {
+                    tokens.append(Token.ofSimple(TokenKind.RBRACE, sl, sc));
+                }
+            } else {
+                Token tok = this.lexOne(sl, sc);
+                if (tok.kind == TokenKind.EOF) {
+                    done = true;
+                } else {
+                    tokens.append(tok);
+                }
+            }
+        }
+    }
+
+    // ── Single-token dispatch ─────────────────────────────────────────────────
+
+    private lexOne(sl: Integer, sc: Integer) : Token {
+        String ch = this.advance();
+        if (ch == "") { return Token.ofSimple(TokenKind.EOF, sl, sc); }
+
+        if (this.isDigit(ch)) { return this.readNumber(ch, sl, sc); }
+        if (this.isAlpha(ch)) { return this.readIdent(ch, sl, sc); }
+
+        if (ch == "+") {
+            if (this.peek() == "+") { this.advance(); return Token.ofSimple(TokenKind.PLUS_PLUS,   sl, sc); }
+            if (this.peek() == "=") { this.advance(); return Token.ofSimple(TokenKind.PLUS_EQ,     sl, sc); }
+            return Token.ofSimple(TokenKind.PLUS, sl, sc);
+        }
+        if (ch == "-") {
+            if (this.peek() == "-") { this.advance(); return Token.ofSimple(TokenKind.MINUS_MINUS, sl, sc); }
+            if (this.peek() == ">") { this.advance(); return Token.ofSimple(TokenKind.ARROW,       sl, sc); }
+            if (this.peek() == "=") { this.advance(); return Token.ofSimple(TokenKind.MINUS_EQ,    sl, sc); }
+            return Token.ofSimple(TokenKind.MINUS, sl, sc);
+        }
+        if (ch == "*") {
+            if (this.peek() == "=") { this.advance(); return Token.ofSimple(TokenKind.STAR_EQ,  sl, sc); }
+            return Token.ofSimple(TokenKind.STAR, sl, sc);
+        }
+        if (ch == "/") {
+            if (this.peek() == "=") { this.advance(); return Token.ofSimple(TokenKind.SLASH_EQ, sl, sc); }
+            return Token.ofSimple(TokenKind.SLASH, sl, sc);
+        }
+        if (ch == "%") { return Token.ofSimple(TokenKind.PERCENT, sl, sc); }
+
+        if (ch == "=") {
+            if (this.peek() == "=") { this.advance(); return Token.ofSimple(TokenKind.EQ_EQ,     sl, sc); }
+            if (this.peek() == ">") { this.advance(); return Token.ofSimple(TokenKind.FAT_ARROW,  sl, sc); }
+            return Token.ofSimple(TokenKind.EQ, sl, sc);
+        }
+        if (ch == "!") {
+            if (this.peek() == "=") { this.advance(); return Token.ofSimple(TokenKind.BANG_EQ, sl, sc); }
+            return Token.ofSimple(TokenKind.BANG, sl, sc);
+        }
+        if (ch == "<") {
+            if (this.peek() == "<") { this.advance(); return Token.ofSimple(TokenKind.LT_LT, sl, sc); }
+            if (this.peek() == "=") { this.advance(); return Token.ofSimple(TokenKind.LT_EQ, sl, sc); }
+            return Token.ofSimple(TokenKind.LT, sl, sc);
+        }
+        if (ch == ">") {
+            if (this.peek() == ">") { this.advance(); return Token.ofSimple(TokenKind.GT_GT, sl, sc); }
+            if (this.peek() == "=") { this.advance(); return Token.ofSimple(TokenKind.GT_EQ, sl, sc); }
+            return Token.ofSimple(TokenKind.GT, sl, sc);
+        }
+        if (ch == "&") {
+            if (this.peek() == "&") { this.advance(); return Token.ofSimple(TokenKind.AND_AND,  sl, sc); }
+            return Token.ofSimple(TokenKind.AMP, sl, sc);
+        }
+        if (ch == "|") {
+            if (this.peek() == "|") { this.advance(); return Token.ofSimple(TokenKind.PIPE_PIPE, sl, sc); }
+            return Token.ofSimple(TokenKind.PIPE, sl, sc);
+        }
+        if (ch == "^") { return Token.ofSimple(TokenKind.CARET, sl, sc); }
+        if (ch == "~") { return Token.ofSimple(TokenKind.TILDE, sl, sc); }
+        if (ch == "?") {
+            if (this.peek() == ".") { this.advance(); return Token.ofSimple(TokenKind.QUESTION_DOT,      sl, sc); }
+            if (this.peek() == "?") { this.advance(); return Token.ofSimple(TokenKind.QUESTION_QUESTION, sl, sc); }
+            return Token.ofSimple(TokenKind.QUESTION, sl, sc);
+        }
+        if (ch == ":") { return Token.ofSimple(TokenKind.COLON, sl, sc); }
+        if (ch == ".") {
+            if (this.peek() == "." && this.peekAt(1) == ".") {
+                this.advance();
+                this.advance();
+                return Token.ofSimple(TokenKind.ELLIPSIS, sl, sc);
+            }
+            return Token.ofSimple(TokenKind.DOT, sl, sc);
+        }
+        if (ch == "(") { return Token.ofSimple(TokenKind.LPAREN,    sl, sc); }
+        if (ch == ")") { return Token.ofSimple(TokenKind.RPAREN,    sl, sc); }
+        if (ch == "{") { return Token.ofSimple(TokenKind.LBRACE,    sl, sc); }
+        if (ch == "}") { return Token.ofSimple(TokenKind.RBRACE,    sl, sc); }
+        if (ch == "[") { return Token.ofSimple(TokenKind.LBRACKET,  sl, sc); }
+        if (ch == "]") { return Token.ofSimple(TokenKind.RBRACKET,  sl, sc); }
+        if (ch == ",") { return Token.ofSimple(TokenKind.COMMA,     sl, sc); }
+        if (ch == ";") { return Token.ofSimple(TokenKind.SEMICOLON, sl, sc); }
+        if (ch == "@") { return Token.ofSimple(TokenKind.AT,        sl, sc); }
+
+        return Token.ofUnknown(ch, sl, sc);
+    }
+
+    // ── Main tokenize loop ────────────────────────────────────────────────────
+
+    public tokenize() : List<Token> {
+        List<Token> tokens = List();
+        Boolean done = false;
+        while (!done) {
+            this.skipWhitespaceAndComments();
+            Integer sl = this.line;
+            Integer sc = this.col;
+            String ch  = this.peek();
+
+            if (ch == "") {
+                tokens.append(Token.ofSimple(TokenKind.EOF, sl, sc));
+                done = true;
+            } else if (ch == "\"") {
+                this.advance();
+                this.readString(tokens);
+            } else {
+                Token tok = this.lexOne(sl, sc);
+                Boolean isEof = tok.kind == TokenKind.EOF;
+                tokens.append(tok);
+                if (isEof) { done = true; }
+            }
+        }
+        return tokens;
+    }
+}

@@ -1,0 +1,71 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.ast.expr;
+
+import arimo.compiler.ast.expr.MatchPatternKind;
+
+public class MatchPattern {
+    public kind     : Integer;
+    public enumName : String;
+    public variant  : String;
+    public bindings : List<String>;
+    public strLit   : String;
+    public intLit   : Integer;
+    public bindName : String;
+
+    public constructor(kind: Integer) {
+        this.kind     = kind;
+        this.enumName = "";
+        this.variant  = "";
+        this.bindings = null;
+        this.strLit   = "";
+        this.intLit   = 0;
+        this.bindName = "";
+    }
+
+    public static wildcard() : MatchPattern {
+        return MatchPattern(MatchPatternKind.WILDCARD);
+    }
+
+    public static binding(name: String) : MatchPattern {
+        MatchPattern p = MatchPattern(MatchPatternKind.BINDING);
+        p.bindName = name;
+        return p;
+    }
+
+    public static variant(enumName: String, varName: String, binds: List<String>) : MatchPattern {
+        MatchPattern p = MatchPattern(MatchPatternKind.VARIANT);
+        p.enumName = enumName;
+        p.variant  = varName;
+        p.bindings = binds;
+        return p;
+    }
+
+    public static ofStrLit(s: String) : MatchPattern {
+        MatchPattern p = MatchPattern(MatchPatternKind.STR_LIT);
+        p.strLit = s;
+        return p;
+    }
+
+    public static ofIntLit(n: Integer) : MatchPattern {
+        MatchPattern p = MatchPattern(MatchPatternKind.INT_LIT);
+        p.intLit = n;
+        return p;
+    }
+}

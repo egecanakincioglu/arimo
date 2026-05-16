@@ -1,0 +1,42 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.ast.decl;
+
+import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.expr.Expr;
+
+public class Param {
+    public name       : String;
+    public ty         : AstType;
+    public default_   : Expr;
+    public isVariadic : Boolean;
+
+    public constructor(name: String, ty: AstType) {
+        this.name       = name;
+        this.ty         = ty;
+        this.default_   = null;
+        this.isVariadic = false;
+    }
+
+    public static variadic(name: String, ty: AstType) : Param {
+        Param p = Param(name, ty);
+        p.isVariadic = true;
+        return p;
+    }
+}

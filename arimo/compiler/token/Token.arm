@@ -1,0 +1,81 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.token;
+
+import arimo.compiler.token.TokenKind;
+
+public class Token {
+    public kind     : Integer;
+    public intVal   : Integer;
+    public floatVal : Float;
+    public boolVal  : Boolean;
+    public strVal   : String;
+    public line     : Integer;
+    public col      : Integer;
+
+    public constructor(kind: Integer, line: Integer, col: Integer) {
+        this.kind     = kind;
+        this.intVal   = 0;
+        this.floatVal = 0.0;
+        this.boolVal  = false;
+        this.strVal   = "";
+        this.line     = line;
+        this.col      = col;
+    }
+
+    public static ofSimple(kind: Integer, line: Integer, col: Integer) : Token {
+        return Token(kind, line, col);
+    }
+
+    public static ofInt(n: Integer, line: Integer, col: Integer) : Token {
+        Token t = Token(TokenKind.INT, line, col);
+        t.intVal = n;
+        return t;
+    }
+
+    public static ofFloat(f: Float, line: Integer, col: Integer) : Token {
+        Token t = Token(TokenKind.FLOAT, line, col);
+        t.floatVal = f;
+        return t;
+    }
+
+    public static ofBool(b: Boolean, line: Integer, col: Integer) : Token {
+        Token t = Token(TokenKind.BOOL, line, col);
+        t.boolVal = b;
+        return t;
+    }
+
+    public static ofStr(s: String, line: Integer, col: Integer) : Token {
+        Token t = Token(TokenKind.STR, line, col);
+        t.strVal = s;
+        return t;
+    }
+
+    public static ofIdent(s: String, line: Integer, col: Integer) : Token {
+        Token t = Token(TokenKind.IDENT, line, col);
+        t.strVal = s;
+        return t;
+    }
+
+    public static ofUnknown(s: String, line: Integer, col: Integer) : Token {
+        Token t = Token(TokenKind.UNKNOWN, line, col);
+        t.strVal = s;
+        return t;
+    }
+}
