@@ -1,4 +1,4 @@
-/*
+﻿/*
 Arimo Lang Compiler - A modern programming language and compiler
 Copyright (C) 2026 Egecan Akıncıoğlu
 
@@ -19,7 +19,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 package arimo.compiler.ast.type;
 
 public class TypeKind {
-    // ── Primitives ────────────────────────────────────────────────────────────
     public static readonly INTEGER  : Integer = 1;
     public static readonly FLOAT    : Integer = 2;
     public static readonly BOOLEAN  : Integer = 3;
@@ -27,7 +26,6 @@ public class TypeKind {
     public static readonly VOID     : Integer = 5;
     public static readonly NORETURN : Integer = 6;
 
-    // ── Fixed-size integers ───────────────────────────────────────────────────
     public static readonly U8       : Integer = 7;
     public static readonly U16      : Integer = 8;
     public static readonly U32      : Integer = 9;
@@ -37,14 +35,12 @@ public class TypeKind {
     public static readonly I32      : Integer = 13;
     public static readonly I64      : Integer = 14;
 
-    // ── Collection types ──────────────────────────────────────────────────────
     public static readonly LIST     : Integer = 20;
     public static readonly MAP      : Integer = 21;
     public static readonly HASHMAP  : Integer = 22;
     public static readonly TREEMAP  : Integer = 23;
     public static readonly PAIR     : Integer = 24;
 
-    // ── Composite and reference types ─────────────────────────────────────────
     public static readonly NAMED    : Integer = 30;
     public static readonly NULLABLE : Integer = 31;
     public static readonly GENERIC  : Integer = 32;

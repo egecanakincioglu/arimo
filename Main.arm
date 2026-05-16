@@ -59,7 +59,6 @@ import arimo.compiler.ast.item.Item;
 
 public class Main {
     public static main() : Void {
-        IO.println("arc-arimo stage 1 compiler");
-        IO.println("Paketler yuklu, derleyici baslatiliyor...");
+        IO.println("arc stage 1 — usage: arc <file.arm>");
     }
 }

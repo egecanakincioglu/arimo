@@ -1,4 +1,4 @@
-/*
+﻿/*
 Arimo Lang Compiler - A modern programming language and compiler
 Copyright (C) 2026 Egecan Akıncıoğlu
 
@@ -30,47 +30,37 @@ public class Expr {
     public line      : Integer;
     public col       : Integer;
 
-    // ── Literal values ────────────────────────────────────────────────────────
     public intVal    : Integer;
     public floatVal  : Float;
     public boolVal   : Boolean;
     public strVal    : String;
 
-    // ── String interpolation ──────────────────────────────────────────────────
     public parts     : List<StrPart>;
 
-    // ── Binary / unary operator ───────────────────────────────────────────────
     public op        : Integer;
     public left      : Expr;
     public right     : Expr;
     public operand   : Expr;
 
-    // ── Field and method access ───────────────────────────────────────────────
     public object    : Expr;
     public field     : String;
     public method    : String;
 
-    // ── Calls (static, constructor, method) ──────────────────────────────────
     public class_    : String;
     public args      : List<Expr>;
 
-    // ── Cast ─────────────────────────────────────────────────────────────────
     public castTy    : AstType;
 
-    // ── Ternary ───────────────────────────────────────────────────────────────
     public cond      : Expr;
     public then_     : Expr;
     public else_     : Expr;
 
-    // ── Lambda ────────────────────────────────────────────────────────────────
     public params    : List<String>;
     public paramTys  : List<AstType>;
     public body      : Expr;
 
-    // ── Index ─────────────────────────────────────────────────────────────────
     public index     : Expr;
 
-    // ── Match ─────────────────────────────────────────────────────────────────
     public matchExpr : Expr;
     public arms      : List<MatchArm>;
 
@@ -104,7 +94,6 @@ public class Expr {
         this.arms      = null;
     }
 
-    // ── Factory methods ───────────────────────────────────────────────────────
 
     public static intLit(n: Integer, line: Integer, col: Integer) : Expr {
         Expr e = Expr(ExprKind.INT_LIT, line, col);

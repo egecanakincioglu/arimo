@@ -1,4 +1,4 @@
-/*
+﻿/*
 Arimo Lang Compiler - A modern programming language and compiler
 Copyright (C) 2026 Egecan Akıncıoğlu
 
@@ -36,7 +36,6 @@ public class Lexer {
         this.col    = 1;
     }
 
-    // ── Character access ──────────────────────────────────────────────────────
 
     private peek() : String {
         if (this.pos >= this.len) { return ""; }
@@ -58,7 +57,6 @@ public class Lexer {
         return ch;
     }
 
-    // ── Character classification ──────────────────────────────────────────────
 
     private isDigit(ch: String) : Boolean {
         return "0123456789".contains(ch);
@@ -84,7 +82,6 @@ public class Lexer {
         return ch == " " || ch == "\t" || ch == "\r" || ch == "\n";
     }
 
-    // ── Whitespace and comment skipping ───────────────────────────────────────
 
     private skipWhitespaceAndComments() : Void {
         Boolean cont = true;
@@ -122,7 +119,6 @@ public class Lexer {
         }
     }
 
-    // ── Number parsing helpers ────────────────────────────────────────────────
 
     private hexCharVal(ch: String) : Integer {
         return "0123456789abcdef".indexOf(ch.toLower());
@@ -149,7 +145,6 @@ public class Lexer {
         return result;
     }
 
-    // ── Number lexing ─────────────────────────────────────────────────────────
 
     private readNumber(first: String, sl: Integer, sc: Integer) : Token {
         if (first == "0") {
@@ -198,7 +193,6 @@ public class Lexer {
         return Token.ofInt(num.parseInt(), sl, sc);
     }
 
-    // ── Identifier and keyword lexing ─────────────────────────────────────────
 
     private readIdent(first: String, sl: Integer, sc: Integer) : Token {
         String word = first;
@@ -289,7 +283,6 @@ public class Lexer {
         return Token.ofIdent(word, sl, sc);
     }
 
-    // ── String and interpolation lexing ───────────────────────────────────────
 
     private readString(tokens: List<Token>) : Void {
         String buf   = "";
@@ -365,7 +358,6 @@ public class Lexer {
         }
     }
 
-    // ── Single-token dispatch ─────────────────────────────────────────────────
 
     private lexOne(sl: Integer, sc: Integer) : Token {
         String ch = this.advance();
@@ -451,7 +443,6 @@ public class Lexer {
         return Token.ofUnknown(ch, sl, sc);
     }
 
-    // ── Main tokenize loop ────────────────────────────────────────────────────
 
     public tokenize() : List<Token> {
         List<Token> tokens = List();

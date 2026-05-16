@@ -1,4 +1,4 @@
-/*
+﻿/*
 Arimo Lang Compiler - A modern programming language and compiler
 Copyright (C) 2026 Egecan Akıncıoğlu
 
@@ -69,7 +69,6 @@ public class Parser {
         this.eofTok   = Token.ofSimple(TokenKind.EOF, 0, 0);
     }
 
-    // ── Token access helpers ──────────────────────────────────────────────────
 
     private peek() : Token {
         if (this.pos >= this.tokens.length()) { return this.eofTok; }
@@ -121,7 +120,6 @@ public class Parser {
         if (this.check(TokenKind.SEMICOLON)) { this.advance(); }
     }
 
-    // ── Type name from token kind ─────────────────────────────────────────────
 
     private typeKindForToken(k: Integer) : Integer {
         if (k == TokenKind.TYPE_INTEGER) { return TypeKind.INTEGER; }
@@ -145,7 +143,6 @@ public class Parser {
         return this.typeKindForToken(k) != -1;
     }
 
-    // ── Type parsing ──────────────────────────────────────────────────────────
 
     public parseType() : AstType {
         AstType base = this.parseBaseType();
@@ -162,20 +159,17 @@ public class Parser {
         Integer sl = t.line;
         Integer sc = t.col;
 
-        // Primitive / fixed-size types
         Integer simpleKind = this.typeKindForToken(k);
         if (simpleKind != -1) {
             this.advance();
             return AstType.simple(simpleKind);
         }
 
-        // Exception keyword used as type name
         if (k == TokenKind.TYPE_EXCEPTION) {
             this.advance();
             return AstType.named("Exception");
         }
 
-        // Collection types with generic params
         if (k == TokenKind.TYPE_LIST) {
             this.advance();
             this.eat(TokenKind.LT);
@@ -243,7 +237,6 @@ public class Parser {
             return AstType.array(inner, size);
         }
 
-        // Function pointer: (A, B) -> C
         if (k == TokenKind.LPAREN) {
             this.advance();
             List<AstType> params = List();
@@ -257,7 +250,6 @@ public class Parser {
             return AstType.fnptr(params, ret);
         }
 
-        // Named / generic
         if (k == TokenKind.IDENT) {
             String name = this.advance().strVal;
             if (this.check(TokenKind.LT)) {
@@ -279,40 +271,30 @@ public class Parser {
         return AstType.simple(TypeKind.VOID);
     }
 
-    // ── Expression parsing (Pratt) ────────────────────────────────────────────
 
     private infixPrec(kind: Integer) : Integer {
-        // Assignment (right-assoc handled separately)
         if (kind == TokenKind.EQ)         { return 1; }
         if (kind == TokenKind.PLUS_EQ)    { return 1; }
         if (kind == TokenKind.MINUS_EQ)   { return 1; }
         if (kind == TokenKind.STAR_EQ)    { return 1; }
         if (kind == TokenKind.SLASH_EQ)   { return 1; }
-        // Null coalesce
         if (kind == TokenKind.QUESTION_QUESTION) { return 2; }
-        // Ternary ?
         if (kind == TokenKind.QUESTION)   { return 3; }
-        // Logical
         if (kind == TokenKind.PIPE_PIPE)  { return 4; }
         if (kind == TokenKind.AND_AND)    { return 5; }
-        // Equality
         if (kind == TokenKind.EQ_EQ)      { return 6; }
         if (kind == TokenKind.BANG_EQ)    { return 6; }
-        // Comparison
         if (kind == TokenKind.LT)         { return 7; }
         if (kind == TokenKind.LT_EQ)      { return 7; }
         if (kind == TokenKind.GT)         { return 7; }
         if (kind == TokenKind.GT_EQ)      { return 7; }
-        // Bitwise
         if (kind == TokenKind.PIPE)       { return 8; }
         if (kind == TokenKind.CARET)      { return 9; }
         if (kind == TokenKind.AMP)        { return 10; }
         if (kind == TokenKind.LT_LT)      { return 11; }
         if (kind == TokenKind.GT_GT)      { return 11; }
-        // Additive
         if (kind == TokenKind.PLUS)       { return 12; }
         if (kind == TokenKind.MINUS)      { return 12; }
-        // Multiplicative
         if (kind == TokenKind.STAR)       { return 13; }
         if (kind == TokenKind.SLASH)      { return 13; }
         if (kind == TokenKind.PERCENT)    { return 13; }
@@ -358,7 +340,6 @@ public class Parser {
                 Integer sl = this.peek().line;
                 Integer sc = this.peek().col;
 
-                // Ternary
                 if (k == TokenKind.QUESTION) {
                     this.advance();
                     Expr then_ = this.parseExpr(0);
@@ -366,13 +347,11 @@ public class Parser {
                     Expr else_ = this.parseExpr(0);
                     left = Expr.ternary(left, then_, else_, sl, sc);
                 }
-                // Null coalesce
                 else if (k == TokenKind.QUESTION_QUESTION) {
                     this.advance();
                     Expr right = this.parseExpr(prec);
                     left = Expr.nullCoalesce(left, right, sl, sc);
                 }
-                // Assignment (right-assoc: re-parse at same prec)
                 else if (k == TokenKind.EQ || k == TokenKind.PLUS_EQ ||
                          k == TokenKind.MINUS_EQ || k == TokenKind.STAR_EQ ||
                          k == TokenKind.SLASH_EQ) {
@@ -381,7 +360,6 @@ public class Parser {
                     Expr right = this.parseExpr(prec - 1);
                     left = Expr.binop(op, left, right, sl, sc);
                 }
-                // Normal left-assoc binary
                 else {
                     this.advance();
                     Integer op = this.infixOp(k);
@@ -406,16 +384,13 @@ public class Parser {
 
     private parseStringInterp(sl: Integer, sc: Integer) : Expr {
         List<StrPart> parts = List();
-        // Current token is STR or DOLLAR_LBRACE (start of string)
         if (this.check(TokenKind.STR)) {
             String text = this.advance().strVal;
             if (!this.check(TokenKind.DOLLAR_LBRACE)) {
-                // Simple string literal
                 return Expr.strLit(text, sl, sc);
             }
             if (text.length() > 0) { parts.append(StrPart.text(text)); }
         }
-        // Collect interp segments
         while (this.check(TokenKind.DOLLAR_LBRACE)) {
             this.advance();
             Expr e = this.parseExpr(0);
@@ -430,7 +405,6 @@ public class Parser {
     }
 
     private parseLambda(sl: Integer, sc: Integer) : Expr {
-        // Already consumed LPAREN
         List<String> params   = List();
         List<AstType> paramTys = List();
         while (!this.check(TokenKind.RPAREN) && !this.check(TokenKind.EOF)) {
@@ -444,7 +418,6 @@ public class Parser {
     }
 
     private isLambdaStart() : Boolean {
-        // ( ) -> or ( ident ) -> or ( ident , ident ) ->
         if (!this.check(TokenKind.LPAREN)) { return false; }
         Integer save = this.pos;
         this.advance(); // consume (
@@ -472,50 +445,42 @@ public class Parser {
         Integer sc = t.col;
         Integer k  = t.kind;
 
-        // Null literal
         if (k == TokenKind.NULL) {
             this.advance();
             return Expr.nullLit(sl, sc);
         }
 
-        // Int literal
         if (k == TokenKind.INT) {
             Integer v = this.advance().intVal;
             return Expr.intLit(v, sl, sc);
         }
 
-        // Float literal
         if (k == TokenKind.FLOAT) {
             Float v = this.advance().floatVal;
             return Expr.floatLit(v, sl, sc);
         }
 
-        // Bool literal
         if (k == TokenKind.BOOL) {
             Boolean v = this.advance().boolVal;
             return Expr.boolLit(v, sl, sc);
         }
 
-        // String (possibly interpolated)
         if (k == TokenKind.STR || k == TokenKind.DOLLAR_LBRACE) {
             return this.parseStringInterp(sl, sc);
         }
 
-        // this
         if (k == TokenKind.THIS) {
             this.advance();
             Expr obj = Expr.thisExpr(sl, sc);
             return this.parseSuffix(obj);
         }
 
-        // super
         if (k == TokenKind.SUPER) {
             this.advance();
             Expr obj = Expr.superExpr(sl, sc);
             return this.parseSuffix(obj);
         }
 
-        // Unary prefix: !, -, ~, ++, --
         if (k == TokenKind.BANG) {
             this.advance();
             return Expr.unary(UnaryOp.NOT, this.parsePrimary(), sl, sc);
@@ -537,20 +502,17 @@ public class Parser {
             return Expr.unary(UnaryOp.PRE_DEC, this.parsePrimary(), sl, sc);
         }
 
-        // await
         if (k == TokenKind.AWAIT) {
             this.advance();
             Expr inner = this.parsePrimary();
             return Expr.await_(inner, sl, sc);
         }
 
-        // Lambda: (params) -> body
         if (this.isLambdaStart()) {
             this.advance(); // consume (
             return this.parseLambda(sl, sc);
         }
 
-        // Grouped expression: (expr)
         if (k == TokenKind.LPAREN) {
             this.advance();
             Expr inner = this.parseExpr(0);
@@ -558,7 +520,6 @@ public class Parser {
             return this.parseSuffix(inner);
         }
 
-        // match expression
         if (k == TokenKind.MATCH) {
             this.advance();
             Expr subject = this.parseExpr(0);
@@ -575,7 +536,6 @@ public class Parser {
             return Expr.match_(subject, arms, sl, sc);
         }
 
-        // Built-in stubs (IO, Math, Time, Memory) — parsed as static call or field
         if (k == TokenKind.STD_IO || k == TokenKind.STD_MATH ||
             k == TokenKind.STD_TIME || k == TokenKind.STD_MEMORY) {
             String cls = this.stubName(k);
@@ -584,10 +544,8 @@ public class Parser {
             return this.parseSuffix(obj);
         }
 
-        // Identifier: variable, constructor call, or static call
         if (k == TokenKind.IDENT) {
             String name = this.advance().strVal;
-            // Constructor or static call: Name(args) or Name.method(args)
             if (this.check(TokenKind.LPAREN)) {
                 List<Expr> args = this.parseArgs();
                 Expr call = Expr.ctorCall(name, args, sl, sc);
@@ -597,7 +555,6 @@ public class Parser {
             return this.parseSuffix(base);
         }
 
-        // Type keywords used as receiver (e.g. Integer.sizeOf())
         if (this.isSimpleTypeToken(k)) {
             String name = this.typeTokenName(k);
             this.advance();
@@ -635,7 +592,6 @@ public class Parser {
         return "Unknown";
     }
 
-    // Parse .field, .method(), [index], ?., ++, -- after an expression
     private parseSuffix(base: Expr) : Expr {
         Expr e = base;
         Boolean cont = true;
@@ -696,28 +652,23 @@ public class Parser {
         return e;
     }
 
-    // ── Match pattern ─────────────────────────────────────────────────────────
 
     private parseMatchPattern() : MatchPattern {
-        // Wildcard
         if (this.check(TokenKind.IDENT) && this.peek().strVal == "_") {
             this.advance();
             return MatchPattern.wildcard();
         }
 
-        // String literal
         if (this.check(TokenKind.STR)) {
             String s = this.advance().strVal;
             return MatchPattern.ofStrLit(s);
         }
 
-        // Integer literal
         if (this.check(TokenKind.INT)) {
             Integer n = this.advance().intVal;
             return MatchPattern.ofIntLit(n);
         }
 
-        // EnumName.Variant or EnumName.Variant(bindings) or just binding name
         if (this.check(TokenKind.IDENT)) {
             String first = this.advance().strVal;
             if (this.check(TokenKind.DOT)) {
@@ -742,7 +693,6 @@ public class Parser {
         return MatchPattern.wildcard();
     }
 
-    // ── Statement parsing ─────────────────────────────────────────────────────
 
     public parseBlock() : List<Stmt> {
         this.eat(TokenKind.LBRACE);
@@ -776,7 +726,6 @@ public class Parser {
         Integer sc = t.col;
         Integer k  = t.kind;
 
-        // return
         if (k == TokenKind.RETURN) {
             this.advance();
             Expr e = null;
@@ -787,7 +736,6 @@ public class Parser {
             return Stmt.return_(e, sl, sc);
         }
 
-        // throw
         if (k == TokenKind.THROW) {
             this.advance();
             Expr e = this.parseExpr(0);
@@ -795,21 +743,18 @@ public class Parser {
             return Stmt.throw_(e, sl, sc);
         }
 
-        // break
         if (k == TokenKind.BREAK) {
             this.advance();
             this.skipSemicolon();
             return Stmt.break_(sl, sc);
         }
 
-        // continue
         if (k == TokenKind.CONTINUE) {
             this.advance();
             this.skipSemicolon();
             return Stmt.continue_(sl, sc);
         }
 
-        // defer
         if (k == TokenKind.DEFER) {
             this.advance();
             Expr e = this.parseExpr(0);
@@ -817,7 +762,6 @@ public class Parser {
             return Stmt.defer_(e, sl, sc);
         }
 
-        // if
         if (k == TokenKind.IF) {
             this.advance();
             this.eat(TokenKind.LPAREN);
@@ -842,7 +786,6 @@ public class Parser {
             return Stmt.if_(cond, then_, elseIfs, else_, sl, sc);
         }
 
-        // while
         if (k == TokenKind.WHILE) {
             this.advance();
             this.eat(TokenKind.LPAREN);
@@ -852,12 +795,9 @@ public class Parser {
             return Stmt.while_(cond, body, sl, sc);
         }
 
-        // for
         if (k == TokenKind.FOR) {
             this.advance();
             this.eat(TokenKind.LPAREN);
-            // Determine: for-each or C-style
-            // for (Type name : iter) or for (Type name in iter) or for (Type name = init; cond; step)
             AstType ty   = this.parseType();
             String  name = this.eatIdent();
             if (this.check(TokenKind.COLON) || (this.check(TokenKind.IDENT) && this.peek().strVal == "in")) {
@@ -867,7 +807,6 @@ public class Parser {
                 List<Stmt> body = this.parseBlock();
                 return Stmt.forEach(ty, name, iter, body, sl, sc);
             }
-            // C-style: already parsed Type name, now expect = init ; cond ; step
             this.eat(TokenKind.EQ);
             Expr initVal = this.parseExpr(0);
             Stmt init    = Stmt.varDecl(ty, name, initVal, sl, sc);
@@ -880,7 +819,6 @@ public class Parser {
             return Stmt.for_(init, cond, step, body, sl, sc);
         }
 
-        // switch
         if (k == TokenKind.SWITCH) {
             this.advance();
             this.eat(TokenKind.LPAREN);
@@ -906,7 +844,6 @@ public class Parser {
             return Stmt.switch_(expr, cases, sl, sc);
         }
 
-        // try/catch/finally
         if (k == TokenKind.TRY) {
             this.advance();
             List<Stmt> tryBody = this.parseBlock();
@@ -928,7 +865,6 @@ public class Parser {
             return Stmt.try_(tryBody, catches, finally_, sl, sc);
         }
 
-        // asm block
         if (k == TokenKind.ASM) {
             this.advance();
             this.eat(TokenKind.LBRACE);
@@ -944,7 +880,6 @@ public class Parser {
             return Stmt.asm_(asmText, sl, sc);
         }
 
-        // volatile var decl
         if (k == TokenKind.VOLATILE) {
             this.advance();
             AstType ty   = this.parseType();
@@ -955,7 +890,6 @@ public class Parser {
             return Stmt.volatileVarDecl(ty, name2, init, sl, sc);
         }
 
-        // var decl: Type name = expr; or Type name;
         if (this.looksLikeVarDecl()) {
             AstType ty   = this.parseType();
             String  name3 = this.eatIdent();
@@ -965,7 +899,6 @@ public class Parser {
             return Stmt.varDecl(ty, name3, init, sl, sc);
         }
 
-        // Expression statement
         Expr e = this.parseExpr(0);
         this.skipSemicolon();
         return Stmt.exprStmt(e, sl, sc);
@@ -983,14 +916,12 @@ public class Parser {
         return stmts;
     }
 
-    // ── Annotation parsing ────────────────────────────────────────────────────
 
     private parseAnnotations() : List<String> {
         List<String> annots = List();
         while (this.check(TokenKind.AT)) {
             this.advance();
             String name = this.eatIdent();
-            // Optional argument: @Deprecated("msg") or @Align(16)
             if (this.check(TokenKind.LPAREN)) {
                 this.advance();
                 while (!this.check(TokenKind.RPAREN) && !this.check(TokenKind.EOF)) {
@@ -1003,7 +934,6 @@ public class Parser {
         return annots;
     }
 
-    // ── Generic bounds ────────────────────────────────────────────────────────
 
     private parseGenericBounds() : List<GenericBound> {
         List<GenericBound> bounds = List();
@@ -1027,7 +957,6 @@ public class Parser {
         return bounds;
     }
 
-    // ── Parameter list ────────────────────────────────────────────────────────
 
     private parseParams() : List<Param> {
         List<Param> params = List();
@@ -1039,7 +968,6 @@ public class Parser {
             String  name = this.eatIdent();
             Param p = Param(name, ty);
             p.isVariadic = isVariadic;
-            // Default value
             if (this.check(TokenKind.EQ)) {
                 this.advance();
                 p.default_ = this.parseExpr(0);
@@ -1051,14 +979,12 @@ public class Parser {
         return params;
     }
 
-    // ── Method declaration ────────────────────────────────────────────────────
 
     private parseMethod(vis: Integer, isStatic: Boolean, isAbstract: Boolean,
                         isDefault: Boolean, isOverride: Boolean,
                         isAsync: Boolean, isOperator: Boolean) : MethodDecl {
         String name = "";
         if (isOperator) {
-            // operator token follows
             name = "operator_" + this.operatorSymbol();
         } else {
             name = this.eatIdent();
@@ -1100,7 +1026,6 @@ public class Parser {
         return "op";
     }
 
-    // ── Field declaration ─────────────────────────────────────────────────────
 
     private parseField(vis: Integer, isStatic: Boolean, isReadonly: Boolean) : FieldDecl {
         String name = this.eatIdent();
@@ -1117,7 +1042,6 @@ public class Parser {
         return f;
     }
 
-    // ── Class body members ────────────────────────────────────────────────────
 
     private parseClassBody(classDecl: ClassDecl) : Void {
         this.eat(TokenKind.LBRACE);
@@ -1133,13 +1057,11 @@ public class Parser {
             Boolean isOperator = false;
             Boolean isDefault  = false;
 
-            // Visibility
             if (this.check(TokenKind.PUBLIC))    { this.advance(); vis = Visibility.PUBLIC;    }
             else if (this.check(TokenKind.PRIVATE))   { this.advance(); vis = Visibility.PRIVATE;   }
             else if (this.check(TokenKind.PROTECTED)) { this.advance(); vis = Visibility.PROTECTED; }
             else if (this.check(TokenKind.INTERNAL))  { this.advance(); vis = Visibility.INTERNAL;  }
 
-            // Modifiers
             Boolean contMod = true;
             while (contMod) {
                 if (this.check(TokenKind.STATIC))   { this.advance(); isStatic   = true; }
@@ -1152,16 +1074,13 @@ public class Parser {
                 else { contMod = false; }
             }
 
-            // Constructor
             if (this.check(TokenKind.CONSTRUCTOR)) {
                 this.advance();
                 List<Param> params = this.parseParams();
                 List<Stmt> body = this.parseBlock();
                 classDecl.ctor = ConstructorDecl(vis, params, body);
             }
-            // Method or field
             else if (isOperator || this.peek().kind == TokenKind.IDENT) {
-                // Disambiguate: field has "name : Type" pattern, method has "name(params)"
                 if (!isOperator && this.peekAt(1).kind == TokenKind.COLON) {
                     classDecl.fields.append(this.parseField(vis, isStatic, isReadonly));
                 } else {
@@ -1171,14 +1090,12 @@ public class Parser {
                 }
             }
             else {
-                // Skip unknown token
                 this.advance();
             }
         }
         this.eat(TokenKind.RBRACE);
     }
 
-    // ── Item parsing ──────────────────────────────────────────────────────────
 
     private parseClassDecl(vis: Integer, isAbstract: Boolean, isManual: Boolean,
                            isSealed: Boolean, isImmutable: Boolean) : Item {
@@ -1225,11 +1142,9 @@ public class Parser {
         String name = this.eatIdent();
         EnumDecl e = EnumDecl(vis, name);
         this.eat(TokenKind.LBRACE);
-        // Variants first (until we hit a method-like token or })
         Boolean inVariants = true;
         while (!this.check(TokenKind.RBRACE) && !this.check(TokenKind.EOF)) {
             Integer k = this.peek().kind;
-            // Method starts with visibility or modifier keyword
             if (k == TokenKind.PUBLIC || k == TokenKind.PRIVATE ||
                 k == TokenKind.PROTECTED || k == TokenKind.INTERNAL ||
                 k == TokenKind.STATIC || k == TokenKind.ABSTRACT) {
@@ -1244,7 +1159,6 @@ public class Parser {
                 MethodDecl m = this.parseMethod(mvis, mStatic, false, false, false, false, false);
                 e.methods.append(m);
             } else {
-                // Variant
                 String varName = this.eatIdent();
                 EnumVariant v = EnumVariant(varName);
                 if (this.check(TokenKind.LPAREN)) {
@@ -1279,7 +1193,6 @@ public class Parser {
             else if (this.check(TokenKind.PRIVATE)) { this.advance(); mvis = Visibility.PRIVATE; }
             if (this.check(TokenKind.STATIC))   { this.advance(); isSt = true; }
             if (this.check(TokenKind.READONLY)) { this.advance(); isRo = true; }
-            // Field or method
             if (this.check(TokenKind.OPERATOR)) {
                 this.advance();
                 s.methods.append(this.parseMethod(mvis, false, false, false, false, false, true));
@@ -1343,7 +1256,6 @@ public class Parser {
     }
 
     private parseExternDecl() : Item {
-        // extern "C" { decls }
         String abi = "C";
         if (this.check(TokenKind.STR)) { abi = this.advance().strVal; }
         ExternDecl ext = ExternDecl(abi);
@@ -1352,7 +1264,6 @@ public class Parser {
             String fname = this.eatIdent();
             ExternFnDecl fn = ExternFnDecl(fname);
             fn.params = this.parseParams();
-            // Handle ellipsis (variadic) — already handled inside parseParams
             if (this.check(TokenKind.COLON)) {
                 this.advance();
                 fn.returnTy = this.parseType();
@@ -1365,7 +1276,6 @@ public class Parser {
     }
 
     private parseExtensionDecl() : Item {
-        // extend TypeName { methods }
         String target = this.eatIdent();
         ExtensionDecl ex = ExtensionDecl(target);
         this.eat(TokenKind.LBRACE);
@@ -1414,7 +1324,6 @@ public class Parser {
         Boolean isImmutable = false;
         Boolean isPacked    = false;
 
-        // Check @ManualMemory, @Packed, @Sealed, @Immutable from annotations
         Integer ai = 0;
         while (ai < annots.length()) {
             String an = annots.get(ai);
@@ -1428,7 +1337,6 @@ public class Parser {
         Integer vis      = Visibility.PUBLIC;
         Boolean isAbstract = false;
 
-        // Visibility
         if (this.check(TokenKind.PUBLIC))    { this.advance(); vis = Visibility.PUBLIC;    }
         else if (this.check(TokenKind.PRIVATE))   { this.advance(); vis = Visibility.PRIVATE;   }
         else if (this.check(TokenKind.PROTECTED)) { this.advance(); vis = Visibility.PROTECTED; }
@@ -1436,7 +1344,6 @@ public class Parser {
 
         if (this.check(TokenKind.ABSTRACT)) { this.advance(); isAbstract = true; }
 
-        // Dispatch on item kind keyword
         if (this.check(TokenKind.CLASS)) {
             this.advance();
             return this.parseClassDecl(vis, isAbstract, isManual, isSealed, isImmutable);
@@ -1453,7 +1360,6 @@ public class Parser {
             this.advance();
             return this.parseStructDecl(vis, isPacked);
         }
-        // exception keyword (parsed as Ident by lexer) or "class ... extends Exception"
         if (this.check(TokenKind.IDENT) && this.peek().strVal == "exception") {
             this.advance();
             return this.parseExceptionDecl(vis, isManual);
@@ -1482,12 +1388,10 @@ public class Parser {
         return Item.fromClass(ClassDecl(Visibility.PUBLIC, "Error"));
     }
 
-    // ── Top-level parse ───────────────────────────────────────────────────────
 
     public parse() : ArimoModule {
         ArimoModule mod = ArimoModule("");
 
-        // package / module declaration
         if (this.check(TokenKind.PACKAGE)) {
             this.advance();
             String path = this.parseDottedName();
@@ -1495,7 +1399,6 @@ public class Parser {
             this.skipSemicolon();
         }
 
-        // imports
         while (this.check(TokenKind.IMPORT)) {
             this.advance();
             String imp = this.parseDottedName();
@@ -1503,7 +1406,6 @@ public class Parser {
             this.skipSemicolon();
         }
 
-        // top-level items
         while (!this.check(TokenKind.EOF)) {
             Item item = this.parseItem();
             mod.items.append(item);

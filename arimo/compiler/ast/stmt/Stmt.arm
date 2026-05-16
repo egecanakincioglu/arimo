@@ -1,4 +1,4 @@
-/*
+﻿/*
 Arimo Lang Compiler - A modern programming language and compiler
 Copyright (C) 2026 Egecan Akıncıoğlu
 
@@ -30,45 +30,36 @@ public class Stmt {
     public line        : Integer;
     public col         : Integer;
 
-    // ── VarDecl ───────────────────────────────────────────────────────────────
     public isVolatile  : Boolean;
     public ty          : AstType;
     public name        : String;
     public initExpr    : Expr;
 
-    // ── ExprStmt / Return / Throw / Defer ────────────────────────────────────
     public expr        : Expr;
 
-    // ── If ────────────────────────────────────────────────────────────────────
     public cond        : Expr;
     public thenBody    : List<Stmt>;
     public elseIfs     : List<ElseIfBranch>;
     public elseBody    : List<Stmt>;
 
-    // ── While / Block ─────────────────────────────────────────────────────────
     public body        : List<Stmt>;
 
-    // ── ForEach ───────────────────────────────────────────────────────────────
     public iterTy      : AstType;
     public iterName    : String;
     public iterable    : Expr;
 
-    // ── For (C-style) ─────────────────────────────────────────────────────────
     public forInit     : Stmt;
     public forCond     : Expr;
     public forStep     : Expr;
     public forBody     : List<Stmt>;
 
-    // ── Switch ────────────────────────────────────────────────────────────────
     public switchExpr  : Expr;
     public cases       : List<SwitchCase>;
 
-    // ── TryCatch ──────────────────────────────────────────────────────────────
     public tryBody     : List<Stmt>;
     public catches     : List<CatchClause>;
     public finallyBody : List<Stmt>;
 
-    // ── Asm ───────────────────────────────────────────────────────────────────
     public asmText     : String;
 
     public constructor(kind: Integer, line: Integer, col: Integer) {
@@ -100,7 +91,6 @@ public class Stmt {
         this.asmText     = "";
     }
 
-    // ── Factory methods ───────────────────────────────────────────────────────
 
     public static varDecl(ty: AstType, name: String, init: Expr, line: Integer, col: Integer) : Stmt {
         Stmt s = Stmt(StmtKind.VAR_DECL, line, col);

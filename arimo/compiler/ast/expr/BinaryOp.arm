@@ -1,4 +1,4 @@
-/*
+﻿/*
 Arimo Lang Compiler - A modern programming language and compiler
 Copyright (C) 2026 Egecan Akıncıoğlu
 
@@ -19,14 +19,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 package arimo.compiler.ast.expr;
 
 public class BinaryOp {
-    // ── Arithmetic ────────────────────────────────────────────────────────────
     public static readonly ADD        : Integer = 1;
     public static readonly SUB        : Integer = 2;
     public static readonly MUL        : Integer = 3;
     public static readonly DIV        : Integer = 4;
     public static readonly MOD        : Integer = 5;
 
-    // ── Comparison ────────────────────────────────────────────────────────────
     public static readonly EQ         : Integer = 6;
     public static readonly NE         : Integer = 7;
     public static readonly LT         : Integer = 8;
@@ -34,18 +32,15 @@ public class BinaryOp {
     public static readonly GT         : Integer = 10;
     public static readonly GE         : Integer = 11;
 
-    // ── Logical ───────────────────────────────────────────────────────────────
     public static readonly AND        : Integer = 12;
     public static readonly OR         : Integer = 13;
 
-    // ── Bitwise ───────────────────────────────────────────────────────────────
     public static readonly BITAND     : Integer = 14;
     public static readonly BITOR      : Integer = 15;
     public static readonly XOR        : Integer = 16;
     public static readonly SHL        : Integer = 17;
     public static readonly SHR        : Integer = 18;
 
-    // ── Assignment ────────────────────────────────────────────────────────────
     public static readonly ASSIGN     : Integer = 19;
     public static readonly ADD_ASSIGN : Integer = 20;
     public static readonly SUB_ASSIGN : Integer = 21;
