@@ -1,1 +1,2 @@
-*.arm linguist-language=Arimo
+*.arm linguist-language=Arimo Lang
+*.arm linguist-detectable=true
