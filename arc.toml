@@ -1,0 +1,46 @@
+# arc.toml -- Arimo project manifest
+
+[project]
+name        = "arimo"
+version     = "0.1.0"
+description = ""
+entry       = "Main.arm"
+license     = "MIT"
+readme      = "README.md"
+keywords    = []
+homepage    = ""
+repository  = ""
+
+[[project.authors]]
+name  = ""
+email = ""
+
+# -- Build --------------------------------------------------------------------
+
+[build]
+target = "x86_64-pc-windows-gnu"
+
+[profiles.release]
+optimize = true
+
+[profiles.dev]
+optimize = false
+
+# -- Stdlib -------------------------------------------------------------------
+
+[stdlib]
+include = []
+
+# -- Dependencies -------------------------------------------------------------
+
+[dependencies]
+# arimo-http = "1.0.0"
+
+[dev-dependencies]
+# arimo-test = "0.1.0"
+
+# -- Scripts ------------------------------------------------------------------
+
+[scripts]
+# lint = "arc check --strict"
+# docs = "arc doc"
