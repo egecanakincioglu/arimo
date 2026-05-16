@@ -1,0 +1,45 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.typechecker;
+
+import arimo.compiler.ast.type.AstType;
+
+public class ScopeFrame {
+    public names : List<String>;
+    public types : List<AstType>;
+
+    public constructor() {
+        this.names = List();
+        this.types = List();
+    }
+
+    public define(name: String, ty: AstType) : Void {
+        this.names.append(name);
+        this.types.append(ty);
+    }
+
+    public lookup(name: String) : AstType {
+        Integer i = this.names.length() - 1;
+        while (i >= 0) {
+            if (this.names.get(i) == name) { return this.types.get(i); }
+            i--;
+        }
+        return null;
+    }
+}

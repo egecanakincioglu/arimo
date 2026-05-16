@@ -1,0 +1,544 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.typechecker;
+
+import arimo.compiler.typechecker.ScopeFrame;
+import arimo.compiler.ast.ArimoModule;
+import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.stmt.StmtKind;
+import arimo.compiler.ast.stmt.Stmt;
+import arimo.compiler.ast.stmt.CatchClause;
+import arimo.compiler.ast.stmt.ElseIfBranch;
+import arimo.compiler.ast.stmt.SwitchCase;
+import arimo.compiler.ast.decl.Param;
+import arimo.compiler.ast.decl.FieldDecl;
+import arimo.compiler.ast.decl.MethodDecl;
+import arimo.compiler.ast.decl.ConstructorDecl;
+import arimo.compiler.ast.decl.ExternFnDecl;
+import arimo.compiler.ast.item.ItemKind;
+import arimo.compiler.ast.item.Item;
+import arimo.compiler.ast.item.ClassDecl;
+import arimo.compiler.ast.item.EnumDecl;
+import arimo.compiler.ast.item.StructDecl;
+import arimo.compiler.ast.item.ExceptionDecl;
+import arimo.compiler.ast.item.InterfaceDecl;
+import arimo.compiler.ast.item.ExtensionDecl;
+import arimo.compiler.ast.item.ExternDecl;
+import arimo.compiler.ast.item.UnionDecl;
+
+public class TypeChecker {
+    private classNames    : List<String>;
+    private classItems    : List<ClassDecl>;
+    private enumNames     : List<String>;
+    private enumItems     : List<EnumDecl>;
+    private structNames   : List<String>;
+    private structItems   : List<StructDecl>;
+    private exNames       : List<String>;
+    private exItems       : List<ExceptionDecl>;
+    private ifaceNames    : List<String>;
+    private ifaceItems    : List<InterfaceDecl>;
+    private extNames      : List<String>;
+    private extItems      : List<ExtensionDecl>;
+    private externFnNames : List<String>;
+    private externFns     : List<ExternFnDecl>;
+    private aliasNames    : List<String>;
+    private aliasTypes    : List<AstType>;
+    private unionNames    : List<String>;
+    private unionItems    : List<UnionDecl>;
+
+    private scopeStack        : List<ScopeFrame>;
+    private currentClassName  : String;
+    private currentRetTy      : AstType;
+
+    public errors   : List<String>;
+    public warnings : List<String>;
+
+    public constructor() {
+        this.classNames    = List();
+        this.classItems    = List();
+        this.enumNames     = List();
+        this.enumItems     = List();
+        this.structNames   = List();
+        this.structItems   = List();
+        this.exNames       = List();
+        this.exItems       = List();
+        this.ifaceNames    = List();
+        this.ifaceItems    = List();
+        this.extNames      = List();
+        this.extItems      = List();
+        this.externFnNames = List();
+        this.externFns     = List();
+        this.aliasNames    = List();
+        this.aliasTypes    = List();
+        this.unionNames    = List();
+        this.unionItems    = List();
+        this.scopeStack    = List();
+        this.currentClassName = "";
+        this.currentRetTy  = null;
+        this.errors        = List();
+        this.warnings      = List();
+    }
+
+    public check(module: ArimoModule) : Void {
+        this.collectDecls(module);
+        this.checkItems(module);
+    }
+
+    private collectDecls(module: ArimoModule) : Void {
+        Integer i = 0;
+        while (i < module.items.length()) {
+            Item item = module.items.get(i);
+            if (item.kind == ItemKind.CLASS) {
+                this.classNames.append(item.classDecl.name);
+                this.classItems.append(item.classDecl);
+            } else if (item.kind == ItemKind.ENUM) {
+                this.enumNames.append(item.enumDecl.name);
+                this.enumItems.append(item.enumDecl);
+            } else if (item.kind == ItemKind.STRUCT) {
+                this.structNames.append(item.structDecl.name);
+                this.structItems.append(item.structDecl);
+            } else if (item.kind == ItemKind.EXCEPTION) {
+                this.exNames.append(item.exDecl.name);
+                this.exItems.append(item.exDecl);
+            } else if (item.kind == ItemKind.INTERFACE) {
+                this.ifaceNames.append(item.ifaceDecl.name);
+                this.ifaceItems.append(item.ifaceDecl);
+            } else if (item.kind == ItemKind.EXTERN) {
+                ExternDecl ext = item.externDecl;
+                Integer j = 0;
+                while (j < ext.decls.length()) {
+                    ExternFnDecl fn = ext.decls.get(j);
+                    this.externFnNames.append(fn.name);
+                    this.externFns.append(fn);
+                    j++;
+                }
+            } else if (item.kind == ItemKind.ALIAS) {
+                this.aliasNames.append(item.aliasDecl.name);
+                this.aliasTypes.append(item.aliasDecl.ty);
+            } else if (item.kind == ItemKind.EXTENSION) {
+                this.extNames.append(item.extDecl.target);
+                this.extItems.append(item.extDecl);
+            } else if (item.kind == ItemKind.UNION) {
+                this.unionNames.append(item.unionDecl.name);
+                this.unionItems.append(item.unionDecl);
+            }
+            i++;
+        }
+    }
+
+    private checkItems(module: ArimoModule) : Void {
+        Integer i = 0;
+        while (i < module.items.length()) {
+            Item item = module.items.get(i);
+            if (item.kind == ItemKind.CLASS) {
+                this.checkClass(item.classDecl);
+            } else if (item.kind == ItemKind.EXCEPTION) {
+                this.checkException(item.exDecl);
+            } else if (item.kind == ItemKind.STRUCT) {
+                this.checkStruct(item.structDecl);
+            } else if (item.kind == ItemKind.EXTENSION) {
+                this.checkExtension(item.extDecl);
+            }
+            i++;
+        }
+    }
+
+    private checkClass(c: ClassDecl) : Void {
+        this.currentClassName = c.name;
+        if (c.ctor != null) { this.checkConstructor(c.ctor); }
+        Integer i = 0;
+        while (i < c.methods.length()) {
+            this.checkMethod(c.methods.get(i));
+            i++;
+        }
+    }
+
+    private checkException(e: ExceptionDecl) : Void {
+        this.currentClassName = e.name;
+        if (e.ctor != null) { this.checkConstructor(e.ctor); }
+        Integer i = 0;
+        while (i < e.methods.length()) {
+            this.checkMethod(e.methods.get(i));
+            i++;
+        }
+    }
+
+    private checkStruct(s: StructDecl) : Void {
+        this.currentClassName = s.name;
+        Integer i = 0;
+        while (i < s.methods.length()) {
+            this.checkMethod(s.methods.get(i));
+            i++;
+        }
+    }
+
+    private checkExtension(e: ExtensionDecl) : Void {
+        this.currentClassName = e.target;
+        Integer i = 0;
+        while (i < e.methods.length()) {
+            this.checkMethod(e.methods.get(i));
+            i++;
+        }
+    }
+
+    private checkConstructor(ctor: ConstructorDecl) : Void {
+        this.pushScope();
+        Integer i = 0;
+        while (i < ctor.params.length()) {
+            Param p = ctor.params.get(i);
+            this.define(p.name, p.ty);
+            i++;
+        }
+        this.checkStmts(ctor.body);
+        this.popScope();
+    }
+
+    private checkMethod(m: MethodDecl) : Void {
+        if (m.body == null) { return; }
+        this.currentRetTy = m.returnTy;
+        this.pushScope();
+        Integer i = 0;
+        while (i < m.params.length()) {
+            Param p = m.params.get(i);
+            this.define(p.name, p.ty);
+            i++;
+        }
+        this.checkStmts(m.body);
+        this.popScope();
+    }
+
+    private checkStmts(stmts: List<Stmt>) : Void {
+        if (stmts == null) { return; }
+        Integer i = 0;
+        while (i < stmts.length()) {
+            this.checkStmt(stmts.get(i));
+            i++;
+        }
+    }
+
+    private checkStmt(s: Stmt) : Void {
+        if (s == null) { return; }
+        Integer k = s.kind;
+
+        if (k == StmtKind.VAR_DECL) {
+            this.define(s.name, s.ty);
+
+        } else if (k == StmtKind.IF) {
+            this.pushScope();
+            this.checkStmts(s.thenBody);
+            this.popScope();
+            if (s.elseIfs != null) {
+                Integer i = 0;
+                while (i < s.elseIfs.length()) {
+                    this.pushScope();
+                    this.checkStmts(s.elseIfs.get(i).body);
+                    this.popScope();
+                    i++;
+                }
+            }
+            if (s.elseBody != null) {
+                this.pushScope();
+                this.checkStmts(s.elseBody);
+                this.popScope();
+            }
+
+        } else if (k == StmtKind.WHILE) {
+            this.pushScope();
+            this.checkStmts(s.body);
+            this.popScope();
+
+        } else if (k == StmtKind.FOR_EACH) {
+            this.pushScope();
+            this.define(s.iterName, s.iterTy);
+            this.checkStmts(s.body);
+            this.popScope();
+
+        } else if (k == StmtKind.FOR) {
+            this.pushScope();
+            if (s.forInit != null) { this.checkStmt(s.forInit); }
+            this.checkStmts(s.forBody);
+            this.popScope();
+
+        } else if (k == StmtKind.SWITCH) {
+            if (s.cases != null) {
+                Integer i = 0;
+                while (i < s.cases.length()) {
+                    this.pushScope();
+                    this.checkStmts(s.cases.get(i).body);
+                    this.popScope();
+                    i++;
+                }
+            }
+
+        } else if (k == StmtKind.TRY) {
+            this.pushScope();
+            this.checkStmts(s.tryBody);
+            this.popScope();
+            if (s.catches != null) {
+                Integer i = 0;
+                while (i < s.catches.length()) {
+                    CatchClause cc = s.catches.get(i);
+                    this.pushScope();
+                    this.define(cc.name, cc.exType);
+                    this.checkStmts(cc.body);
+                    this.popScope();
+                    i++;
+                }
+            }
+            if (s.finallyBody != null) {
+                this.pushScope();
+                this.checkStmts(s.finallyBody);
+                this.popScope();
+            }
+
+        } else if (k == StmtKind.BLOCK) {
+            this.pushScope();
+            this.checkStmts(s.body);
+            this.popScope();
+        }
+    }
+
+    private pushScope() : Void {
+        this.scopeStack.append(ScopeFrame());
+    }
+
+    private popScope() : Void {
+        Integer last = this.scopeStack.length() - 1;
+        if (last >= 0) { this.scopeStack.removeAt(last); }
+    }
+
+    private define(name: String, ty: AstType) : Void {
+        Integer last = this.scopeStack.length() - 1;
+        if (last >= 0) { this.scopeStack.get(last).define(name, ty); }
+    }
+
+    public lookupVar(name: String) : AstType {
+        Integer i = this.scopeStack.length() - 1;
+        while (i >= 0) {
+            AstType ty = this.scopeStack.get(i).lookup(name);
+            if (ty != null) { return ty; }
+            i--;
+        }
+        return null;
+    }
+
+    public findClass(name: String) : ClassDecl {
+        Integer i = 0;
+        while (i < this.classNames.length()) {
+            if (this.classNames.get(i) == name) { return this.classItems.get(i); }
+            i++;
+        }
+        return null;
+    }
+
+    public findEnum(name: String) : EnumDecl {
+        Integer i = 0;
+        while (i < this.enumNames.length()) {
+            if (this.enumNames.get(i) == name) { return this.enumItems.get(i); }
+            i++;
+        }
+        return null;
+    }
+
+    public findStruct(name: String) : StructDecl {
+        Integer i = 0;
+        while (i < this.structNames.length()) {
+            if (this.structNames.get(i) == name) { return this.structItems.get(i); }
+            i++;
+        }
+        return null;
+    }
+
+    public findException(name: String) : ExceptionDecl {
+        Integer i = 0;
+        while (i < this.exNames.length()) {
+            if (this.exNames.get(i) == name) { return this.exItems.get(i); }
+            i++;
+        }
+        return null;
+    }
+
+    public findInterface(name: String) : InterfaceDecl {
+        Integer i = 0;
+        while (i < this.ifaceNames.length()) {
+            if (this.ifaceNames.get(i) == name) { return this.ifaceItems.get(i); }
+            i++;
+        }
+        return null;
+    }
+
+    public findExternFn(name: String) : ExternFnDecl {
+        Integer i = 0;
+        while (i < this.externFnNames.length()) {
+            if (this.externFnNames.get(i) == name) { return this.externFns.get(i); }
+            i++;
+        }
+        return null;
+    }
+
+    public findExtension(target: String) : ExtensionDecl {
+        Integer i = 0;
+        while (i < this.extNames.length()) {
+            if (this.extNames.get(i) == target) { return this.extItems.get(i); }
+            i++;
+        }
+        return null;
+    }
+
+    public findUnion(name: String) : UnionDecl {
+        Integer i = 0;
+        while (i < this.unionNames.length()) {
+            if (this.unionNames.get(i) == name) { return this.unionItems.get(i); }
+            i++;
+        }
+        return null;
+    }
+
+    public resolveAlias(name: String) : AstType {
+        Integer i = 0;
+        while (i < this.aliasNames.length()) {
+            if (this.aliasNames.get(i) == name) { return this.aliasTypes.get(i); }
+            i++;
+        }
+        return null;
+    }
+
+    public isKnownType(name: String) : Boolean {
+        if (this.findClass(name) != null)     { return true; }
+        if (this.findEnum(name) != null)      { return true; }
+        if (this.findStruct(name) != null)    { return true; }
+        if (this.findException(name) != null) { return true; }
+        if (this.findInterface(name) != null) { return true; }
+        if (this.findUnion(name) != null)     { return true; }
+        if (this.resolveAlias(name) != null)  { return true; }
+        return false;
+    }
+
+    public allFieldsOf(name: String) : List<FieldDecl> {
+        List<FieldDecl> result = List();
+        ClassDecl c = this.findClass(name);
+        if (c != null) {
+            if (c.extends_ != "") {
+                List<FieldDecl> pf = this.allFieldsOf(c.extends_);
+                Integer i = 0;
+                while (i < pf.length()) { result.append(pf.get(i)); i++; }
+            }
+            Integer i = 0;
+            while (i < c.fields.length()) { result.append(c.fields.get(i)); i++; }
+            return result;
+        }
+        ExceptionDecl ex = this.findException(name);
+        if (ex != null) {
+            if (ex.extends_ != "" && ex.extends_ != "Exception") {
+                List<FieldDecl> pf = this.allFieldsOf(ex.extends_);
+                Integer i = 0;
+                while (i < pf.length()) { result.append(pf.get(i)); i++; }
+            }
+            Integer i = 0;
+            while (i < ex.fields.length()) { result.append(ex.fields.get(i)); i++; }
+            return result;
+        }
+        StructDecl s = this.findStruct(name);
+        if (s != null) {
+            Integer i = 0;
+            while (i < s.fields.length()) { result.append(s.fields.get(i)); i++; }
+            return result;
+        }
+        UnionDecl u = this.findUnion(name);
+        if (u != null) {
+            Integer i = 0;
+            while (i < u.fields.length()) { result.append(u.fields.get(i)); i++; }
+        }
+        return result;
+    }
+
+    public fieldIndexOf(name: String, fieldName: String) : Integer {
+        List<FieldDecl> fields = this.allFieldsOf(name);
+        Integer i = 0;
+        while (i < fields.length()) {
+            if (fields.get(i).name == fieldName) { return i; }
+            i++;
+        }
+        return -1;
+    }
+
+    public findMethodOn(className: String, methodName: String) : MethodDecl {
+        ClassDecl c = this.findClass(className);
+        if (c != null) {
+            Integer i = 0;
+            while (i < c.methods.length()) {
+                if (c.methods.get(i).name == methodName) { return c.methods.get(i); }
+                i++;
+            }
+            if (c.extends_ != "") { return this.findMethodOn(c.extends_, methodName); }
+        }
+        ExceptionDecl ex = this.findException(className);
+        if (ex != null) {
+            Integer i = 0;
+            while (i < ex.methods.length()) {
+                if (ex.methods.get(i).name == methodName) { return ex.methods.get(i); }
+                i++;
+            }
+        }
+        StructDecl s = this.findStruct(className);
+        if (s != null) {
+            Integer i = 0;
+            while (i < s.methods.length()) {
+                if (s.methods.get(i).name == methodName) { return s.methods.get(i); }
+                i++;
+            }
+        }
+        ExtensionDecl ext = this.findExtension(className);
+        if (ext != null) {
+            Integer i = 0;
+            while (i < ext.methods.length()) {
+                if (ext.methods.get(i).name == methodName) { return ext.methods.get(i); }
+                i++;
+            }
+        }
+        return null;
+    }
+
+    public findConstructor(name: String) : ConstructorDecl {
+        ClassDecl c = this.findClass(name);
+        if (c != null && c.ctor != null) { return c.ctor; }
+        ExceptionDecl ex = this.findException(name);
+        if (ex != null && ex.ctor != null) { return ex.ctor; }
+        return null;
+    }
+
+    public enumVariantIndex(enumName: String, variantName: String) : Integer {
+        EnumDecl e = this.findEnum(enumName);
+        if (e == null) { return -1; }
+        Integer i = 0;
+        while (i < e.variants.length()) {
+            if (e.variants.get(i).name == variantName) { return i; }
+            i++;
+        }
+        return -1;
+    }
+
+    public currentReturnType() : AstType {
+        return this.currentRetTy;
+    }
+
+    public currentClass() : String {
+        return this.currentClassName;
+    }
+}
