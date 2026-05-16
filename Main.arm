@@ -56,9 +56,151 @@ import arimo.compiler.ast.item.ExternDecl;
 import arimo.compiler.ast.item.ExtensionDecl;
 import arimo.compiler.ast.item.UnionDecl;
 import arimo.compiler.ast.item.Item;
+import arimo.compiler.parser.Parser;
+import arimo.compiler.typechecker.ScopeFrame;
+import arimo.compiler.typechecker.TypeChecker;
+import arimo.compiler.codegen.CodeGen;
+import arimo.fs.File;
+import arimo.process.Process;
 
 public class Main {
+
+    private static stripExt(path: String) : String {
+        if (path.endsWith(".arm")) {
+            return path.substring(0, path.length() - 4);
+        }
+        return path;
+    }
+
+    private static resolveOutStem(path: String) : String {
+        String stem = Main.stripExt(path);
+        Integer lastSlash = stem.indexOf("/");
+        Integer lastBs    = stem.indexOf("\\");
+        Integer sep = lastSlash;
+        if (lastBs > sep) { sep = lastBs; }
+        if (sep >= 0) {
+            return stem.substring(sep + 1, stem.length());
+        }
+        return stem;
+    }
+
+    private static parseFlags(path: String) : Boolean {
+        return path == "--emit-ir";
+    }
+
     public static main() : Void {
-        IO.println("arc stage 1 — usage: arc <file.arm>");
+        IO.println("arc stage 1");
+
+        String inputPath = "";
+        Boolean emitIR   = false;
+        Boolean checkOnly = false;
+
+        String line0 = IO.read();
+        if (line0 != null && line0.length() > 0) {
+            inputPath = line0.trim();
+        }
+
+        if (inputPath.length() == 0) {
+            IO.error("arc: no input file — pass .arm path via stdin");
+            IO.error("  echo path/to/file.arm | arc");
+            return;
+        }
+
+        String next = IO.read();
+        while (next != null && next.length() > 0) {
+            String flag = next.trim();
+            if (flag == "--emit-ir")  { emitIR   = true; }
+            if (flag == "--check")    { checkOnly = true; }
+            next = IO.read();
+        }
+
+        if (!File.exists(inputPath)) {
+            IO.error("arc: file not found: ${inputPath}");
+            return;
+        }
+
+        IO.println("arc: reading ${inputPath}");
+        String src = File.read(inputPath);
+        if (src == null || src.length() == 0) {
+            IO.error("arc: file is empty or unreadable: ${inputPath}");
+            return;
+        }
+
+        IO.println("arc: lexing...");
+        Lexer lexer = Lexer(src);
+        List<Token> tokens = lexer.tokenize();
+        IO.println("arc: ${tokens.length()} tokens");
+
+        IO.println("arc: parsing...");
+        Parser parser = Parser(tokens);
+        ArimoModule mod = parser.parse();
+        if (parser.hasError) {
+            IO.error("arc: parse failed");
+            return;
+        }
+        IO.println("arc: parse ok — ${mod.items.length()} items, package ${mod.path}");
+
+        IO.println("arc: type checking...");
+        TypeChecker tc = TypeChecker();
+        tc.check(mod);
+        Integer errCount = tc.errors.length();
+        if (errCount > 0) {
+            Integer ei = 0;
+            while (ei < errCount) {
+                IO.error(tc.errors.get(ei));
+                ei++;
+            }
+            IO.error("arc: type check failed — ${errCount} error(s)");
+            return;
+        }
+        Integer warnCount = tc.warnings.length();
+        if (warnCount > 0) {
+            Integer wi = 0;
+            while (wi < warnCount) {
+                IO.println(tc.warnings.get(wi));
+                wi++;
+            }
+        }
+        IO.println("arc: type check ok");
+
+        if (checkOnly) {
+            IO.println("arc: check complete");
+            return;
+        }
+
+        IO.println("arc: generating LLVM IR...");
+        CodeGen cg = CodeGen(tc);
+        String ir = cg.generate(mod);
+
+        if (emitIR) {
+            IO.println(ir);
+            return;
+        }
+
+        String stem    = Main.resolveOutStem(inputPath);
+        String llFile  = stem.concat(".ll");
+        String objFile = stem.concat(".o");
+        String exeFile = stem.concat(".exe");
+
+        IO.println("arc: writing ${llFile}");
+        File.write(llFile, ir);
+
+        IO.println("arc: running llc...");
+        String llcCmd = "llc -filetype=obj -o ${objFile} ${llFile}";
+        Boolean llcOk = Process.success(llcCmd);
+        if (!llcOk) {
+            IO.error("arc: llc failed");
+            return;
+        }
+
+        IO.println("arc: linking...");
+        String gccCmd = "gcc ${objFile} -o ${exeFile} -lm";
+        Boolean gccOk = Process.success(gccCmd);
+        if (!gccOk) {
+            IO.error("arc: gcc failed");
+            return;
+        }
+
+        IO.println("arc: done -> ${exeFile}");
     }
 }
