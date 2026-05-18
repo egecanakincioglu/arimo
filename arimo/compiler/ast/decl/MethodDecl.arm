@@ -20,7 +20,7 @@ package arimo.compiler.ast.decl;
 
 import arimo.compiler.ast.decl.Visibility;
 import arimo.compiler.ast.decl.Param;
-import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.types.AstType;
 import arimo.compiler.ast.stmt.Stmt;
 
 public class MethodDecl {
@@ -46,7 +46,5 @@ public class MethodDecl {
         this.isOperator = false;
         this.name       = name;
         this.params     = List();
-        this.returnTy   = null;
-        this.body       = null;
     }
 }

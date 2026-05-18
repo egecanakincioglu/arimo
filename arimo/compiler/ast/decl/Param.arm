@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 package arimo.compiler.ast.decl;
 
-import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.types.AstType;
 import arimo.compiler.ast.expr.Expr;
 
 public class Param {
@@ -30,7 +30,6 @@ public class Param {
     public constructor(name: String, ty: AstType) {
         this.name       = name;
         this.ty         = ty;
-        this.default_   = null;
         this.isVariadic = false;
     }
 

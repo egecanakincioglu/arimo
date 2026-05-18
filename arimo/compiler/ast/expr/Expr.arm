@@ -1,4 +1,4 @@
-﻿/*
+/*
 Arimo Lang Compiler - A modern programming language and compiler
 Copyright (C) 2026 Egecan Akıncıoğlu
 
@@ -21,9 +21,104 @@ package arimo.compiler.ast.expr;
 import arimo.compiler.ast.expr.ExprKind;
 import arimo.compiler.ast.expr.BinaryOp;
 import arimo.compiler.ast.expr.UnaryOp;
-import arimo.compiler.ast.expr.StrPart;
-import arimo.compiler.ast.expr.MatchArm;
-import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.types.AstType;
+
+public class StrPart {
+    public isLit : Boolean;
+    public lit   : String;
+    public expr  : Expr;
+
+    public constructor(isLit: Boolean) {
+        this.isLit = isLit;
+        this.lit   = "";
+    }
+
+    public static text(s: String) : StrPart {
+        StrPart p = StrPart(true);
+        p.lit = s;
+        return p;
+    }
+
+    public static interp(e: Expr) : StrPart {
+        StrPart p = StrPart(false);
+        p.expr = e;
+        return p;
+    }
+}
+
+public class MatchPatternKind {
+    public static readonly VARIANT  : Integer = 1;
+    public static readonly WILDCARD : Integer = 2;
+    public static readonly BINDING  : Integer = 3;
+    public static readonly STR_LIT  : Integer = 4;
+    public static readonly INT_LIT  : Integer = 5;
+}
+
+public class MatchPattern {
+    public kind     : Integer;
+    public enumName : String;
+    public variant  : String;
+    public bindings : List<String>;
+    public strLit   : String;
+    public intLit   : Integer;
+    public bindName : String;
+
+    public constructor(kind: Integer) {
+        this.kind     = kind;
+        this.enumName = "";
+        this.variant  = "";
+        this.strLit   = "";
+        this.intLit   = 0;
+        this.bindName = "";
+    }
+
+    public static wildcard() : MatchPattern {
+        return MatchPattern(MatchPatternKind.WILDCARD);
+    }
+
+    public static binding(name: String) : MatchPattern {
+        MatchPattern p = MatchPattern(MatchPatternKind.BINDING);
+        p.bindName = name;
+        return p;
+    }
+
+    public static variant(enumName: String, varName: String, binds: List<String>) : MatchPattern {
+        MatchPattern p = MatchPattern(MatchPatternKind.VARIANT);
+        p.enumName = enumName;
+        p.variant  = varName;
+        p.bindings = binds;
+        return p;
+    }
+
+    public static ofStrLit(s: String) : MatchPattern {
+        MatchPattern p = MatchPattern(MatchPatternKind.STR_LIT);
+        p.strLit = s;
+        return p;
+    }
+
+    public static ofIntLit(n: Integer) : MatchPattern {
+        MatchPattern p = MatchPattern(MatchPatternKind.INT_LIT);
+        p.intLit = n;
+        return p;
+    }
+}
+
+public class MatchArm {
+    public pattern : MatchPattern;
+    public guard   : Expr;
+    public body    : Expr;
+
+    public constructor(pattern: MatchPattern, body: Expr) {
+        this.pattern = pattern;
+        this.body    = body;
+    }
+
+    public static withGuard(pattern: MatchPattern, guard: Expr, body: Expr) : MatchArm {
+        MatchArm arm = MatchArm(pattern, body);
+        arm.guard = guard;
+        return arm;
+    }
+}
 
 public class Expr {
     public kind      : Integer;
@@ -72,28 +167,11 @@ public class Expr {
         this.floatVal  = 0.0;
         this.boolVal   = false;
         this.strVal    = "";
-        this.parts     = null;
         this.op        = 0;
-        this.left      = null;
-        this.right     = null;
-        this.operand   = null;
-        this.object    = null;
         this.field     = "";
         this.method    = "";
         this.class_    = "";
-        this.args      = null;
-        this.castTy    = null;
-        this.cond      = null;
-        this.then_     = null;
-        this.else_     = null;
-        this.params    = null;
-        this.paramTys  = null;
-        this.body      = null;
-        this.index     = null;
-        this.matchExpr = null;
-        this.arms      = null;
     }
-
 
     public static intLit(n: Integer, line: Integer, col: Integer) : Expr {
         Expr e = Expr(ExprKind.INT_LIT, line, col);

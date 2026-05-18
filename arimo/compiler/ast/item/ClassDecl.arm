@@ -49,7 +49,6 @@ public class ClassDecl {
         this.extends_    = "";
         this.implements_ = List();
         this.fields      = List();
-        this.ctor        = null;
         this.methods     = List();
     }
 }

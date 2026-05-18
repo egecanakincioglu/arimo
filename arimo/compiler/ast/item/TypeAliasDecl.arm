@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 package arimo.compiler.ast.item;
 
-import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.types.AstType;
 
 public class TypeAliasDecl {
     public name : String;

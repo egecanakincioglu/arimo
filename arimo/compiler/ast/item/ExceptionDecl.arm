@@ -37,7 +37,6 @@ public class ExceptionDecl {
         this.name     = name;
         this.extends_ = extends_;
         this.fields   = List();
-        this.ctor     = null;
         this.methods  = List();
     }
 }

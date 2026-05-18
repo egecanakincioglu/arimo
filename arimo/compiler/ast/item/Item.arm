@@ -42,16 +42,7 @@ public class Item {
     public unionDecl  : UnionDecl;
 
     public constructor(kind: Integer) {
-        this.kind       = kind;
-        this.classDecl  = null;
-        this.ifaceDecl  = null;
-        this.enumDecl   = null;
-        this.structDecl = null;
-        this.exDecl     = null;
-        this.aliasDecl  = null;
-        this.externDecl = null;
-        this.extDecl    = null;
-        this.unionDecl  = null;
+        this.kind = kind;
     }
 
     public static fromClass(c: ClassDecl) : Item {

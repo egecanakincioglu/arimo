@@ -1,4 +1,4 @@
-﻿/*
+/*
 Arimo Lang Compiler - A modern programming language and compiler
 Copyright (C) 2026 Egecan Akıncıoğlu
 
@@ -21,8 +21,8 @@ package arimo.compiler.parser;
 import arimo.compiler.token.TokenKind;
 import arimo.compiler.token.Token;
 import arimo.compiler.ast.ArimoModule;
-import arimo.compiler.ast.type.TypeKind;
-import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.types.TypeKind;
+import arimo.compiler.ast.types.AstType;
 import arimo.compiler.ast.expr.ExprKind;
 import arimo.compiler.ast.expr.BinaryOp;
 import arimo.compiler.ast.expr.UnaryOp;
@@ -620,7 +620,7 @@ public class Parser {
             else if (k == TokenKind.QUESTION_DOT) {
                 this.advance();
                 String member = this.eatIdent();
-                List<Expr> args = null;
+                List<Expr> args = List();
                 if (this.check(TokenKind.LPAREN)) {
                     args = this.parseArgs();
                 }
@@ -728,7 +728,7 @@ public class Parser {
 
         if (k == TokenKind.RETURN) {
             this.advance();
-            Expr e = null;
+            Expr e = Expr(1, 0, 0);
             if (!this.check(TokenKind.SEMICOLON) && !this.check(TokenKind.RBRACE)) {
                 e = this.parseExpr(0);
             }
@@ -769,7 +769,7 @@ public class Parser {
             this.eat(TokenKind.RPAREN);
             List<Stmt> then_ = this.parseBlock();
             List<ElseIfBranch> elseIfs = List();
-            List<Stmt> else_ = null;
+            List<Stmt> else_ = List();
             while (this.check(TokenKind.ELSE)) {
                 this.advance();
                 if (this.check(TokenKind.IF)) {
@@ -831,13 +831,16 @@ public class Parser {
                     this.advance();
                     this.eat(TokenKind.COLON);
                     List<Stmt> cbody = this.parseCaseBody();
-                    cases.append(SwitchCase.default_(cbody));
+                    SwitchCase dsc = SwitchCase(true, cbody);
+                    cases.append(dsc);
                 } else {
                     this.eat(TokenKind.CASE);
                     Expr pat = this.parseExpr(0);
                     this.eat(TokenKind.COLON);
                     List<Stmt> cbody = this.parseCaseBody();
-                    cases.append(SwitchCase.case_(pat, cbody));
+                    SwitchCase csc = SwitchCase(false, cbody);
+                    csc.pattern = pat;
+                    cases.append(csc);
                 }
             }
             this.eat(TokenKind.RBRACE);
@@ -857,7 +860,7 @@ public class Parser {
                 List<Stmt> cbody = this.parseBlock();
                 catches.append(CatchClause(exTy, exName, cbody));
             }
-            List<Stmt> finally_ = null;
+            List<Stmt> finally_ = List();
             if (this.check(TokenKind.FINALLY)) {
                 this.advance();
                 finally_ = this.parseBlock();
@@ -884,19 +887,19 @@ public class Parser {
             this.advance();
             AstType ty   = this.parseType();
             String  name2 = this.eatIdent();
-            Expr init = null;
-            if (this.check(TokenKind.EQ)) { this.advance(); init = this.parseExpr(0); }
+            Expr initSentinel = Expr(1, 0, 0);
+            if (this.check(TokenKind.EQ)) { this.advance(); initSentinel = this.parseExpr(0); }
             this.skipSemicolon();
-            return Stmt.volatileVarDecl(ty, name2, init, sl, sc);
+            return Stmt.volatileVarDecl(ty, name2, initSentinel, sl, sc);
         }
 
         if (this.looksLikeVarDecl()) {
             AstType ty   = this.parseType();
             String  name3 = this.eatIdent();
-            Expr init = null;
-            if (this.check(TokenKind.EQ)) { this.advance(); init = this.parseExpr(0); }
+            Expr initSentinel = Expr(1, 0, 0);
+            if (this.check(TokenKind.EQ)) { this.advance(); initSentinel = this.parseExpr(0); }
             this.skipSemicolon();
-            return Stmt.varDecl(ty, name3, init, sl, sc);
+            return Stmt.varDecl(ty, name3, initSentinel, sl, sc);
         }
 
         Expr e = this.parseExpr(0);
@@ -937,23 +940,24 @@ public class Parser {
 
     private parseGenericBounds() : List<GenericBound> {
         List<GenericBound> bounds = List();
-        if (!this.check(TokenKind.LT)) { return bounds; }
-        this.advance();
-        while (!this.check(TokenKind.GT) && !this.check(TokenKind.EOF)) {
-            String name = this.eatIdent();
-            GenericBound gb = GenericBound(name);
-            if (this.check(TokenKind.COLON)) {
-                this.advance();
-                gb.bounds.append(this.eatIdent());
-                while (this.check(TokenKind.PLUS)) {
+        if (this.check(TokenKind.LT)) {
+            this.advance();
+            while (!this.check(TokenKind.GT) && !this.check(TokenKind.EOF)) {
+                String name = this.eatIdent();
+                GenericBound gb = GenericBound(name);
+                if (this.check(TokenKind.COLON)) {
                     this.advance();
                     gb.bounds.append(this.eatIdent());
+                    while (this.check(TokenKind.PLUS)) {
+                        this.advance();
+                        gb.bounds.append(this.eatIdent());
+                    }
                 }
+                bounds.append(gb);
+                if (this.check(TokenKind.COMMA)) { this.advance(); }
             }
-            bounds.append(gb);
-            if (this.check(TokenKind.COMMA)) { this.advance(); }
+            this.eat(TokenKind.GT);
         }
-        this.eat(TokenKind.GT);
         return bounds;
     }
 

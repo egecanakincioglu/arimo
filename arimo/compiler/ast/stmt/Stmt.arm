@@ -1,4 +1,4 @@
-﻿/*
+/*
 Arimo Lang Compiler - A modern programming language and compiler
 Copyright (C) 2026 Egecan Akıncıoğlu
 
@@ -19,11 +19,41 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 package arimo.compiler.ast.stmt;
 
 import arimo.compiler.ast.stmt.StmtKind;
-import arimo.compiler.ast.stmt.ElseIfBranch;
-import arimo.compiler.ast.stmt.CatchClause;
-import arimo.compiler.ast.stmt.SwitchCase;
 import arimo.compiler.ast.expr.Expr;
-import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.types.AstType;
+
+public class ElseIfBranch {
+    public cond : Expr;
+    public body : List<Stmt>;
+
+    public constructor(cond: Expr, body: List<Stmt>) {
+        this.cond = cond;
+        this.body = body;
+    }
+}
+
+public class CatchClause {
+    public exType : AstType;
+    public name   : String;
+    public body   : List<Stmt>;
+
+    public constructor(exType: AstType, name: String, body: List<Stmt>) {
+        this.exType = exType;
+        this.name   = name;
+        this.body   = body;
+    }
+}
+
+public class SwitchCase {
+    public isDefault : Boolean;
+    public pattern   : Expr;
+    public body      : List<Stmt>;
+
+    public constructor(isDefault: Boolean, body: List<Stmt>) {
+        this.isDefault = isDefault;
+        this.body      = body;
+    }
+}
 
 public class Stmt {
     public kind        : Integer;
@@ -67,30 +97,10 @@ public class Stmt {
         this.line        = line;
         this.col         = col;
         this.isVolatile  = false;
-        this.ty          = null;
         this.name        = "";
-        this.initExpr    = null;
-        this.expr        = null;
-        this.cond        = null;
-        this.thenBody    = null;
-        this.elseIfs     = null;
-        this.elseBody    = null;
-        this.body        = null;
-        this.iterTy      = null;
         this.iterName    = "";
-        this.iterable    = null;
-        this.forInit     = null;
-        this.forCond     = null;
-        this.forStep     = null;
-        this.forBody     = null;
-        this.switchExpr  = null;
-        this.cases       = null;
-        this.tryBody     = null;
-        this.catches     = null;
-        this.finallyBody = null;
         this.asmText     = "";
     }
-
 
     public static varDecl(ty: AstType, name: String, init: Expr, line: Integer, col: Integer) : Stmt {
         Stmt s = Stmt(StmtKind.VAR_DECL, line, col);

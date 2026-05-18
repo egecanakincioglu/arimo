@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 package arimo.compiler.ast.decl;
 
-import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.types.AstType;
 
 public class EnumVariant {
     public name : String;

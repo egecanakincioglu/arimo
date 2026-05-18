@@ -29,3 +29,28 @@ orchestrator/venv/
 orchestrator/
 brain/
 CLAUDE.md
+reference/
+
+# obsidian-mind — vault kişisel içerik (tümü local)
+work/
+org/
+perf/
+thinking/
+bases/
+templates/
+Home.md
+vault-manifest.json
+.mcp.json
+
+# obsidian-mind — runtime state
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/plugins/*/data.json
+
+# obsidian-mind — QMD semantic index (local, regenerated)
+.qmd/
+.shardmind/
+
+# Node deps (zero runtime deps; sadece CI typecheck için)
+node_modules/
+.claude/scripts/node_modules/
