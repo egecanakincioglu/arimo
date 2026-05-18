@@ -1,7 +1,7 @@
 # arc.toml -- Arimo project manifest
 
 [project]
-name        = "arimo"
+name        = "arc"
 version     = "0.1.0"
 description = "Arimo stage 1 bootstrap compiler"
 entry       = "Main.arm"
