@@ -54,3 +54,13 @@ vault-manifest.json
 # Node deps (zero runtime deps; sadece CI typecheck için)
 node_modules/
 .claude/scripts/node_modules/
+# Generated LLVM IR
+*.ll
+*.s
+*.o
+
+# Test artifacts
+test_*.arm
+input*.txt
+out*.txt
+err*.txt
