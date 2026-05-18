@@ -19,7 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 package arimo.compiler.ast.decl;
 
 import arimo.compiler.ast.decl.Visibility;
-import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.types.AstType;
 import arimo.compiler.ast.expr.Expr;
 
 public class FieldDecl {
@@ -36,6 +36,5 @@ public class FieldDecl {
         this.isReadonly = false;
         this.name       = name;
         this.ty         = ty;
-        this.init       = null;
     }
 }

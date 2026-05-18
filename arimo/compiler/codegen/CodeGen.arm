@@ -20,8 +20,8 @@ package arimo.compiler.codegen;
 
 import arimo.compiler.typechecker.TypeChecker;
 import arimo.compiler.ast.ArimoModule;
-import arimo.compiler.ast.type.TypeKind;
-import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.types.TypeKind;
+import arimo.compiler.ast.types.AstType;
 import arimo.compiler.ast.expr.ExprKind;
 import arimo.compiler.ast.expr.BinaryOp;
 import arimo.compiler.ast.expr.UnaryOp;
@@ -298,7 +298,6 @@ public class CodeGen {
     }
 
     public emitExpr(e: Expr) : String {
-        if (e == null) { return "0"; }
         Integer k = e.kind;
 
         if (k == ExprKind.NULL_LIT)   { return "null"; }
@@ -436,7 +435,7 @@ public class CodeGen {
         this.curFn = this.curFn.concat("  br i1 ${cmp}, label %${nullLbl}, label %${okLbl}\n");
         this.emitLabel(okLbl);
         String resVal = "null";
-        if (e.args != null) {
+        if (e.args.length() > 0) {
             String cls = this.resolveObjClassName(e.object);
             resVal = this.dispatchMethod(cls, objVal, e.field, e.args);
         } else {
@@ -473,9 +472,9 @@ public class CodeGen {
         if (cls == "__HashMap" || cls == "HashMap") {
             return this.emitHashMapMethod(objVal, method, args);
         }
-        MethodDecl m    = this.tc.findMethodOn(cls, method);
+        MethodDecl? m   = this.tc.findMethodOn(cls, method);
         String retLLTy  = "i8*";
-        if (m != null && m.returnTy != null) { retLLTy = this.llvmTy(m.returnTy); }
+        if (m != null) { if (m.returnTy != null) { retLLTy = this.llvmTy(m.returnTy); } }
         String argStr   = "%${cls}* ${objVal}";
         Integer i = 0;
         while (i < args.length()) {
@@ -500,9 +499,9 @@ public class CodeGen {
         if (cls == "Math")   { return this.emitMath(method, e.args); }
         if (cls == "Memory") { return this.emitMemory(method, e.args); }
         if (cls == "Time")   { return this.emitTime(method, e.args); }
-        MethodDecl m   = this.tc.findMethodOn(cls, method);
+        MethodDecl? m  = this.tc.findMethodOn(cls, method);
         String retLLTy = "i8*";
-        if (m != null && m.returnTy != null) { retLLTy = this.llvmTy(m.returnTy); }
+        if (m != null) { if (m.returnTy != null) { retLLTy = this.llvmTy(m.returnTy); } }
         String argStr  = "";
         Integer i = 0;
         while (i < e.args.length()) {
@@ -526,7 +525,7 @@ public class CodeGen {
         if (cls == "List")    { String r = this.nextReg(); this.emit("${r} = call %__List* @__List__new()"); return r; }
         if (cls == "HashMap") { String r = this.nextReg(); this.emit("${r} = call %__HashMap* @__HashMap__new()"); return r; }
         if (cls == "Pair")    { return this.emitPairCtor(e.args); }
-        ConstructorDecl ctor = this.tc.findConstructor(cls);
+        ConstructorDecl? ctor = this.tc.findConstructor(cls);
         String argStr = "";
         Integer i = 0;
         while (i < e.args.length()) {
@@ -795,7 +794,8 @@ public class CodeGen {
         return r;
     }
 
-    private emitMatchExpr(e: Expr) : String {
+    private emitMatchExpr(e: Expr?) : String {
+        if (e != null) {
         String subj = this.emitExpr(e.matchExpr);
         String endL = this.nextLabel();
         String resReg = this.nextReg();
@@ -833,6 +833,8 @@ public class CodeGen {
         String final = this.nextReg();
         this.emit("${final} = load i8*, i8** ${resReg}");
         return final;
+        }
+        return "0";
     }
 
     private emitStrInterp(e: Expr) : String {
@@ -907,12 +909,8 @@ public class CodeGen {
     private emitMath(method: String, args: List<Expr>) : String {
         if (method == "PI") { String r = this.nextReg(); this.emit("${r} = fadd double 0.0, 3.14159265358979"); return r; }
         if (method == "E")  { String r = this.nextReg(); this.emit("${r} = fadd double 0.0, 2.71828182845905"); return r; }
-        Expr a0 = null;
-        if (args.length() >= 1) { a0 = args.get(0); }
-        Expr a1 = null;
-        if (args.length() >= 2) { a1 = args.get(1); }
         String v0 = "";
-        if (a0 != null) { v0 = this.emitExpr(a0); }
+        if (args.length() >= 1) { v0 = this.emitExpr(args.get(0)); }
         if (method == "sqrt")  { String r = this.nextReg(); this.emit("${r} = call double @llvm.sqrt.f64(double ${v0})"); return r; }
         if (method == "abs")   { String r = this.nextReg(); this.emit("${r} = call double @llvm.fabs.f64(double ${v0})"); return r; }
         if (method == "floor") { String r = this.nextReg(); this.emit("${r} = call double @llvm.floor.f64(double ${v0})"); return r; }
@@ -921,14 +919,16 @@ public class CodeGen {
         if (method == "cos")   { String r = this.nextReg(); this.emit("${r} = call double @llvm.cos.f64(double ${v0})"); return r; }
         if (method == "log")   { String r = this.nextReg(); this.emit("${r} = call double @llvm.log.f64(double ${v0})"); return r; }
         if (method == "pow") {
-            String v1 = this.emitExpr(a1);
+            String v1 = "";
+            if (args.length() >= 2) { v1 = this.emitExpr(args.get(1)); }
             String r = this.nextReg();
             this.emit("${r} = call double @llvm.pow.f64(double ${v0}, double ${v1})");
             return r;
         }
         if (method == "min" || method == "max") {
-            String v1 = this.emitExpr(a1);
-            String t0 = this.inferExprLLTy(a0);
+            String v1 = "";
+            if (args.length() >= 2) { v1 = this.emitExpr(args.get(1)); }
+            String t0 = "i64";
             String r = this.nextReg();
             String op = "slt";
             if (method == "max") { op = "sgt"; }
@@ -1203,8 +1203,8 @@ public class CodeGen {
             String condB = this.toBool(cond);
             String thenL = this.nextLabel();
             String endL  = this.nextLabel();
-            Boolean hasElse = s.elseBody != null;
-            Boolean hasEi   = s.elseIfs != null && s.elseIfs.length() > 0;
+            Boolean hasElse = s.elseBody.length() > 0;
+            Boolean hasEi   = s.elseIfs.length() > 0 && s.elseIfs.length() > 0;
             String falseL = endL;
             if (hasElse || hasEi) { falseL = this.nextLabel(); }
             this.curFn = this.curFn.concat("  br i1 ${condB}, label %${thenL}, label %${falseL}\n");
@@ -1378,7 +1378,7 @@ public class CodeGen {
             this.pushScope();
             this.emitStmts(s.tryBody);
             this.popScope();
-            if (s.catches != null) {
+            if (s.catches.length() > 0) {
                 Integer i = 0;
                 while (i < s.catches.length()) {
                     CatchClause cc = s.catches.get(i);
@@ -1391,7 +1391,7 @@ public class CodeGen {
                     i++;
                 }
             }
-            if (s.finallyBody != null) {
+            if (s.finallyBody.length() > 0) {
                 this.pushScope();
                 this.emitStmts(s.finallyBody);
                 this.popScope();
@@ -1428,15 +1428,17 @@ public class CodeGen {
     }
 
     private emitStmts(stmts: List<Stmt>) : Void {
-        if (stmts == null) { return; }
+        if (stmts.length() >= 0) {
         Integer i = 0;
         while (i < stmts.length()) {
             this.emitStmt(stmts.get(i));
             i++;
         }
+        }
     }
 
-    private emitConstructor(c: ClassDecl) : Void {
+    private emitConstructor(c: ClassDecl?) : Void {
+        if (c != null) {
         ConstructorDecl ctor = c.ctor;
         String paramStr = "";
         Integer i = 0;
@@ -1480,6 +1482,7 @@ public class CodeGen {
         this.emitStmts(ctor.body);
         this.emit("ret %${c.name}* ${self}");
         this.flushFn(sig);
+        }
     }
 
     private emitMethod(className: String, m: MethodDecl) : Void {
@@ -1526,33 +1529,37 @@ public class CodeGen {
         return "null";
     }
 
-    private emitClassType(c: ClassDecl) : Void {
-        List<FieldDecl> fields = this.nonStaticFields(c.name);
-        String fieldTypes = "i64";
-        Integer i = 0;
-        while (i < fields.length()) {
-            fieldTypes = fieldTypes.concat(", ").concat(this.llvmTy(fields.get(i).ty));
-            i++;
-        }
-        this.addHeader("%${c.name} = type { ${fieldTypes} }");
-        Integer fi = 0;
-        while (fi < c.fields.length()) {
-            FieldDecl f = c.fields.get(fi);
-            if (f.isStatic) {
-                String llt = this.llvmTy(f.ty);
-                String init = this.defVal(llt);
-                this.addHeader("@${c.name}__${f.name} = global ${llt} ${init}");
+    private emitClassType(c: ClassDecl?) : Void {
+        if (c != null) {
+            List<FieldDecl> fields = this.nonStaticFields(c.name);
+            String fieldTypes = "i64";
+            Integer i = 0;
+            while (i < fields.length()) {
+                fieldTypes = fieldTypes.concat(", ").concat(this.llvmTy(fields.get(i).ty));
+                i++;
             }
-            fi++;
+            this.addHeader("%${c.name} = type { ${fieldTypes} }");
+            Integer fi = 0;
+            while (fi < c.fields.length()) {
+                FieldDecl f = c.fields.get(fi);
+                if (f.isStatic) {
+                    String llt = this.llvmTy(f.ty);
+                    String init = this.defVal(llt);
+                    this.addHeader("@${c.name}__${f.name} = global ${llt} ${init}");
+                }
+                fi++;
+            }
         }
     }
 
-    private emitEnumType(e: EnumDecl) : Void {
-        this.addHeader("%${e.name} = type { i64, i64, i64 }");
-        Integer i = 0;
-        while (i < e.variants.length()) {
-            this.addHeader("@${e.name}__${e.variants.get(i).name} = constant i64 ${i}");
-            i++;
+    private emitEnumType(e: EnumDecl?) : Void {
+        if (e != null) {
+            this.addHeader("%${e.name} = type { i64, i64, i64 }");
+            Integer i = 0;
+            while (i < e.variants.length()) {
+                this.addHeader("@${e.name}__${e.variants.get(i).name} = constant i64 ${i}");
+                i++;
+            }
         }
     }
 
@@ -1617,7 +1624,8 @@ public class CodeGen {
         this.addRuntime("define %__Pair* @__Pair__new() {\nentry:\n  %raw = call i8* @malloc(i64 16)\n  %p = bitcast i8* %raw to %__Pair*\n  %z = bitcast %__Pair* %p to i8*\n  call void @llvm.memset.p0i8.i64(i8* %z, i8 0, i64 16, i1 false)\n  ret %__Pair* %p\n}\ndefine void @__Pair__setFirst(%__Pair* %p, i8* %v) {\nentry:\n  %fp = getelementptr inbounds %__Pair, %__Pair* %p, i32 0, i32 0\n  store i8* %v, i8** %fp\n  ret void\n}\ndefine void @__Pair__setSecond(%__Pair* %p, i8* %v) {\nentry:\n  %sp = getelementptr inbounds %__Pair, %__Pair* %p, i32 0, i32 1\n  store i8* %v, i8** %sp\n  ret void\n}\n");
     }
 
-    private emitExternDecl(ext: ExternDecl) : Void {
+    private emitExternDecl(ext: ExternDecl?) : Void {
+        if (ext != null) {
         Integer i = 0;
         while (i < ext.decls.length()) {
             ExternFnDecl fn = ext.decls.get(i);
@@ -1635,6 +1643,7 @@ public class CodeGen {
             this.addHeader("declare ${retTy} @${fn.name}(${paramStr})");
             i++;
         }
+        }
     }
 
     public generate(module: ArimoModule) : String {
@@ -1647,19 +1656,23 @@ public class CodeGen {
             else if (item.kind == ItemKind.ENUM) { this.emitEnumType(item.enumDecl);   }
             else if (item.kind == ItemKind.STRUCT) {
                 StructDecl sd = item.structDecl;
-                List<FieldDecl> fields = sd.fields;
-                String fts = "i64";
-                Integer fi = 0;
-                while (fi < fields.length()) { fts = fts.concat(", ").concat(this.llvmTy(fields.get(fi).ty)); fi++; }
-                this.addHeader("%${sd.name} = type { ${fts} }");
+                if (sd != null) {
+                    List<FieldDecl> fields = sd.fields;
+                    String fts = "i64";
+                    Integer fi = 0;
+                    while (fi < fields.length()) { fts = fts.concat(", ").concat(this.llvmTy(fields.get(fi).ty)); fi++; }
+                    this.addHeader("%${sd.name} = type { ${fts} }");
+                }
             }
             else if (item.kind == ItemKind.EXCEPTION) {
-                ExceptionDecl ed = item.exDecl;
-                String fts = "i64";
-                Integer fi = 0;
-                List<FieldDecl> efields = this.nonStaticFields(ed.name);
-                while (fi < efields.length()) { fts = fts.concat(", ").concat(this.llvmTy(efields.get(fi).ty)); fi++; }
-                this.addHeader("%${ed.name} = type { ${fts} }");
+                ExceptionDecl? ed0 = item.exDecl;
+                if (ed0 != null) {
+                    String fts = "i64";
+                    Integer fi = 0;
+                    List<FieldDecl> efields = this.nonStaticFields(ed0.name);
+                    while (fi < efields.length()) { fts = fts.concat(", ").concat(this.llvmTy(efields.get(fi).ty)); fi++; }
+                    this.addHeader("%${ed0.name} = type { ${fts} }");
+                }
             }
             else if (item.kind == ItemKind.EXTERN) { this.emitExternDecl(item.externDecl); }
             i++;
@@ -1670,7 +1683,8 @@ public class CodeGen {
             Item item = module.items.get(j);
             if (item.kind == ItemKind.CLASS) {
                 ClassDecl c = item.classDecl;
-                if (c.ctor != null) { this.emitConstructor(c); }
+                if (c != null) { if (c.ctor != null) { this.emitConstructor(c); } }
+                if (c != null) {
                 Integer mi = 0;
                 while (mi < c.methods.length()) {
                     this.emitMethod(c.name, c.methods.get(mi));
@@ -1706,57 +1720,62 @@ public class CodeGen {
                     }
                     if (hasMain == 1) { this.entryClass = c.name; }
                 }
+                }
             }
             else if (item.kind == ItemKind.EXCEPTION) {
                 ExceptionDecl ed = item.exDecl;
-                if (ed.ctor != null) {
-                    ConstructorDecl ctor = ed.ctor;
-                    String paramStr = "";
-                    Integer pi = 0;
-                    while (pi < ctor.params.length()) {
-                        Param p = ctor.params.get(pi);
-                        String pt = this.llvmTy(p.ty);
-                        if (paramStr.length() > 0) { paramStr = paramStr.concat(", "); }
-                        paramStr = paramStr.concat("${pt} %p.${p.name}");
-                        pi++;
+                if (ed != null) {
+                    if (ed.ctor != null) {
+                        ConstructorDecl ctor = ed.ctor;
+                        String paramStr = "";
+                        Integer pi = 0;
+                        while (pi < ctor.params.length()) {
+                            Param p = ctor.params.get(pi);
+                            String pt = this.llvmTy(p.ty);
+                            if (paramStr.length() > 0) { paramStr = paramStr.concat(", "); }
+                            paramStr = paramStr.concat("${pt} %p.${p.name}");
+                            pi++;
+                        }
+                        String sig = "define %${ed.name}* @${ed.name}__new(${paramStr})";
+                        this.curFn = ""; this.selfType = ed.name; this.retTyStr = "%${ed.name}*";
+                        this.varNames = List(); this.varRegs = List(); this.varLLTys = List();
+                        this.scopeMarks = List(); this.loopExits = List(); this.loopConds = List();
+                        Integer sz = (1 + this.nonStaticFields(ed.name).length()) * 8;
+                        String raw = this.nextReg();
+                        this.emit("${raw} = call i8* @malloc(i64 ${sz})");
+                        String self = this.nextReg();
+                        this.emit("${self} = bitcast i8* ${raw} to %${ed.name}*");
+                        String zraw = this.nextReg();
+                        this.emit("${zraw} = bitcast %${ed.name}* ${self} to i8*");
+                        this.emit("call void @llvm.memset.p0i8.i64(i8* ${zraw}, i8 0, i64 ${sz}, i1 false)");
+                        this.emit("%self = bitcast %${ed.name}* ${self} to %${ed.name}*");
+                        Integer pi2 = 0;
+                        while (pi2 < ctor.params.length()) {
+                            Param p = ctor.params.get(pi2);
+                            String pt = this.llvmTy(p.ty);
+                            String reg = this.defineVar(p.name, pt);
+                            this.emit("store ${pt} %p.${p.name}, ${pt}* ${reg}");
+                            pi2++;
+                        }
+                        this.emitStmts(ctor.body);
+                        this.emit("ret %${ed.name}* ${self}");
+                        this.flushFn(sig);
                     }
-                    String sig = "define %${ed.name}* @${ed.name}__new(${paramStr})";
-                    this.curFn = ""; this.selfType = ed.name; this.retTyStr = "%${ed.name}*";
-                    this.varNames = List(); this.varRegs = List(); this.varLLTys = List();
-                    this.scopeMarks = List(); this.loopExits = List(); this.loopConds = List();
-                    Integer sz = (1 + this.nonStaticFields(ed.name).length()) * 8;
-                    String raw = this.nextReg();
-                    this.emit("${raw} = call i8* @malloc(i64 ${sz})");
-                    String self = this.nextReg();
-                    this.emit("${self} = bitcast i8* ${raw} to %${ed.name}*");
-                    String zraw = this.nextReg();
-                    this.emit("${zraw} = bitcast %${ed.name}* ${self} to i8*");
-                    this.emit("call void @llvm.memset.p0i8.i64(i8* ${zraw}, i8 0, i64 ${sz}, i1 false)");
-                    this.emit("%self = bitcast %${ed.name}* ${self} to %${ed.name}*");
-                    Integer pi2 = 0;
-                    while (pi2 < ctor.params.length()) {
-                        Param p = ctor.params.get(pi2);
-                        String pt = this.llvmTy(p.ty);
-                        String reg = this.defineVar(p.name, pt);
-                        this.emit("store ${pt} %p.${p.name}, ${pt}* ${reg}");
-                        pi2++;
+                    Integer mi = 0;
+                    while (mi < ed.methods.length()) {
+                        this.emitMethod(ed.name, ed.methods.get(mi));
+                        mi++;
                     }
-                    this.emitStmts(ctor.body);
-                    this.emit("ret %${ed.name}* ${self}");
-                    this.flushFn(sig);
-                }
-                Integer mi = 0;
-                while (mi < ed.methods.length()) {
-                    this.emitMethod(ed.name, ed.methods.get(mi));
-                    mi++;
                 }
             }
             else if (item.kind == ItemKind.EXTENSION) {
                 ExtensionDecl ext = item.extDecl;
-                Integer mi = 0;
-                while (mi < ext.methods.length()) {
-                    this.emitMethod(ext.target, ext.methods.get(mi));
-                    mi++;
+                if (ext != null) {
+                    Integer mi = 0;
+                    while (mi < ext.methods.length()) {
+                        this.emitMethod(ext.target, ext.methods.get(mi));
+                        mi++;
+                    }
                 }
             }
             j++;

@@ -1,6 +1,6 @@
 /*
 Arimo Lang Compiler - A modern programming language and compiler
-Copyright (C) 2026 Egecan Akıncıoğlu
+Copyright (C) 2026 Egecan Akincıoglu
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published
@@ -17,24 +17,3 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 package arimo.compiler.ast.expr;
-
-import arimo.compiler.ast.expr.MatchPattern;
-import arimo.compiler.ast.expr.Expr;
-
-public class MatchArm {
-    public pattern : MatchPattern;
-    public guard   : Expr;
-    public body    : Expr;
-
-    public constructor(pattern: MatchPattern, body: Expr) {
-        this.pattern = pattern;
-        this.guard   = null;
-        this.body    = body;
-    }
-
-    public static withGuard(pattern: MatchPattern, guard: Expr, body: Expr) : MatchArm {
-        MatchArm arm = MatchArm(pattern, body);
-        arm.guard = guard;
-        return arm;
-    }
-}

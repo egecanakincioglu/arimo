@@ -20,7 +20,7 @@ package arimo.compiler.typechecker;
 
 import arimo.compiler.typechecker.ScopeFrame;
 import arimo.compiler.ast.ArimoModule;
-import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.types.AstType;
 import arimo.compiler.ast.stmt.StmtKind;
 import arimo.compiler.ast.stmt.Stmt;
 import arimo.compiler.ast.stmt.CatchClause;
@@ -90,7 +90,6 @@ public class TypeChecker {
         this.unionItems    = List();
         this.scopeStack    = List();
         this.currentClassName = "";
-        this.currentRetTy  = null;
         this.errors        = List();
         this.warnings      = List();
     }
@@ -243,7 +242,7 @@ public class TypeChecker {
             this.pushScope();
             this.checkStmts(s.thenBody);
             this.popScope();
-            if (s.elseIfs != null) {
+            if (s.elseIfs.length() > 0) {
                 Integer i = 0;
                 while (i < s.elseIfs.length()) {
                     this.pushScope();
@@ -252,7 +251,7 @@ public class TypeChecker {
                     i++;
                 }
             }
-            if (s.elseBody != null) {
+            if (s.elseBody.length() > 0) {
                 this.pushScope();
                 this.checkStmts(s.elseBody);
                 this.popScope();
@@ -276,7 +275,7 @@ public class TypeChecker {
             this.popScope();
 
         } else if (k == StmtKind.SWITCH) {
-            if (s.cases != null) {
+            if (s.cases.length() > 0) {
                 Integer i = 0;
                 while (i < s.cases.length()) {
                     this.pushScope();
@@ -290,7 +289,7 @@ public class TypeChecker {
             this.pushScope();
             this.checkStmts(s.tryBody);
             this.popScope();
-            if (s.catches != null) {
+            if (s.catches.length() > 0) {
                 Integer i = 0;
                 while (i < s.catches.length()) {
                     CatchClause cc = s.catches.get(i);
@@ -301,7 +300,7 @@ public class TypeChecker {
                     i++;
                 }
             }
-            if (s.finallyBody != null) {
+            if (s.finallyBody.length() > 0) {
                 this.pushScope();
                 this.checkStmts(s.finallyBody);
                 this.popScope();
@@ -328,17 +327,17 @@ public class TypeChecker {
         if (last >= 0) { this.scopeStack.get(last).define(name, ty); }
     }
 
-    public lookupVar(name: String) : AstType {
+    public lookupVar(name: String) : AstType? {
         Integer i = this.scopeStack.length() - 1;
         while (i >= 0) {
-            AstType ty = this.scopeStack.get(i).lookup(name);
+            AstType? ty = this.scopeStack.get(i).lookup(name);
             if (ty != null) { return ty; }
             i--;
         }
         return null;
     }
 
-    public findClass(name: String) : ClassDecl {
+    public findClass(name: String) : ClassDecl? {
         Integer i = 0;
         while (i < this.classNames.length()) {
             if (this.classNames.get(i) == name) { return this.classItems.get(i); }
@@ -347,7 +346,7 @@ public class TypeChecker {
         return null;
     }
 
-    public findEnum(name: String) : EnumDecl {
+    public findEnum(name: String) : EnumDecl? {
         Integer i = 0;
         while (i < this.enumNames.length()) {
             if (this.enumNames.get(i) == name) { return this.enumItems.get(i); }
@@ -356,7 +355,7 @@ public class TypeChecker {
         return null;
     }
 
-    public findStruct(name: String) : StructDecl {
+    public findStruct(name: String) : StructDecl? {
         Integer i = 0;
         while (i < this.structNames.length()) {
             if (this.structNames.get(i) == name) { return this.structItems.get(i); }
@@ -365,7 +364,7 @@ public class TypeChecker {
         return null;
     }
 
-    public findException(name: String) : ExceptionDecl {
+    public findException(name: String) : ExceptionDecl? {
         Integer i = 0;
         while (i < this.exNames.length()) {
             if (this.exNames.get(i) == name) { return this.exItems.get(i); }
@@ -374,7 +373,7 @@ public class TypeChecker {
         return null;
     }
 
-    public findInterface(name: String) : InterfaceDecl {
+    public findInterface(name: String) : InterfaceDecl? {
         Integer i = 0;
         while (i < this.ifaceNames.length()) {
             if (this.ifaceNames.get(i) == name) { return this.ifaceItems.get(i); }
@@ -383,7 +382,7 @@ public class TypeChecker {
         return null;
     }
 
-    public findExternFn(name: String) : ExternFnDecl {
+    public findExternFn(name: String) : ExternFnDecl? {
         Integer i = 0;
         while (i < this.externFnNames.length()) {
             if (this.externFnNames.get(i) == name) { return this.externFns.get(i); }
@@ -392,7 +391,7 @@ public class TypeChecker {
         return null;
     }
 
-    public findExtension(target: String) : ExtensionDecl {
+    public findExtension(target: String) : ExtensionDecl? {
         Integer i = 0;
         while (i < this.extNames.length()) {
             if (this.extNames.get(i) == target) { return this.extItems.get(i); }
@@ -401,7 +400,7 @@ public class TypeChecker {
         return null;
     }
 
-    public findUnion(name: String) : UnionDecl {
+    public findUnion(name: String) : UnionDecl? {
         Integer i = 0;
         while (i < this.unionNames.length()) {
             if (this.unionNames.get(i) == name) { return this.unionItems.get(i); }
@@ -410,7 +409,7 @@ public class TypeChecker {
         return null;
     }
 
-    public resolveAlias(name: String) : AstType {
+    public resolveAlias(name: String) : AstType? {
         Integer i = 0;
         while (i < this.aliasNames.length()) {
             if (this.aliasNames.get(i) == name) { return this.aliasTypes.get(i); }
@@ -432,7 +431,7 @@ public class TypeChecker {
 
     public allFieldsOf(name: String) : List<FieldDecl> {
         List<FieldDecl> result = List();
-        ClassDecl c = this.findClass(name);
+        ClassDecl? c = this.findClass(name);
         if (c != null) {
             if (c.extends_ != "") {
                 List<FieldDecl> pf = this.allFieldsOf(c.extends_);
@@ -441,29 +440,29 @@ public class TypeChecker {
             }
             Integer i = 0;
             while (i < c.fields.length()) { result.append(c.fields.get(i)); i++; }
-            return result;
-        }
-        ExceptionDecl ex = this.findException(name);
-        if (ex != null) {
-            if (ex.extends_ != "" && ex.extends_ != "Exception") {
-                List<FieldDecl> pf = this.allFieldsOf(ex.extends_);
+        } else {
+            ExceptionDecl? ex = this.findException(name);
+            if (ex != null) {
+                if (ex.extends_ != "" && ex.extends_ != "Exception") {
+                    List<FieldDecl> pf = this.allFieldsOf(ex.extends_);
+                    Integer i = 0;
+                    while (i < pf.length()) { result.append(pf.get(i)); i++; }
+                }
                 Integer i = 0;
-                while (i < pf.length()) { result.append(pf.get(i)); i++; }
+                while (i < ex.fields.length()) { result.append(ex.fields.get(i)); i++; }
+            } else {
+                StructDecl? s = this.findStruct(name);
+                if (s != null) {
+                    Integer i = 0;
+                    while (i < s.fields.length()) { result.append(s.fields.get(i)); i++; }
+                } else {
+                    UnionDecl? u = this.findUnion(name);
+                    if (u != null) {
+                        Integer i = 0;
+                        while (i < u.fields.length()) { result.append(u.fields.get(i)); i++; }
+                    }
+                }
             }
-            Integer i = 0;
-            while (i < ex.fields.length()) { result.append(ex.fields.get(i)); i++; }
-            return result;
-        }
-        StructDecl s = this.findStruct(name);
-        if (s != null) {
-            Integer i = 0;
-            while (i < s.fields.length()) { result.append(s.fields.get(i)); i++; }
-            return result;
-        }
-        UnionDecl u = this.findUnion(name);
-        if (u != null) {
-            Integer i = 0;
-            while (i < u.fields.length()) { result.append(u.fields.get(i)); i++; }
         }
         return result;
     }
@@ -478,8 +477,8 @@ public class TypeChecker {
         return -1;
     }
 
-    public findMethodOn(className: String, methodName: String) : MethodDecl {
-        ClassDecl c = this.findClass(className);
+    public findMethodOn(className: String, methodName: String) : MethodDecl? {
+        ClassDecl? c = this.findClass(className);
         if (c != null) {
             Integer i = 0;
             while (i < c.methods.length()) {
@@ -488,7 +487,7 @@ public class TypeChecker {
             }
             if (c.extends_ != "") { return this.findMethodOn(c.extends_, methodName); }
         }
-        ExceptionDecl ex = this.findException(className);
+        ExceptionDecl? ex = this.findException(className);
         if (ex != null) {
             Integer i = 0;
             while (i < ex.methods.length()) {
@@ -496,7 +495,7 @@ public class TypeChecker {
                 i++;
             }
         }
-        StructDecl s = this.findStruct(className);
+        StructDecl? s = this.findStruct(className);
         if (s != null) {
             Integer i = 0;
             while (i < s.methods.length()) {
@@ -504,7 +503,7 @@ public class TypeChecker {
                 i++;
             }
         }
-        ExtensionDecl ext = this.findExtension(className);
+        ExtensionDecl? ext = this.findExtension(className);
         if (ext != null) {
             Integer i = 0;
             while (i < ext.methods.length()) {
@@ -515,26 +514,27 @@ public class TypeChecker {
         return null;
     }
 
-    public findConstructor(name: String) : ConstructorDecl {
-        ClassDecl c = this.findClass(name);
-        if (c != null && c.ctor != null) { return c.ctor; }
-        ExceptionDecl ex = this.findException(name);
-        if (ex != null && ex.ctor != null) { return ex.ctor; }
+    public findConstructor(name: String) : ConstructorDecl? {
+        ClassDecl? c = this.findClass(name);
+        if (c != null) { if (c.ctor != null) { return c.ctor; } }
+        ExceptionDecl? ex = this.findException(name);
+        if (ex != null) { if (ex.ctor != null) { return ex.ctor; } }
         return null;
     }
 
     public enumVariantIndex(enumName: String, variantName: String) : Integer {
-        EnumDecl e = this.findEnum(enumName);
-        if (e == null) { return -1; }
-        Integer i = 0;
-        while (i < e.variants.length()) {
-            if (e.variants.get(i).name == variantName) { return i; }
-            i++;
+        EnumDecl? e = this.findEnum(enumName);
+        if (e != null) {
+            Integer ei = 0;
+            while (ei < e.variants.length()) {
+                if (e.variants.get(ei).name == variantName) { return ei; }
+                ei++;
+            }
         }
         return -1;
     }
 
-    public currentReturnType() : AstType {
+    public currentReturnType() : AstType? {
         return this.currentRetTy;
     }
 

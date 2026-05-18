@@ -19,7 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 package arimo.compiler.ast.decl;
 
 import arimo.compiler.ast.decl.Param;
-import arimo.compiler.ast.type.AstType;
+import arimo.compiler.ast.types.AstType;
 
 public class ExternFnDecl {
     public name       : String;
@@ -30,7 +30,6 @@ public class ExternFnDecl {
     public constructor(name: String) {
         this.name       = name;
         this.params     = List();
-        this.returnTy   = null;
         this.isVariadic = false;
     }
 }
