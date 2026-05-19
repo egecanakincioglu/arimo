@@ -12,8 +12,8 @@ homepage    = ""
 repository  = ""
 
 [[project.authors]]
-name  = ""
-email = ""
+name  = "Egecan Akincıoglu"
+email = "dev@egecanakincioglu.com"
 
 # -- Build --------------------------------------------------------------------
 
