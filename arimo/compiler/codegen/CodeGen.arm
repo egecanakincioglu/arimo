@@ -457,6 +457,35 @@ public class CodeGen {
     }
 
     private emitMethodCall(e: Expr) : String {
+        if (e.object != null && e.object.kind == ExprKind.IDENT) {
+            String n = e.object.strVal;
+            if (n == "IO")     { return this.emitIO(e.method, e.args); }
+            if (n == "Math")   { return this.emitMath(e.method, e.args); }
+            if (n == "Memory") { return this.emitMemory(e.method, e.args); }
+            if (n == "Time")   { return this.emitTime(e.method, e.args); }
+            String llt = this.lookupLLTy(n);
+            if (llt == "") {
+                MethodDecl? sm = this.tc.findMethodOn(n, e.method);
+                String retLLTy = "i8*";
+                if (sm != null) { if (sm.returnTy != null) { retLLTy = this.llvmTy(sm.returnTy); } }
+                String argStr2 = "";
+                Integer si = 0;
+                while (si < e.args.length()) {
+                    String av2 = this.emitExpr(e.args.get(si));
+                    String at2 = this.inferExprLLTy(e.args.get(si));
+                    if (argStr2.length() > 0) { argStr2 = argStr2.concat(", "); }
+                    argStr2 = argStr2.concat("${at2} ${av2}");
+                    si++;
+                }
+                if (retLLTy == "void") {
+                    this.emit("call void @${n}__${e.method}(${argStr2})");
+                    return "";
+                }
+                String sr = this.nextReg();
+                this.emit("${sr} = call ${retLLTy} @${n}__${e.method}(${argStr2})");
+                return sr;
+            }
+        }
         String objVal = this.emitExpr(e.object);
         String cls    = this.resolveObjClassName(e.object);
         if (cls == "String" || cls == "") {
@@ -874,9 +903,9 @@ public class CodeGen {
     }
 
     private emitIO(method: String, args: List<Expr>) : String {
-        String fmtNl  = this.emitStrConst("%s\\n");
-        String fmtI   = this.emitStrConst("%lld\\n");
-        String fmtF   = this.emitStrConst("%f\\n");
+        String fmtNl  = this.emitStrConst("%s\n");
+        String fmtI   = this.emitStrConst("%lld\n");
+        String fmtF   = this.emitStrConst("%f\n");
         String fmtNlP = this.strGEP(fmtNl, 4);
         String fmtIP  = this.strGEP(fmtI, 6);
         String fmtFP  = this.strGEP(fmtF, 4);
@@ -1189,7 +1218,7 @@ public class CodeGen {
 
         else if (k == StmtKind.THROW) {
             String msg = this.emitExpr(s.expr);
-            String fmt = this.emitStrConst("exception: %s\\n");
+            String fmt = this.emitStrConst("exception: %s\n");
             String fp  = this.strGEP(fmt, 15);
             this.emit("call i32 (i8*, ...) @printf(i8* ${fp}, i8* ${msg})");
             this.emit("call void @abort()");
@@ -1599,14 +1628,14 @@ public class CodeGen {
         this.addRuntime("define void @__List__append(%__List* %list, i8* %elem) {\nentry:\n  %lp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 1\n  %cp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 2\n  %dp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 0\n  %l = load i64, i64* %lp\n  %c = load i64, i64* %cp\n  %d = load i8*, i8** %dp\n  %full = icmp sge i64 %l, %c\n  br i1 %full, label %grow, label %store\ngrow:\n  %nc = mul i64 %c, 2\n  %ns = mul i64 %nc, 8\n  %nd = call i8* @malloc(i64 %ns)\n  %os = mul i64 %l, 8\n  call void @llvm.memset.p0i8.i64(i8* %nd, i8 0, i64 %ns, i1 false)\n  %src = bitcast i8* %d to i8*\n  store i8* %nd, i8** %dp\n  store i64 %nc, i64* %cp\n  %d2 = load i8*, i8** %dp\n  br label %store\nstore:\n  %d3 = load i8*, i8** %dp\n  %arr = bitcast i8* %d3 to i8**\n  %ep = getelementptr i8*, i8** %arr, i64 %l\n  store i8* %elem, i8** %ep\n  %nl = add i64 %l, 1\n  store i64 %nl, i64* %lp\n  ret void\n}\n");
         this.addRuntime("define i8* @__List__get(%__List* %list, i64 %i) {\nentry:\n  %dp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 0\n  %d = load i8*, i8** %dp\n  %arr = bitcast i8* %d to i8**\n  %ep = getelementptr i8*, i8** %arr, i64 %i\n  %v = load i8*, i8** %ep\n  ret i8* %v\n}\n");
         this.addRuntime("define void @__List__set(%__List* %list, i64 %i, i8* %v) {\nentry:\n  %dp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 0\n  %d = load i8*, i8** %dp\n  %arr = bitcast i8* %d to i8**\n  %ep = getelementptr i8*, i8** %arr, i64 %i\n  store i8* %v, i8** %ep\n  ret void\n}\n");
-        this.addRuntime("define void @__List__removeAt(%__List* %list, i64 %i) {\nentry:\n  %lp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 1\n  %l = load i64, i64* %lp\n  %dp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 0\n  %d = load i8*, i8** %dp\n  %arr = bitcast i8* %d to i8**\n  %j0 = add i64 %i, 1\n  br label %loop\nloop:\n  %j = phi i64 [ %j0, %entry ], [ %jn, %loop ]\n  %done = icmp sge i64 %j, %l\n  br i1 %done, label %exit, label %shift\nshift:\n  %src = getelementptr i8*, i8** %arr, i64 %j\n  %dst = getelementptr i8*, i8** %arr, i64 %jm1\n  %sv = load i8*, i8** %src\n  store i8* %sv, i8** %dst\n  %jn = add i64 %j, 1\n  %jm1 = sub i64 %j, 1\n  br label %loop\nexit:\n  %nl = sub i64 %l, 1\n  store i64 %nl, i64* %lp\n  ret void\n}\n");
+        this.addRuntime("define void @__List__removeAt(%__List* %list, i64 %i) {\nentry:\n  %lp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 1\n  %l = load i64, i64* %lp\n  %dp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 0\n  %d = load i8*, i8** %dp\n  %arr = bitcast i8* %d to i8**\n  %j0 = add i64 %i, 1\n  br label %loop\nloop:\n  %j = phi i64 [ %j0, %entry ], [ %jn, %shift ]\n  %done = icmp sge i64 %j, %l\n  br i1 %done, label %exit, label %shift\nshift:\n  %jm1 = sub i64 %j, 1\n  %jn = add i64 %j, 1\n  %src = getelementptr i8*, i8** %arr, i64 %j\n  %dst = getelementptr i8*, i8** %arr, i64 %jm1\n  %sv = load i8*, i8** %src\n  store i8* %sv, i8** %dst\n  br label %loop\nexit:\n  %nl = sub i64 %l, 1\n  store i64 %nl, i64* %lp\n  ret void\n}\n");
         this.addRuntime("define i8* @__arimo_str_concat(i8* %a, i8* %b) {\nentry:\n  %la = call i64 @strlen(i8* %a)\n  %lb = call i64 @strlen(i8* %b)\n  %lt = add i64 %la, %lb\n  %lt1 = add i64 %lt, 1\n  %buf = call i8* @malloc(i64 %lt1)\n  call i8* @strcpy(i8* %buf, i8* %a)\n  call i8* @strcat(i8* %buf, i8* %b)\n  ret i8* %buf\n}\n");
         this.addRuntime("define i64 @__arimo_str_contains(i8* %s, i8* %sub) {\nentry:\n  %r = call i8* @strstr(i8* %s, i8* %sub)\n  %null = icmp eq i8* %r, null\n  %res = select i1 %null, i64 0, i64 1\n  ret i64 %res\n}\n");
         this.addRuntime("define i64 @__arimo_str_starts_with(i8* %s, i8* %pre) {\nentry:\n  %l = call i64 @strlen(i8* %pre)\n  %r = call i32 @strncmp(i8* %s, i8* %pre, i64 %l)\n  %ok = icmp eq i32 %r, 0\n  %res = select i1 %ok, i64 1, i64 0\n  ret i64 %res\n}\ndeclare i32 @strncmp(i8*, i8*, i64)\n");
         this.addRuntime("define i64 @__arimo_str_ends_with(i8* %s, i8* %suf) {\nentry:\n  %ls = call i64 @strlen(i8* %s)\n  %lp = call i64 @strlen(i8* %suf)\n  %diff = sub i64 %ls, %lp\n  %neg = icmp slt i64 %diff, 0\n  br i1 %neg, label %no, label %check\ncheck:\n  %arr = bitcast i8* %s to i8*\n  %ptr = getelementptr i8, i8* %arr, i64 %diff\n  %r = call i32 @strcmp(i8* %ptr, i8* %suf)\n  %ok = icmp eq i32 %r, 0\n  %res = select i1 %ok, i64 1, i64 0\n  ret i64 %res\nno:\n  ret i64 0\n}\n");
         this.addRuntime("define i8* @__arimo_str_substring(i8* %s, i64 %from, i64 %to) {\nentry:\n  %len = sub i64 %to, %from\n  %len1 = add i64 %len, 1\n  %buf = call i8* @malloc(i64 %len1)\n  %src = getelementptr i8, i8* %s, i64 %from\n  call i8* @strncpy(i8* %buf, i8* %src, i64 %len)\n  %end = getelementptr i8, i8* %buf, i64 %len\n  store i8 0, i8* %end\n  ret i8* %buf\n}\ndeclare i8* @strncpy(i8*, i8*, i64)\n");
         this.addRuntime("define i64 @__arimo_str_index_of(i8* %s, i8* %sub) {\nentry:\n  %r = call i8* @strstr(i8* %s, i8* %sub)\n  %isnull = icmp eq i8* %r, null\n  br i1 %isnull, label %notfound, label %found\nfound:\n  %ri = ptrtoint i8* %r to i64\n  %si = ptrtoint i8* %s to i64\n  %idx = sub i64 %ri, %si\n  ret i64 %idx\nnotfound:\n  ret i64 -1\n}\n");
-        this.addRuntime("define i8* @__arimo_str_to_lower(i8* %s) {\nentry:\n  %l = call i64 @strlen(i8* %s)\n  %l1 = add i64 %l, 1\n  %buf = call i8* @malloc(i64 %l1)\n  call i8* @strcpy(i8* %buf, i8* %s)\n  br label %loop\nloop:\n  %i = phi i64 [ 0, %entry ], [ %in, %loop ]\n  %done = icmp sge i64 %i, %l\n  br i1 %done, label %exit, label %body\nbody:\n  %cp = getelementptr i8, i8* %buf, i64 %i\n  %c = load i8, i8* %cp\n  %ci = sext i8 %c to i32\n  %upper = icmp uge i32 %ci, 65\n  %lower = icmp ule i32 %ci, 90\n  %isUp = and i1 %upper, %lower\n  %lc = add i32 %ci, 32\n  %lc8 = trunc i32 %lc to i8\n  %nc = select i1 %isUp, i8 %lc8, i8 %c\n  store i8 %nc, i8* %cp\n  %in = add i64 %i, 1\n  br label %loop\nexit:\n  ret i8* %buf\n}\n");
+        this.addRuntime("define i8* @__arimo_str_to_lower(i8* %s) {\nentry:\n  %l = call i64 @strlen(i8* %s)\n  %l1 = add i64 %l, 1\n  %buf = call i8* @malloc(i64 %l1)\n  call i8* @strcpy(i8* %buf, i8* %s)\n  br label %loop\nloop:\n  %i = phi i64 [ 0, %entry ], [ %in, %body ]\n  %done = icmp sge i64 %i, %l\n  br i1 %done, label %exit, label %body\nbody:\n  %cp = getelementptr i8, i8* %buf, i64 %i\n  %c = load i8, i8* %cp\n  %ci = sext i8 %c to i32\n  %upper = icmp uge i32 %ci, 65\n  %lower = icmp ule i32 %ci, 90\n  %isUp = and i1 %upper, %lower\n  %lc = add i32 %ci, 32\n  %lc8 = trunc i32 %lc to i8\n  %nc = select i1 %isUp, i8 %lc8, i8 %c\n  store i8 %nc, i8* %cp\n  %in = add i64 %i, 1\n  br label %loop\nexit:\n  ret i8* %buf\n}\n");
         this.addRuntime("define i8* @__arimo_i64_to_str(i64 %n) {\nentry:\n  %buf = call i8* @malloc(i64 32)\n  %fmt = getelementptr [5 x i8], [5 x i8]* @.fmt_i64, i32 0, i32 0\n  call i32 (i8*, i8*, ...) @sprintf(i8* %buf, i8* %fmt, i64 %n)\n  ret i8* %buf\n}\n@.fmt_i64 = private constant [5 x i8] c\"%lld\\00\"\n");
         this.addRuntime("define i8* @__arimo_f64_to_str(double %f) {\nentry:\n  %buf = call i8* @malloc(i64 64)\n  %fmt = getelementptr [3 x i8], [3 x i8]* @.fmt_f64, i32 0, i32 0\n  call i32 (i8*, i8*, ...) @sprintf(i8* %buf, i8* %fmt, double %f)\n  ret i8* %buf\n}\n@.fmt_f64 = private constant [3 x i8] c\"%g\\00\"\n");
         this.addRuntime("define i64 @__arimo_str_parse_int(i8* %s) {\nentry:\n  %r = call i64 @strtoll(i8* %s, i8** null, i32 10)\n  ret i64 %r\n}\ndeclare i64 @strtoll(i8*, i8**, i32)\n");
