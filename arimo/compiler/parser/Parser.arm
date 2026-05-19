@@ -1395,7 +1395,6 @@ public class Parser {
 
     public parse() : ArimoModule {
         ArimoModule mod = ArimoModule("");
-
         if (this.check(TokenKind.PACKAGE)) {
             this.advance();
             String path = this.parseDottedName();
@@ -1414,7 +1413,6 @@ public class Parser {
             Item item = this.parseItem();
             mod.items.append(item);
         }
-
         return mod;
     }
 
