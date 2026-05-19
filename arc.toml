@@ -3,7 +3,7 @@
 [project]
 name        = "arc"
 version     = "0.1.0"
-description = "Arimo stage 1 bootstrap compiler"
+description = "Arimo stage 1 bootstrap compiler — arc-arimo"
 entry       = "Main.arm"
 license     = "MIT"
 readme      = "README.md"
