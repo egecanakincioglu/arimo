@@ -562,6 +562,23 @@ public class Parser {
             return this.parseSuffix(base);
         }
 
+        if (k == TokenKind.TYPE_LIST || k == TokenKind.TYPE_HASHMAP ||
+            k == TokenKind.TYPE_MAP  || k == TokenKind.TYPE_TREEMAP ||
+            k == TokenKind.TYPE_PAIR) {
+            String colName = "";
+            if (k == TokenKind.TYPE_LIST)    { colName = "List";    }
+            if (k == TokenKind.TYPE_HASHMAP) { colName = "HashMap"; }
+            if (k == TokenKind.TYPE_MAP)     { colName = "Map";     }
+            if (k == TokenKind.TYPE_TREEMAP) { colName = "TreeMap"; }
+            if (k == TokenKind.TYPE_PAIR)    { colName = "Pair";    }
+            this.advance();
+            if (this.check(TokenKind.LPAREN)) {
+                List<Expr> args = this.parseArgs();
+                return this.parseSuffix(Expr.ctorCall(colName, args, sl, sc));
+            }
+            return this.parseSuffix(Expr.ident(colName, sl, sc));
+        }
+
         IO.error("parse error at ${sl}:${sc} — unexpected token in expression: ${k}");
         this.hasError = true;
         this.advance();
