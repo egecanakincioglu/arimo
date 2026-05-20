@@ -62,9 +62,10 @@ public class CodeGen {
     private curFn      : String;
     private selfType   : String;
     private retTyStr   : String;
-    private varNames   : List<String>;
-    private varRegs    : List<String>;
-    private varLLTys   : List<String>;
+    private varNames      : List<String>;
+    private varRegs       : List<String>;
+    private varLLTys      : List<String>;
+    private varElemClass  : List<String>;
     private scopeMarks : List<Integer>;
     private loopExits  : List<String>;
     private loopConds  : List<String>;
@@ -82,10 +83,11 @@ public class CodeGen {
         this.curFn      = "";
         this.selfType   = "";
         this.retTyStr   = "void";
-        this.varNames   = List();
-        this.varRegs    = List();
-        this.varLLTys   = List();
-        this.scopeMarks = List();
+        this.varNames     = List();
+        this.varRegs      = List();
+        this.varLLTys     = List();
+        this.varElemClass = List();
+        this.scopeMarks   = List();
         this.loopExits  = List();
         this.loopConds  = List();
         this.entryClass = "";
@@ -119,10 +121,11 @@ public class CodeGen {
         this.body = this.body.concat(sig).concat(" {\nentry:\n").concat(this.curFn).concat("}\n\n");
         this.curFn = "";
         this.counter = 0;
-        this.varNames = List();
-        this.varRegs  = List();
-        this.varLLTys = List();
-        this.scopeMarks = List();
+        this.varNames     = List();
+        this.varRegs      = List();
+        this.varLLTys     = List();
+        this.varElemClass = List();
+        this.scopeMarks   = List();
         this.loopExits  = List();
         this.loopConds  = List();
     }
@@ -232,7 +235,29 @@ public class CodeGen {
         this.varNames.append(name);
         this.varRegs.append(reg);
         this.varLLTys.append(llt);
+        this.varElemClass.append("");
         return reg;
+    }
+
+    private defineVarWithElem(name: String, llt: String, elemCls: String) : String {
+        Integer n = this.counter;
+        this.counter++;
+        String reg = "%v${n}";
+        this.emit("${reg} = alloca ${llt}");
+        this.varNames.append(name);
+        this.varRegs.append(reg);
+        this.varLLTys.append(llt);
+        this.varElemClass.append(elemCls);
+        return reg;
+    }
+
+    private lookupElemClass(name: String) : String {
+        Integer i = this.varNames.length() - 1;
+        while (i >= 0) {
+            if (this.varNames.get(i) == name) { return this.varElemClass.get(i); }
+            i--;
+        }
+        return "";
     }
 
     private lookupReg(name: String) : String {
@@ -450,6 +475,30 @@ public class CodeGen {
         if (e.kind == ExprKind.METHOD) {
             if (e.object != null) {
                 String objCls = this.resolveObjClassName(e.object);
+                if (objCls == "__List" && e.method == "get") {
+                    if (e.object.kind == ExprKind.FIELD && e.object.object != null) {
+                        String ownerCls = this.resolveObjClassName(e.object.object);
+                        if (ownerCls.length() > 0 && ownerCls != "__List" && ownerCls != "__HashMap") {
+                            List<FieldDecl> fds = this.tc.allFieldsOf(ownerCls);
+                            Integer fi = 0;
+                            while (fi < fds.length()) {
+                                FieldDecl fd = fds.get(fi) as FieldDecl;
+                                if (fd != null) {
+                                    if (fd.name == e.object.field) {
+                                        if (fd.ty != null) {
+                                            if (fd.ty.kind == TypeKind.LIST && fd.ty.inner != null) {
+                                                String en = fd.ty.inner.name;
+                                                if (en.length() > 0) { return en; }
+                                            }
+                                        }
+                                        fi = fds.length();
+                                    }
+                                }
+                                fi++;
+                            }
+                        }
+                    }
+                }
                 if (objCls.length() > 0) {
                     MethodDecl? mm = this.tc.findMethodOn(objCls, e.method);
                     if (mm != null) {
@@ -1646,10 +1695,11 @@ public class CodeGen {
         this.curFn      = "";
         this.selfType   = c.name;
         this.retTyStr   = "%${c.name}*";
-        this.varNames   = List();
-        this.varRegs    = List();
-        this.varLLTys   = List();
-        this.scopeMarks = List();
+        this.varNames     = List();
+        this.varRegs      = List();
+        this.varLLTys     = List();
+        this.varElemClass = List();
+        this.scopeMarks   = List();
         this.loopExits  = List();
         this.loopConds  = List();
         Integer sz = this.structByteSize(c.name);
@@ -1690,7 +1740,7 @@ public class CodeGen {
         }
         String sig = "define %${ed.name}* @${ed.name}__new(${paramStr})";
         this.curFn = ""; this.selfType = ed.name; this.retTyStr = "%${ed.name}*";
-        this.varNames = List(); this.varRegs = List(); this.varLLTys = List();
+        this.varNames = List(); this.varRegs = List(); this.varLLTys = List(); this.varElemClass = List();
         this.scopeMarks = List(); this.loopExits = List(); this.loopConds = List();
         Integer sz = (1 + this.nonStaticFields(ed.name).length()) * 8;
         String raw = this.nextReg();
@@ -1732,10 +1782,11 @@ public class CodeGen {
         this.curFn      = "";
         this.selfType   = className;
         this.retTyStr   = retTy;
-        this.varNames   = List();
-        this.varRegs    = List();
-        this.varLLTys   = List();
-        this.scopeMarks = List();
+        this.varNames     = List();
+        this.varRegs      = List();
+        this.varLLTys     = List();
+        this.varElemClass = List();
+        this.scopeMarks   = List();
         this.loopExits  = List();
         this.loopConds  = List();
         Integer j = 0;
@@ -1920,7 +1971,7 @@ public class CodeGen {
             this.curFn = "";
             this.selfType = c.name;
             this.retTyStr = "%${c.name}*";
-            this.varNames = List(); this.varRegs = List(); this.varLLTys = List();
+            this.varNames = List(); this.varRegs = List(); this.varLLTys = List(); this.varElemClass = List();
             this.scopeMarks = List(); this.loopExits = List(); this.loopConds = List();
             String raw = this.nextReg();
             this.emit("${raw} = call i8* @malloc(i64 ${sz})");
@@ -1985,7 +2036,7 @@ public class CodeGen {
             this.curFn = "";
             this.selfType = "";
             this.retTyStr = "i32";
-            this.varNames = List(); this.varRegs = List(); this.varLLTys = List();
+            this.varNames = List(); this.varRegs = List(); this.varLLTys = List(); this.varElemClass = List();
             this.scopeMarks = List(); this.loopExits = List(); this.loopConds = List();
             this.emit("call void @${this.entryClass}__main()");
             this.emit("ret i32 0");
