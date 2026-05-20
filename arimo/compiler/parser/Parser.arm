@@ -968,8 +968,9 @@ public class Parser {
         while (!this.check(TokenKind.RPAREN) && !this.check(TokenKind.EOF)) {
             Boolean isVariadic = false;
             if (this.check(TokenKind.ELLIPSIS)) { this.advance(); isVariadic = true; }
-            AstType ty   = this.parseType();
             String  name = this.eatIdent();
+            this.eat(TokenKind.COLON);
+            AstType ty   = this.parseType();
             Param p = Param(name, ty);
             p.isVariadic = isVariadic;
             if (this.check(TokenKind.EQ)) {
