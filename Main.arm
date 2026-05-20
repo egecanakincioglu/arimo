@@ -93,14 +93,49 @@ public class Main {
         Integer i = 0;
         while (i < imp.length()) {
             String ch = imp.substring(i, i + 1);
-            if (ch == ".") {
-                result = result.concat("/");
-            } else {
-                result = result.concat(ch);
-            }
+            if (ch == ".") { result = result.concat("/"); }
+            else           { result = result.concat(ch); }
             i++;
         }
         return result.concat(".arm");
+    }
+
+    private static isStdlib(imp: String) : Boolean {
+        if (imp.startsWith("arimo.fs."))       { return true; }
+        if (imp.startsWith("arimo.process."))  { return true; }
+        if (imp.startsWith("arimo.io."))       { return true; }
+        if (imp.startsWith("arimo.time."))     { return true; }
+        if (imp.startsWith("arimo.util."))     { return true; }
+        if (imp.startsWith("arimo.lang."))     { return true; }
+        if (imp.startsWith("arimo.env."))      { return true; }
+        return false;
+    }
+
+    private static dirOf(path: String) : String {
+        Integer lastSlash = path.indexOf("/");
+        Integer lastBs    = path.indexOf("\\");
+        Integer sep = lastSlash;
+        if (lastBs > sep) { sep = lastBs; }
+        if (sep >= 0) { return path.substring(0, sep + 1); }
+        return "";
+    }
+
+    private static strListContains(lst: List<String>, s: String) : Boolean {
+        Integer i = 0;
+        while (i < lst.length()) {
+            if (lst.get(i) == s) { return true; }
+            i++;
+        }
+        return false;
+    }
+
+    private static parseFileAt(path: String) : ArimoModule {
+        String src = File.read(path);
+        if (src == null || src.length() == 0) { return ArimoModule(""); }
+        Lexer lx = Lexer(src);
+        List<Token> toks = lx.tokenize();
+        Parser px = Parser(toks);
+        return px.parse();
     }
 
     public static main() : Void {
@@ -155,25 +190,57 @@ public class Main {
         }
         IO.println("arc: parse ok — ${mod.items.length()} items, package ${mod.path}");
 
-        IO.println("arc: type checking...");
-        TypeChecker tc = TypeChecker();
-        Integer ii = 0;
-        while (ii < mod.imports.length()) {
-            String imp = mod.imports.get(ii);
+        List<ArimoModule> modules = List();
+        List<String> visited = List();
+        List<String> queue = List();
+        modules.append(mod);
+        visited.append(inputPath);
+
+        Integer si = 0;
+        while (si < mod.imports.length()) {
+            String imp0 = mod.imports.get(si);
+            if (!Main.isStdlib(imp0) && !Main.strListContains(visited, imp0)) {
+                queue.append(imp0);
+            }
+            si++;
+        }
+
+        while (queue.length() > 0) {
+            String imp = queue.get(0);
+            queue.removeAt(0);
+            if (Main.strListContains(visited, imp)) { continue; }
+            visited.append(imp);
             String impPath = Main.importToPath(imp);
             if (File.exists(impPath)) {
-                String impSrc = File.read(impPath);
-                if (impSrc != null && impSrc.length() > 0) {
-                    Lexer impLexer = Lexer(impSrc);
-                    List<Token> impTokens = impLexer.tokenize();
-                    Parser impParser = Parser(impTokens);
-                    ArimoModule impMod = impParser.parse();
-                    tc.registerModule(impMod);
+                ArimoModule impMod = Main.parseFileAt(impPath);
+                if (impMod.path.length() > 0 || impMod.items.length() > 0) {
+                    modules.append(impMod);
+                    Integer qi = 0;
+                    while (qi < impMod.imports.length()) {
+                        String imp2 = impMod.imports.get(qi);
+                        if (!Main.isStdlib(imp2) && !Main.strListContains(visited, imp2)) {
+                            queue.append(imp2);
+                        }
+                        qi++;
+                    }
                 }
             }
-            ii++;
         }
-        tc.check(mod);
+
+        IO.println("arc: ${modules.length()} modules loaded");
+
+        IO.println("arc: type checking...");
+        TypeChecker tc = TypeChecker();
+        Integer ri = 0;
+        while (ri < modules.length()) {
+            tc.registerModule(modules.get(ri));
+            ri++;
+        }
+        Integer chi = 0;
+        while (chi < modules.length()) {
+            tc.checkItems(modules.get(chi));
+            chi++;
+        }
         Integer errCount = tc.errors.length();
         if (errCount > 0) {
             Integer ei = 0;
@@ -201,7 +268,7 @@ public class Main {
 
         IO.println("arc: generating LLVM IR...");
         CodeGen cg = CodeGen(tc);
-        String ir = cg.generate(mod);
+        String ir = cg.generateAll(modules);
 
         if (emitIR) {
             IO.println(ir);
