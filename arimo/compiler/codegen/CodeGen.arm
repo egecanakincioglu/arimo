@@ -410,6 +410,8 @@ public class CodeGen {
         if (e.kind == ExprKind.THIS) { return this.selfType; }
         if (e.kind == ExprKind.IDENT) {
             String llt = this.lookupLLTy(e.strVal);
+            if (llt == "%__List*")    { return "__List"; }
+            if (llt == "%__HashMap*") { return "__HashMap"; }
             if (llt.startsWith("%") && llt.endsWith("*") && !llt.startsWith("%__")) {
                 return llt.substring(1, llt.length() - 1);
             }
@@ -418,6 +420,8 @@ public class CodeGen {
         if (e.kind == ExprKind.FIELD) {
             String cls = this.resolveObjClassName(e.object);
             String fllty = this.fieldLLTy(cls, e.field);
+            if (fllty == "%__List*")    { return "__List"; }
+            if (fllty == "%__HashMap*") { return "__HashMap"; }
             if (fllty.startsWith("%") && fllty.endsWith("*") && !fllty.startsWith("%__")) {
                 return fllty.substring(1, fllty.length() - 1);
             }
@@ -457,41 +461,47 @@ public class CodeGen {
     }
 
     private emitMethodCall(e: Expr) : String {
-        if (e.object != null && e.object.kind == ExprKind.IDENT) {
+        String objVal = this.emitExpr(e.object);
+        String cls    = this.resolveObjClassName(e.object);
+        if (cls == "String") {
+            return this.emitStringMethod(objVal, e.method, e.args);
+        }
+        if (cls != "") {
+            return this.dispatchMethod(cls, objVal, e.method, e.args);
+        }
+        if (objVal == "0") {
             String n = e.object.strVal;
             if (n == "IO")     { return this.emitIO(e.method, e.args); }
             if (n == "Math")   { return this.emitMath(e.method, e.args); }
             if (n == "Memory") { return this.emitMemory(e.method, e.args); }
             if (n == "Time")   { return this.emitTime(e.method, e.args); }
-            String llt = this.lookupLLTy(n);
-            if (llt == "") {
-                MethodDecl? sm = this.tc.findMethodOn(n, e.method);
-                String retLLTy = "i8*";
-                if (sm != null) { if (sm.returnTy != null) { retLLTy = this.llvmTy(sm.returnTy); } }
-                String argStr2 = "";
-                Integer si = 0;
-                while (si < e.args.length()) {
-                    String av2 = this.emitExpr(e.args.get(si));
-                    String at2 = this.inferExprLLTy(e.args.get(si));
-                    if (argStr2.length() > 0) { argStr2 = argStr2.concat(", "); }
-                    argStr2 = argStr2.concat("${at2} ${av2}");
-                    si++;
-                }
-                if (retLLTy == "void") {
-                    this.emit("call void @${n}__${e.method}(${argStr2})");
-                    return "";
-                }
-                String sr = this.nextReg();
-                this.emit("${sr} = call ${retLLTy} @${n}__${e.method}(${argStr2})");
-                return sr;
+            MethodDecl? sm = this.tc.findMethodOn(n, e.method);
+            String retLLTy = "i8*";
+            if (sm != null) { if (sm.returnTy != null) { retLLTy = this.llvmTy(sm.returnTy); } }
+            if (retLLTy == "i8*") {
+                String meth = e.method;
+                if (meth == "exists" || meth == "success" || meth == "delete") { retLLTy = "i64"; }
+                if (meth == "write" || meth == "append" || meth == "check") { retLLTy = "void"; }
+                if (meth == "exec") { retLLTy = "i8*"; }
             }
+            String argStr2 = "";
+            Integer si = 0;
+            while (si < e.args.length()) {
+                String av2 = this.emitExpr(e.args.get(si));
+                String at2 = this.inferExprLLTy(e.args.get(si));
+                if (argStr2.length() > 0) { argStr2 = argStr2.concat(", "); }
+                argStr2 = argStr2.concat("${at2} ${av2}");
+                si++;
+            }
+            if (retLLTy == "void") {
+                this.emit("call void @${n}__${e.method}(${argStr2})");
+                return "";
+            }
+            String sr = this.nextReg();
+            this.emit("${sr} = call ${retLLTy} @${n}__${e.method}(${argStr2})");
+            return sr;
         }
-        String objVal = this.emitExpr(e.object);
-        String cls    = this.resolveObjClassName(e.object);
-        if (cls == "String" || cls == "") {
-            return this.emitStringMethod(objVal, e.method, e.args);
-        }
-        return this.dispatchMethod(cls, objVal, e.method, e.args);
+        return this.emitStringMethod(objVal, e.method, e.args);
     }
 
     private dispatchMethod(cls: String, objVal: String, method: String, args: List<Expr>) : String {
@@ -602,6 +612,19 @@ public class CodeGen {
         if (k == ExprKind.CTOR)      { return "%${e.class_}*"; }
         if (k == ExprKind.STR_INTERP){ return "i8*"; }
         if (k == ExprKind.CAST && e.castTy != null) { return this.llvmTy(e.castTy); }
+        if (k == ExprKind.METHOD) {
+            String method = e.method;
+            if (method == "length" || method == "indexOf" || method == "charCodeAt" ||
+                method == "compareTo" || method == "contains" || method == "startsWith" ||
+                method == "endsWith" || method == "isEmpty") { return "i64"; }
+            if (method == "exists" || method == "success" || method == "delete") { return "i64"; }
+            return "i8*";
+        }
+        if (k == ExprKind.STATIC_CALL) {
+            MethodDecl? sm = this.tc.findMethodOn(e.class_, e.method);
+            if (sm != null) { if (sm.returnTy != null) { return this.llvmTy(sm.returnTy); } }
+            return "i8*";
+        }
         if (k == ExprKind.BINOP) {
             Integer op = e.op;
             if (op == BinaryOp.EQ || op == BinaryOp.NE || op == BinaryOp.LT ||
@@ -1607,6 +1630,7 @@ public class CodeGen {
         this.addHeader("declare i32 @sprintf(i8*, i8*, ...)");
         this.addHeader("declare void @abort()");
         this.addHeader("declare void @llvm.memset.p0i8.i64(i8*, i8, i64, i1)");
+        this.addHeader("declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i1)");
         this.addHeader("declare double @llvm.sqrt.f64(double)");
         this.addHeader("declare double @llvm.fabs.f64(double)");
         this.addHeader("declare double @llvm.floor.f64(double)");
@@ -1625,7 +1649,7 @@ public class CodeGen {
     private emitRuntimeFunctions() : Void {
         this.addRuntime("define %__List* @__List__new() {\nentry:\n  %raw = call i8* @malloc(i64 32)\n  %p = bitcast i8* %raw to %__List*\n  %z = bitcast %__List* %p to i8*\n  call void @llvm.memset.p0i8.i64(i8* %z, i8 0, i64 32, i1 false)\n  %cp = getelementptr inbounds %__List, %__List* %p, i32 0, i32 2\n  store i64 4, i64* %cp\n  %dp = getelementptr inbounds %__List, %__List* %p, i32 0, i32 0\n  %data = call i8* @malloc(i64 32)\n  store i8* %data, i8** %dp\n  ret %__List* %p\n}\n");
         this.addRuntime("define i64 @__List__length(%__List* %list) {\nentry:\n  %lp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 1\n  %l = load i64, i64* %lp\n  ret i64 %l\n}\n");
-        this.addRuntime("define void @__List__append(%__List* %list, i8* %elem) {\nentry:\n  %lp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 1\n  %cp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 2\n  %dp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 0\n  %l = load i64, i64* %lp\n  %c = load i64, i64* %cp\n  %d = load i8*, i8** %dp\n  %full = icmp sge i64 %l, %c\n  br i1 %full, label %grow, label %store\ngrow:\n  %nc = mul i64 %c, 2\n  %ns = mul i64 %nc, 8\n  %nd = call i8* @malloc(i64 %ns)\n  %os = mul i64 %l, 8\n  call void @llvm.memset.p0i8.i64(i8* %nd, i8 0, i64 %ns, i1 false)\n  %src = bitcast i8* %d to i8*\n  store i8* %nd, i8** %dp\n  store i64 %nc, i64* %cp\n  %d2 = load i8*, i8** %dp\n  br label %store\nstore:\n  %d3 = load i8*, i8** %dp\n  %arr = bitcast i8* %d3 to i8**\n  %ep = getelementptr i8*, i8** %arr, i64 %l\n  store i8* %elem, i8** %ep\n  %nl = add i64 %l, 1\n  store i64 %nl, i64* %lp\n  ret void\n}\n");
+        this.addRuntime("define void @__List__append(%__List* %list, i8* %elem) {\nentry:\n  %lp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 1\n  %cp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 2\n  %dp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 0\n  %l = load i64, i64* %lp\n  %c = load i64, i64* %cp\n  %d = load i8*, i8** %dp\n  %full = icmp sge i64 %l, %c\n  br i1 %full, label %grow, label %store\ngrow:\n  %nc = mul i64 %c, 2\n  %ns = mul i64 %nc, 8\n  %nd = call i8* @malloc(i64 %ns)\n  %os = mul i64 %l, 8\n  call void @llvm.memset.p0i8.i64(i8* %nd, i8 0, i64 %ns, i1 false)\n  %src = bitcast i8* %d to i8*\n  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %nd, i8* %src, i64 %os, i1 false)\n  store i8* %nd, i8** %dp\n  store i64 %nc, i64* %cp\n  %d2 = load i8*, i8** %dp\n  br label %store\nstore:\n  %d3 = load i8*, i8** %dp\n  %arr = bitcast i8* %d3 to i8**\n  %ep = getelementptr i8*, i8** %arr, i64 %l\n  store i8* %elem, i8** %ep\n  %nl = add i64 %l, 1\n  store i64 %nl, i64* %lp\n  ret void\n}\n");
         this.addRuntime("define i8* @__List__get(%__List* %list, i64 %i) {\nentry:\n  %dp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 0\n  %d = load i8*, i8** %dp\n  %arr = bitcast i8* %d to i8**\n  %ep = getelementptr i8*, i8** %arr, i64 %i\n  %v = load i8*, i8** %ep\n  ret i8* %v\n}\n");
         this.addRuntime("define void @__List__set(%__List* %list, i64 %i, i8* %v) {\nentry:\n  %dp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 0\n  %d = load i8*, i8** %dp\n  %arr = bitcast i8* %d to i8**\n  %ep = getelementptr i8*, i8** %arr, i64 %i\n  store i8* %v, i8** %ep\n  ret void\n}\n");
         this.addRuntime("define void @__List__removeAt(%__List* %list, i64 %i) {\nentry:\n  %lp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 1\n  %l = load i64, i64* %lp\n  %dp = getelementptr inbounds %__List, %__List* %list, i32 0, i32 0\n  %d = load i8*, i8** %dp\n  %arr = bitcast i8* %d to i8**\n  %j0 = add i64 %i, 1\n  br label %loop\nloop:\n  %j = phi i64 [ %j0, %entry ], [ %jn, %shift ]\n  %done = icmp sge i64 %j, %l\n  br i1 %done, label %exit, label %shift\nshift:\n  %jm1 = sub i64 %j, 1\n  %jn = add i64 %j, 1\n  %src = getelementptr i8*, i8** %arr, i64 %j\n  %dst = getelementptr i8*, i8** %arr, i64 %jm1\n  %sv = load i8*, i8** %src\n  store i8* %sv, i8** %dst\n  br label %loop\nexit:\n  %nl = sub i64 %l, 1\n  store i64 %nl, i64* %lp\n  ret void\n}\n");
@@ -1677,6 +1701,30 @@ public class CodeGen {
 
     public generate(module: ArimoModule) : String {
         this.emitModuleHeader();
+        Integer ci = 0;
+        while (ci < this.tc.classNames.length()) {
+            String cname = this.tc.classNames.get(ci);
+            Boolean inMod = false;
+            Integer mi2 = 0;
+            while (mi2 < module.items.length()) {
+                Item it2 = module.items.get(mi2);
+                if (it2.kind == ItemKind.CLASS && it2.classDecl != null) {
+                    if (it2.classDecl.name == cname) { inMod = true; }
+                }
+                mi2++;
+            }
+            if (!inMod) {
+                List<FieldDecl> cfields = this.nonStaticFields(cname);
+                String cfts = "i64";
+                Integer cfi = 0;
+                while (cfi < cfields.length()) {
+                    cfts = cfts.concat(", ").concat(this.llvmTy(cfields.get(cfi).ty));
+                    cfi++;
+                }
+                this.addHeader("%${cname} = type { ${cfts} }");
+            }
+            ci++;
+        }
         this.emitRuntimeFunctions();
         Integer i = 0;
         while (i < module.items.length()) {
