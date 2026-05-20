@@ -283,7 +283,8 @@ public class CodeGen {
         List<FieldDecl> res = List();
         Integer i = 0;
         while (i < all.length()) {
-            if (!all.get(i).isStatic) { res.append(all.get(i)); }
+            FieldDecl fd = all.get(i) as FieldDecl;
+            if (!fd.isStatic) { res.append(fd); }
             i++;
         }
         return res;
@@ -297,7 +298,8 @@ public class CodeGen {
         List<FieldDecl> fs = this.nonStaticFields(className);
         Integer i = 0;
         while (i < fs.length()) {
-            if (fs.get(i).name == fieldName) { return i + 1; }
+            FieldDecl fd = fs.get(i) as FieldDecl;
+            if (fd.name == fieldName) { return i + 1; }
             i++;
         }
         return -1;
@@ -307,7 +309,8 @@ public class CodeGen {
         List<FieldDecl> fs = this.nonStaticFields(className);
         Integer i = 0;
         while (i < fs.length()) {
-            if (fs.get(i).name == fieldName) { return this.llvmTy(fs.get(i).ty); }
+            FieldDecl fd = fs.get(i) as FieldDecl;
+            if (fd.name == fieldName) { return this.llvmTy(fd.ty); }
             i++;
         }
         return "i8*";
@@ -711,7 +714,12 @@ public class CodeGen {
         if (k == ExprKind.NULL_LIT)  { return "i8*"; }
         if (k == ExprKind.THIS)      { return "%${this.selfType}*"; }
         if (k == ExprKind.IDENT)     { return this.lookupLLTy(e.strVal); }
-        if (k == ExprKind.CTOR)      { return "%${e.class_}*"; }
+        if (k == ExprKind.CTOR) {
+            if (e.class_ == "List")    { return "%__List*"; }
+            if (e.class_ == "HashMap" || e.class_ == "Map" || e.class_ == "TreeMap") { return "%__HashMap*"; }
+            if (e.class_ == "Pair")    { return "%__Pair*"; }
+            return "%${e.class_}*";
+        }
         if (k == ExprKind.STR_INTERP){ return "i8*"; }
         if (k == ExprKind.CAST && e.castTy != null) { return this.llvmTy(e.castTy); }
         if (k == ExprKind.FIELD) {
@@ -721,7 +729,7 @@ public class CodeGen {
                 List<FieldDecl> fsf = this.tc.allFieldsOf(e.object.strVal);
                 Integer fsi = 0;
                 while (fsi < fsf.length()) {
-                    FieldDecl fd = fsf.get(fsi);
+                    FieldDecl fd = fsf.get(fsi) as FieldDecl;
                     if (fd.isStatic && fd.name == e.field) { return this.llvmTy(fd.ty); }
                     fsi++;
                 }
@@ -1811,21 +1819,23 @@ public class CodeGen {
 
     private emitClassType(c: ClassDecl?) : Void {
         if (c != null) {
-            List<FieldDecl> fields = this.nonStaticFields(c.name);
+            ClassDecl cn = c as ClassDecl;
+            List<FieldDecl> fields = this.nonStaticFields(cn.name);
             String fieldTypes = "i64";
             Integer i = 0;
             while (i < fields.length()) {
-                fieldTypes = fieldTypes.concat(", ").concat(this.llvmTy(fields.get(i).ty));
+                FieldDecl fd = fields.get(i) as FieldDecl;
+                fieldTypes = fieldTypes.concat(", ").concat(this.llvmTy(fd.ty));
                 i++;
             }
-            this.addHeader("%${c.name} = type { ${fieldTypes} }");
+            this.addHeader("%${cn.name} = type { ${fieldTypes} }");
             Integer fi = 0;
-            while (fi < c.fields.length()) {
-                FieldDecl f = c.fields.get(fi);
+            while (fi < cn.fields.length()) {
+                FieldDecl f = cn.fields.get(fi) as FieldDecl;
                 if (f.isStatic) {
                     String llt = this.llvmTy(f.ty);
                     String init = this.defVal(llt);
-                    this.addHeader("@${c.name}__${f.name} = global ${llt} ${init}");
+                    this.addHeader("@${cn.name}__${f.name} = global ${llt} ${init}");
                 }
                 fi++;
             }
@@ -1834,10 +1844,12 @@ public class CodeGen {
 
     private emitEnumType(e: EnumDecl?) : Void {
         if (e != null) {
-            this.addHeader("%${e.name} = type { i64, i64, i64 }");
+            EnumDecl en = e as EnumDecl;
+            this.addHeader("%${en.name} = type { i64, i64, i64 }");
             Integer i = 0;
-            while (i < e.variants.length()) {
-                this.addHeader("@${e.name}__${e.variants.get(i).name} = constant i64 ${i}");
+            while (i < en.variants.length()) {
+                EnumVariant ev = en.variants.get(i) as EnumVariant;
+                this.addHeader("@${en.name}__${ev.name} = constant i64 ${i}");
                 i++;
             }
         }
@@ -1907,23 +1919,25 @@ public class CodeGen {
 
     private emitExternDecl(ext: ExternDecl?) : Void {
         if (ext != null) {
-        Integer i = 0;
-        while (i < ext.decls.length()) {
-            ExternFnDecl fn = ext.decls.get(i);
-            String paramStr = "";
-            Integer j = 0;
-            while (j < fn.params.length()) {
-                String pt = this.llvmTy(fn.params.get(j).ty);
-                if (paramStr.length() > 0) { paramStr = paramStr.concat(", "); }
-                paramStr = paramStr.concat(pt);
-                j++;
+            ExternDecl exn = ext as ExternDecl;
+            Integer i = 0;
+            while (i < exn.decls.length()) {
+                ExternFnDecl fn = exn.decls.get(i) as ExternFnDecl;
+                String paramStr = "";
+                Integer j = 0;
+                while (j < fn.params.length()) {
+                    Param p = fn.params.get(j) as Param;
+                    String pt = this.llvmTy(p.ty);
+                    if (paramStr.length() > 0) { paramStr = paramStr.concat(", "); }
+                    paramStr = paramStr.concat(pt);
+                    j++;
+                }
+                if (fn.isVariadic) { paramStr = paramStr.concat(", ..."); }
+                String retTy = "void";
+                if (fn.returnTy != null) { retTy = this.llvmTy(fn.returnTy); }
+                this.addHeader("declare ${retTy} @${fn.name}(${paramStr})");
+                i++;
             }
-            if (fn.isVariadic) { paramStr = paramStr.concat(", ..."); }
-            String retTy = "void";
-            if (fn.returnTy != null) { retTy = this.llvmTy(fn.returnTy); }
-            this.addHeader("declare ${retTy} @${fn.name}(${paramStr})");
-            i++;
-        }
         }
     }
 
@@ -1936,21 +1950,31 @@ public class CodeGen {
             else if (item.kind == ItemKind.STRUCT) {
                 StructDecl sd = item.structDecl;
                 if (sd != null) {
-                    List<FieldDecl> fields = sd.fields;
+                    StructDecl sdn = sd as StructDecl;
+                    List<FieldDecl> fields = sdn.fields;
                     String fts = "i64";
                     Integer fi = 0;
-                    while (fi < fields.length()) { fts = fts.concat(", ").concat(this.llvmTy(fields.get(fi).ty)); fi++; }
-                    this.addHeader("%${sd.name} = type { ${fts} }");
+                    while (fi < fields.length()) {
+                        FieldDecl sfd = fields.get(fi) as FieldDecl;
+                        fts = fts.concat(", ").concat(this.llvmTy(sfd.ty));
+                        fi++;
+                    }
+                    this.addHeader("%${sdn.name} = type { ${fts} }");
                 }
             }
             else if (item.kind == ItemKind.EXCEPTION) {
                 ExceptionDecl? ed0 = item.exDecl;
                 if (ed0 != null) {
+                    ExceptionDecl edn = ed0 as ExceptionDecl;
                     String fts = "i64";
                     Integer fi = 0;
-                    List<FieldDecl> efields = this.nonStaticFields(ed0.name);
-                    while (fi < efields.length()) { fts = fts.concat(", ").concat(this.llvmTy(efields.get(fi).ty)); fi++; }
-                    this.addHeader("%${ed0.name} = type { ${fts} }");
+                    List<FieldDecl> efields = this.nonStaticFields(edn.name);
+                    while (fi < efields.length()) {
+                        FieldDecl efd = efields.get(fi) as FieldDecl;
+                        fts = fts.concat(", ").concat(this.llvmTy(efd.ty));
+                        fi++;
+                    }
+                    this.addHeader("%${edn.name} = type { ${fts} }");
                 }
             }
             else if (item.kind == ItemKind.EXTERN) { this.emitExternDecl(item.externDecl); }
@@ -2081,7 +2105,8 @@ public class CodeGen {
                 String cfts = "i64";
                 Integer cfi = 0;
                 while (cfi < cfields.length()) {
-                    cfts = cfts.concat(", ").concat(this.llvmTy(cfields.get(cfi).ty));
+                    FieldDecl cfd = cfields.get(cfi) as FieldDecl;
+                    cfts = cfts.concat(", ").concat(this.llvmTy(cfd.ty));
                     cfi++;
                 }
                 this.addHeader("%${cname} = type { ${cfts} }");
