@@ -64,3 +64,4 @@ test_*.arm
 input*.txt
 out*.txt
 err*.txt
+__*.txt
