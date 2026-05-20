@@ -141,8 +141,9 @@ public class Main {
     public static main() : Void {
         IO.println("arc stage 1");
 
-        String inputPath = "";
-        Boolean emitIR   = false;
+        String inputPath  = "";
+        String stdlibPath = "";
+        Boolean emitIR    = false;
         Boolean checkOnly = false;
 
         String line0 = IO.read();
@@ -161,6 +162,10 @@ public class Main {
             String flag = next.trim();
             if (flag == "--emit-ir")  { emitIR   = true; }
             if (flag == "--check")    { checkOnly = true; }
+            if (flag == "--stdlib-path") {
+                String sp = IO.read();
+                if (sp != null && sp.length() > 0) { stdlibPath = sp.trim(); }
+            }
             next = IO.read();
         }
 
@@ -199,8 +204,10 @@ public class Main {
         Integer si = 0;
         while (si < mod.imports.length()) {
             String imp0 = mod.imports.get(si);
-            if (!Main.isStdlib(imp0) && !Main.strListContains(visited, imp0)) {
-                queue.append(imp0);
+            if (!Main.strListContains(visited, imp0)) {
+                if (!Main.isStdlib(imp0) || stdlibPath.length() > 0) {
+                    queue.append(imp0);
+                }
             }
             si++;
         }
@@ -210,16 +217,23 @@ public class Main {
             queue.removeAt(0);
             if (Main.strListContains(visited, imp)) { continue; }
             visited.append(imp);
-            String impPath = Main.importToPath(imp);
-            if (File.exists(impPath)) {
+            String impPath = "";
+            if (Main.isStdlib(imp) && stdlibPath.length() > 0) {
+                impPath = stdlibPath.concat("/").concat(Main.importToPath(imp));
+            } else if (!Main.isStdlib(imp)) {
+                impPath = Main.importToPath(imp);
+            }
+            if (impPath.length() > 0 && File.exists(impPath)) {
                 ArimoModule impMod = Main.parseFileAt(impPath);
                 if (impMod.path.length() > 0 || impMod.items.length() > 0) {
                     modules.append(impMod);
                     Integer qi = 0;
                     while (qi < impMod.imports.length()) {
                         String imp2 = impMod.imports.get(qi);
-                        if (!Main.isStdlib(imp2) && !Main.strListContains(visited, imp2)) {
-                            queue.append(imp2);
+                        if (!Main.strListContains(visited, imp2)) {
+                            if (!Main.isStdlib(imp2) || stdlibPath.length() > 0) {
+                                queue.append(imp2);
+                            }
                         }
                         qi++;
                     }
