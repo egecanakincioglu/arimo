@@ -652,6 +652,8 @@ public class CodeGen {
             if (method == "length" || method == "indexOf" || method == "charCodeAt" ||
                 method == "compareTo" || method == "contains" || method == "startsWith" ||
                 method == "endsWith" || method == "isEmpty") { return "i64"; }
+            if (method == "parseFloat" || method == "toFloat") { return "double"; }
+            if (method == "parseInt" || method == "toInt" || method == "parseHex") { return "i64"; }
             if (method == "exists" || method == "success" || method == "delete") { return "i64"; }
             if (e.object != null) {
                 String cls2 = this.resolveObjClassName(e.object);
