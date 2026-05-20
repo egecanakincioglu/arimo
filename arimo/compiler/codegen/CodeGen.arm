@@ -1699,33 +1699,7 @@ public class CodeGen {
         }
     }
 
-    public generate(module: ArimoModule) : String {
-        this.emitModuleHeader();
-        Integer ci = 0;
-        while (ci < this.tc.classNames.length()) {
-            String cname = this.tc.classNames.get(ci);
-            Boolean inMod = false;
-            Integer mi2 = 0;
-            while (mi2 < module.items.length()) {
-                Item it2 = module.items.get(mi2);
-                if (it2.kind == ItemKind.CLASS && it2.classDecl != null) {
-                    if (it2.classDecl.name == cname) { inMod = true; }
-                }
-                mi2++;
-            }
-            if (!inMod) {
-                List<FieldDecl> cfields = this.nonStaticFields(cname);
-                String cfts = "i64";
-                Integer cfi = 0;
-                while (cfi < cfields.length()) {
-                    cfts = cfts.concat(", ").concat(this.llvmTy(cfields.get(cfi).ty));
-                    cfi++;
-                }
-                this.addHeader("%${cname} = type { ${cfts} }");
-            }
-            ci++;
-        }
-        this.emitRuntimeFunctions();
+    private emitTypeDecls(module: ArimoModule) : Void {
         Integer i = 0;
         while (i < module.items.length()) {
             Item item = module.items.get(i);
@@ -1754,7 +1728,9 @@ public class CodeGen {
             else if (item.kind == ItemKind.EXTERN) { this.emitExternDecl(item.externDecl); }
             i++;
         }
-        this.addHeader("");
+    }
+
+    private emitFunctionBodies(module: ArimoModule) : Void {
         Integer j = 0;
         while (j < module.items.length()) {
             Item item = module.items.get(j);
@@ -1857,6 +1833,9 @@ public class CodeGen {
             }
             j++;
         }
+    }
+
+    private emitMainBridge() : Void {
         if (this.entryClass != "") {
             String mainSig = "define i32 @main(i32 %argc, i8** %argv)";
             this.curFn = "";
@@ -1868,6 +1847,57 @@ public class CodeGen {
             this.emit("ret i32 0");
             this.flushFn(mainSig);
         }
+    }
+
+    public generateAll(modules: List<ArimoModule>) : String {
+        this.emitModuleHeader();
+        this.emitRuntimeFunctions();
+        Integer m = 0;
+        while (m < modules.length()) {
+            this.emitTypeDecls(modules.get(m));
+            m++;
+        }
+        this.addHeader("");
+        Integer m2 = 0;
+        while (m2 < modules.length()) {
+            this.emitFunctionBodies(modules.get(m2));
+            m2++;
+        }
+        this.emitMainBridge();
+        return this.header.concat(this.strConsts).concat(this.rtFuncs).concat(this.body);
+    }
+
+    public generate(module: ArimoModule) : String {
+        this.emitModuleHeader();
+        Integer ci = 0;
+        while (ci < this.tc.classNames.length()) {
+            String cname = this.tc.classNames.get(ci);
+            Boolean inMod = false;
+            Integer mi2 = 0;
+            while (mi2 < module.items.length()) {
+                Item it2 = module.items.get(mi2);
+                if (it2.kind == ItemKind.CLASS && it2.classDecl != null) {
+                    if (it2.classDecl.name == cname) { inMod = true; }
+                }
+                mi2++;
+            }
+            if (!inMod) {
+                List<FieldDecl> cfields = this.nonStaticFields(cname);
+                String cfts = "i64";
+                Integer cfi = 0;
+                while (cfi < cfields.length()) {
+                    cfts = cfts.concat(", ").concat(this.llvmTy(cfields.get(cfi).ty));
+                    cfi++;
+                }
+                this.addHeader("%${cname} = type { ${cfts} }");
+            }
+            ci++;
+        }
+        this.emitRuntimeFunctions();
+        this.emitTypeDecls(module);
+        this.addHeader("");
+        this.emitFunctionBodies(module);
+        this.emitMainBridge();
         return this.header.concat(this.strConsts).concat(this.rtFuncs).concat(this.body);
     }
 }
