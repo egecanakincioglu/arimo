@@ -667,7 +667,31 @@ public class CodeGen {
         if (cls == "List")    { String r = this.nextReg(); this.emit("${r} = call %__List* @__List__new()"); return r; }
         if (cls == "HashMap") { String r = this.nextReg(); this.emit("${r} = call %__HashMap* @__HashMap__new()"); return r; }
         if (cls == "Pair")    { return this.emitPairCtor(e.args); }
+        if (cls == "__super__") { return ""; }
         ConstructorDecl? ctor = this.tc.findConstructor(cls);
+        if (ctor == null) {
+            ExternFnDecl? ef = this.tc.findExternFn(cls);
+            if (ef != null) {
+                String retLLTy = "i8*";
+                if (ef.returnTy != null) { retLLTy = this.llvmTy(ef.returnTy); }
+                String eArgStr = "";
+                Integer ei = 0;
+                while (ei < e.args.length()) {
+                    String av = this.emitExpr(e.args.get(ei));
+                    String at = this.inferExprLLTy(e.args.get(ei));
+                    if (eArgStr.length() > 0) { eArgStr = eArgStr.concat(", "); }
+                    eArgStr = eArgStr.concat("${at} ${av}");
+                    ei++;
+                }
+                if (retLLTy == "void") {
+                    this.emit("call void @${cls}(${eArgStr})");
+                    return "";
+                }
+                String er = this.nextReg();
+                this.emit("${er} = call ${retLLTy} @${cls}(${eArgStr})");
+                return er;
+            }
+        }
         String argStr = "";
         Integer i = 0;
         while (i < e.args.length()) {
@@ -718,6 +742,12 @@ public class CodeGen {
             if (e.class_ == "List")    { return "%__List*"; }
             if (e.class_ == "HashMap" || e.class_ == "Map" || e.class_ == "TreeMap") { return "%__HashMap*"; }
             if (e.class_ == "Pair")    { return "%__Pair*"; }
+            if (e.class_ == "__super__") { return "void"; }
+            ExternFnDecl? ef = this.tc.findExternFn(e.class_);
+            if (ef != null) {
+                if (ef.returnTy != null) { return this.llvmTy(ef.returnTy); }
+                return "void";
+            }
             return "%${e.class_}*";
         }
         if (k == ExprKind.STR_INTERP){ return "i8*"; }
@@ -1433,10 +1463,7 @@ public class CodeGen {
         }
 
         else if (k == StmtKind.THROW) {
-            String msg = this.emitExpr(s.expr);
-            String fmt = this.emitStrConst("exception: %s\n");
-            String fp  = this.strGEP(fmt, 15);
-            this.emit("call i32 (i8*, ...) @printf(i8* ${fp}, i8* ${msg})");
+            this.emitExpr(s.expr);
             this.emit("call void @abort()");
             this.emit("unreachable");
             String dead = this.nextLabel();
@@ -1911,7 +1938,7 @@ public class CodeGen {
         this.addRuntime("define i8* @__arimo_time_now() {\nentry:\n  %buf = call i8* @malloc(i64 32)\n  %fmt = getelementptr [3 x i8], [3 x i8]* @.fmt_now, i32 0, i32 0\n  call i32 (i8*, i8*, ...) @sprintf(i8* %buf, i8* %fmt, i64 0)\n  ret i8* %buf\n}\n@.fmt_now = private constant [3 x i8] c\"0s\\00\"\n");
         this.addRuntime("define i8* @__arimo_generate_id() {\nentry:\n  %buf = call i8* @malloc(i64 64)\n  %fmt = getelementptr [10 x i8], [10 x i8]* @.fmt_id, i32 0, i32 0\n  call i32 (i8*, i8*, ...) @sprintf(i8* %buf, i8* %fmt, i64 0, i64 0)\n  ret i8* %buf\n}\n@.fmt_id = private constant [10 x i8] c\"%llx-%llx\\00\"\n");
         this.addRuntime("define i64 @__arimo_now_millis() {\nentry:\n  ret i64 0\n}\n");
-        this.addRuntime("define i8* @__arimo_readline() {\nentry:\n  %buf = call i8* @malloc(i64 1024)\n  %fmt = getelementptr [4 x i8], [4 x i8]* @.fmt_rd, i32 0, i32 0\n  %n = call i32 (i8*, ...) @scanf(i8* %fmt, i8* %buf)\n  ret i8* %buf\n}\n@.fmt_rd = private constant [4 x i8] c\"%1s\\00\"\ndeclare i32 @scanf(i8*, ...)\n");
+        this.addRuntime("define i8* @__arimo_readline() {\nentry:\n  %buf = call i8* @malloc(i64 1024)\n  %fmt = getelementptr [11 x i8], [11 x i8]* @.fmt_rd, i32 0, i32 0\n  %n = call i32 (i8*, ...) @scanf(i8* %fmt, i8* %buf)\n  ret i8* %buf\n}\n@.fmt_rd = private constant [11 x i8] c\" %1023[^\\0A]\\00\"\ndeclare i32 @scanf(i8*, ...)\n");
         this.addRuntime("define %__HashMap* @__HashMap__new() {\nentry:\n  %raw = call i8* @malloc(i64 64)\n  %p = bitcast i8* %raw to %__HashMap*\n  %z = bitcast %__HashMap* %p to i8*\n  call void @llvm.memset.p0i8.i64(i8* %z, i8 0, i64 64, i1 false)\n  ret %__HashMap* %p\n}\n");
         this.addRuntime("define void @__HashMap__set(%__HashMap* %m, i8* %k, i8* %v) {\nentry:\n  ret void\n}\ndefine i8* @__HashMap__get(%__HashMap* %m, i8* %k) {\nentry:\n  ret i8* null\n}\ndefine i8* @__HashMap__getOrDefault(%__HashMap* %m, i8* %k, i8* %d) {\nentry:\n  ret i8* %d\n}\n");
         this.addRuntime("define %__Pair* @__Pair__new() {\nentry:\n  %raw = call i8* @malloc(i64 16)\n  %p = bitcast i8* %raw to %__Pair*\n  %z = bitcast %__Pair* %p to i8*\n  call void @llvm.memset.p0i8.i64(i8* %z, i8 0, i64 16, i1 false)\n  ret %__Pair* %p\n}\ndefine void @__Pair__setFirst(%__Pair* %p, i8* %v) {\nentry:\n  %fp = getelementptr inbounds %__Pair, %__Pair* %p, i32 0, i32 0\n  store i8* %v, i8** %fp\n  ret void\n}\ndefine void @__Pair__setSecond(%__Pair* %p, i8* %v) {\nentry:\n  %sp = getelementptr inbounds %__Pair, %__Pair* %p, i32 0, i32 1\n  store i8* %v, i8** %sp\n  ret void\n}\n");
