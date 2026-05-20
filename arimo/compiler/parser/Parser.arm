@@ -466,7 +466,8 @@ public class Parser {
         }
 
         if (k == TokenKind.STR || k == TokenKind.DOLLAR_LBRACE) {
-            return this.parseStringInterp(sl, sc);
+            Expr strExpr = this.parseStringInterp(sl, sc);
+            return this.parseSuffix(strExpr);
         }
 
         if (k == TokenKind.THIS) {

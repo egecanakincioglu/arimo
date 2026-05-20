@@ -630,6 +630,20 @@ public class CodeGen {
         if (k == ExprKind.CTOR)      { return "%${e.class_}*"; }
         if (k == ExprKind.STR_INTERP){ return "i8*"; }
         if (k == ExprKind.CAST && e.castTy != null) { return this.llvmTy(e.castTy); }
+        if (k == ExprKind.FIELD) {
+            String fcls = this.resolveObjClassName(e.object);
+            if (fcls != "") { return this.fieldLLTy(fcls, e.field); }
+            if (e.object != null && e.object.strVal.length() > 0) {
+                List<FieldDecl> fsf = this.tc.allFieldsOf(e.object.strVal);
+                Integer fsi = 0;
+                while (fsi < fsf.length()) {
+                    FieldDecl fd = fsf.get(fsi);
+                    if (fd.isStatic && fd.name == e.field) { return this.llvmTy(fd.ty); }
+                    fsi++;
+                }
+            }
+            return "i64";
+        }
         if (k == ExprKind.METHOD) {
             String method = e.method;
             if (method == "length" || method == "indexOf" || method == "charCodeAt" ||
