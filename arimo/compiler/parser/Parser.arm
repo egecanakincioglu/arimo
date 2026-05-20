@@ -478,6 +478,10 @@ public class Parser {
 
         if (k == TokenKind.SUPER) {
             this.advance();
+            if (this.check(TokenKind.LPAREN)) {
+                List<Expr> superArgs = this.parseArgs();
+                return Expr.ctorCall("__super__", superArgs, sl, sc);
+            }
             Expr obj = Expr.superExpr(sl, sc);
             return this.parseSuffix(obj);
         }
@@ -1133,7 +1137,8 @@ public class Parser {
         c.generics    = this.parseGenericBounds();
         if (this.check(TokenKind.EXTENDS)) {
             this.advance();
-            c.extends_ = this.eatIdent();
+            if (this.check(TokenKind.TYPE_EXCEPTION)) { this.advance(); c.extends_ = "Exception"; }
+            else { c.extends_ = this.eatIdent(); }
         }
         if (this.check(TokenKind.IMPLEMENTS)) {
             this.advance();
@@ -1236,7 +1241,8 @@ public class Parser {
         String ext  = "Exception";
         if (this.check(TokenKind.EXTENDS)) {
             this.advance();
-            ext = this.eatIdent();
+            if (this.check(TokenKind.TYPE_EXCEPTION)) { this.advance(); ext = "Exception"; }
+            else { ext = this.eatIdent(); }
         }
         ExceptionDecl ex = ExceptionDecl(vis, name, ext);
         ex.isManual = isManual;
