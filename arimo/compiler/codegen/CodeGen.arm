@@ -447,6 +447,36 @@ public class CodeGen {
                 return fllty.substring(1, fllty.length() - 1);
             }
         }
+        if (e.kind == ExprKind.METHOD) {
+            if (e.object != null) {
+                String objCls = this.resolveObjClassName(e.object);
+                if (objCls.length() > 0) {
+                    MethodDecl? mm = this.tc.findMethodOn(objCls, e.method);
+                    if (mm != null) {
+                        if (mm.returnTy != null) {
+                            String rty = this.llvmTy(mm.returnTy);
+                            if (rty == "%__List*") { return "__List"; }
+                            if (rty == "%__HashMap*") { return "__HashMap"; }
+                            if (rty.startsWith("%") && rty.endsWith("*") && !rty.startsWith("%__")) {
+                                return rty.substring(1, rty.length() - 1);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (e.kind == ExprKind.STATIC_CALL) {
+            MethodDecl? sm = this.tc.findMethodOn(e.class_, e.method);
+            if (sm != null) {
+                if (sm.returnTy != null) {
+                    String rty = this.llvmTy(sm.returnTy);
+                    if (rty == "%__List*") { return "__List"; }
+                    if (rty.startsWith("%") && rty.endsWith("*") && !rty.startsWith("%__")) {
+                        return rty.substring(1, rty.length() - 1);
+                    }
+                }
+            }
+        }
         return "";
     }
 
@@ -607,14 +637,16 @@ public class CodeGen {
             String v0 = this.emitExpr(args.get(0));
             String t0 = this.inferExprLLTy(args.get(0));
             String bc = this.nextReg();
-            this.emit("${bc} = bitcast ${t0} ${v0} to i8*");
+            if (this.isIntTy(t0)) { this.emit("${bc} = inttoptr ${t0} ${v0} to i8*"); }
+            else { this.emit("${bc} = bitcast ${t0} ${v0} to i8*"); }
             this.emit("call void @__Pair__setFirst(%__Pair* ${r}, i8* ${bc})");
         }
         if (args.length() >= 2) {
             String v1 = this.emitExpr(args.get(1));
             String t1 = this.inferExprLLTy(args.get(1));
             String bc = this.nextReg();
-            this.emit("${bc} = bitcast ${t1} ${v1} to i8*");
+            if (this.isIntTy(t1)) { this.emit("${bc} = inttoptr ${t1} ${v1} to i8*"); }
+            else { this.emit("${bc} = bitcast ${t1} ${v1} to i8*"); }
             this.emit("call void @__Pair__setSecond(%__Pair* ${r}, i8* ${bc})");
         }
         return r;
@@ -683,6 +715,10 @@ public class CodeGen {
                 op == BinaryOp.AND || op == BinaryOp.OR) { return "i64"; }
             return this.inferExprLLTy(e.left);
         }
+        if (k == ExprKind.UNARY) {
+            if (e.op == UnaryOp.NOT) { return "i64"; }
+            return this.inferExprLLTy(e.operand);
+        }
         return "i8*";
     }
 
@@ -700,7 +736,12 @@ public class CodeGen {
             flt = this.lookupLLTy(e.left.strVal) == "double";
         }
         String r = this.nextReg();
-        if      (op == BinaryOp.ADD) { this.emit(flt ? "${r} = fadd double ${lv}, ${rv}" : "${r} = add i64 ${lv}, ${rv}"); }
+        if      (op == BinaryOp.ADD) {
+            String addLlt = this.inferExprLLTy(e.left);
+            if (addLlt == "i8*") { this.emit("${r} = call i8* @__arimo_str_concat(i8* ${lv}, i8* ${rv})"); }
+            else if (flt) { this.emit("${r} = fadd double ${lv}, ${rv}"); }
+            else { this.emit("${r} = add i64 ${lv}, ${rv}"); }
+        }
         else if (op == BinaryOp.SUB) { this.emit(flt ? "${r} = fsub double ${lv}, ${rv}" : "${r} = sub i64 ${lv}, ${rv}"); }
         else if (op == BinaryOp.MUL) { this.emit(flt ? "${r} = fmul double ${lv}, ${rv}" : "${r} = mul i64 ${lv}, ${rv}"); }
         else if (op == BinaryOp.DIV) { this.emit(flt ? "${r} = fdiv double ${lv}, ${rv}" : "${r} = sdiv i64 ${lv}, ${rv}"); }
@@ -729,10 +770,15 @@ public class CodeGen {
             String cmp = this.nextReg();
             if (llt == "double") { this.emit("${cmp} = fcmp oeq double ${lv}, ${rv}"); }
             else if (llt == "i8*") {
-                String cr = this.nextReg();
-                this.emit("${cr} = call i32 @strcmp(i8* ${lv}, i8* ${rv})");
-                this.emit("${cmp} = icmp eq i32 ${cr}, 0");
-            } else { this.emit("${cmp} = icmp eq i64 ${lv}, ${rv}"); }
+                if (rv == "null" || lv == "null") {
+                    this.emit("${cmp} = icmp eq i8* ${lv}, ${rv}");
+                } else {
+                    String cr = this.nextReg();
+                    this.emit("${cr} = call i32 @strcmp(i8* ${lv}, i8* ${rv})");
+                    this.emit("${cmp} = icmp eq i32 ${cr}, 0");
+                }
+            } else if (llt.endsWith("*")) { this.emit("${cmp} = icmp eq ${llt} ${lv}, ${rv}"); }
+            else { this.emit("${cmp} = icmp eq i64 ${lv}, ${rv}"); }
             return this.fromBool(cmp);
         }
         else if (op == BinaryOp.NE) {
@@ -740,10 +786,15 @@ public class CodeGen {
             String cmp = this.nextReg();
             if (llt == "double") { this.emit("${cmp} = fcmp one double ${lv}, ${rv}"); }
             else if (llt == "i8*") {
-                String cr = this.nextReg();
-                this.emit("${cr} = call i32 @strcmp(i8* ${lv}, i8* ${rv})");
-                this.emit("${cmp} = icmp ne i32 ${cr}, 0");
-            } else { this.emit("${cmp} = icmp ne i64 ${lv}, ${rv}"); }
+                if (rv == "null" || lv == "null") {
+                    this.emit("${cmp} = icmp ne i8* ${lv}, ${rv}");
+                } else {
+                    String cr = this.nextReg();
+                    this.emit("${cr} = call i32 @strcmp(i8* ${lv}, i8* ${rv})");
+                    this.emit("${cmp} = icmp ne i32 ${cr}, 0");
+                }
+            } else if (llt.endsWith("*")) { this.emit("${cmp} = icmp ne ${llt} ${lv}, ${rv}"); }
+            else { this.emit("${cmp} = icmp ne i64 ${lv}, ${rv}"); }
             return this.fromBool(cmp);
         }
         else if (op == BinaryOp.LT) { String c = this.nextReg(); this.emit("${c} = icmp slt i64 ${lv}, ${rv}"); return this.fromBool(c); }
@@ -781,7 +832,9 @@ public class CodeGen {
                 String sv = val;
                 if (fllty != ty && ty != "void") {
                     String bc = this.nextReg();
-                    this.emit("${bc} = bitcast ${ty} ${val} to ${fllty}");
+                    if (this.isIntTy(ty) && fllty.endsWith("*")) { this.emit("${bc} = inttoptr ${ty} ${val} to ${fllty}"); }
+                    else if (ty.endsWith("*") && this.isIntTy(fllty)) { this.emit("${bc} = ptrtoint ${ty} ${val} to ${fllty}"); }
+                    else { this.emit("${bc} = bitcast ${ty} ${val} to ${fllty}"); }
                     sv = bc;
                 }
                 this.emit("store ${fllty} ${sv}, ${fllty}* ${ptr}");
@@ -790,7 +843,8 @@ public class CodeGen {
             String listVal = this.emitExpr(target.object);
             String idxVal  = this.emitExpr(target.index);
             String bc      = this.nextReg();
-            this.emit("${bc} = bitcast ${ty} ${val} to i8*");
+            if (this.isIntTy(ty)) { this.emit("${bc} = inttoptr ${ty} ${val} to i8*"); }
+            else { this.emit("${bc} = bitcast ${ty} ${val} to i8*"); }
             this.emit("call void @__List__set(%__List* ${listVal}, i64 ${idxVal}, i8* ${bc})");
         }
     }
@@ -835,6 +889,10 @@ public class CodeGen {
         return "0";
     }
 
+    private isIntTy(t: String) : Boolean {
+        return t == "i64" || t == "i32" || t == "i16" || t == "i8" || t == "i1";
+    }
+
     private emitCast(e: Expr) : String {
         String v   = this.emitExpr(e.operand);
         String from = this.inferExprLLTy(e.operand);
@@ -843,8 +901,19 @@ public class CodeGen {
         String r = this.nextReg();
         if (from == "double" && to == "i64") { this.emit("${r} = fptosi double ${v} to i64"); return r; }
         if (from == "i64" && to == "double") { this.emit("${r} = sitofp i64 ${v} to double"); return r; }
-        if (to == "i8*") { this.emit("${r} = bitcast ${from} ${v} to i8*"); return r; }
-        if (from == "i8*") { this.emit("${r} = bitcast i8* ${v} to ${to}"); return r; }
+        if (from == "double" && to == "i8*") { this.emit("${r} = inttoptr i64 0 to i8*"); return r; }
+        if (to == "i8*") {
+            if (this.isIntTy(from)) { this.emit("${r} = inttoptr ${from} ${v} to i8*"); }
+            else { this.emit("${r} = bitcast ${from} ${v} to i8*"); }
+            return r;
+        }
+        if (from == "i8*") {
+            if (this.isIntTy(to)) { this.emit("${r} = ptrtoint i8* ${v} to ${to}"); }
+            else { this.emit("${r} = bitcast i8* ${v} to ${to}"); }
+            return r;
+        }
+        if (this.isIntTy(from) && to.endsWith("*")) { this.emit("${r} = inttoptr ${from} ${v} to ${to}"); return r; }
+        if (from.endsWith("*") && this.isIntTy(to)) { this.emit("${r} = ptrtoint ${from} ${v} to ${to}"); return r; }
         if (from.startsWith("%") && to.startsWith("%")) { this.emit("${r} = bitcast ${from} ${v} to ${to}"); return r; }
         this.emit("${r} = bitcast ${from} ${v} to ${to}");
         return r;
@@ -1182,7 +1251,11 @@ public class CodeGen {
             String v = this.emitExpr(args.get(0));
             String t = this.inferExprLLTy(args.get(0));
             String bc = v;
-            if (t != "i8*") { bc = this.nextReg(); this.emit("${bc} = bitcast ${t} ${v} to i8*"); }
+            if (t != "i8*") {
+                bc = this.nextReg();
+                if (this.isIntTy(t)) { this.emit("${bc} = inttoptr ${t} ${v} to i8*"); }
+                else { this.emit("${bc} = bitcast ${t} ${v} to i8*"); }
+            }
             this.emit("call void @__List__append(%__List* ${listVal}, i8* ${bc})");
             return "";
         }
@@ -1207,7 +1280,11 @@ public class CodeGen {
             String v = this.emitExpr(args.get(1));
             String t = this.inferExprLLTy(args.get(1));
             String bc = v;
-            if (t != "i8*") { bc = this.nextReg(); this.emit("${bc} = bitcast ${t} ${v} to i8*"); }
+            if (t != "i8*") {
+                bc = this.nextReg();
+                if (this.isIntTy(t)) { this.emit("${bc} = inttoptr ${t} ${v} to i8*"); }
+                else { this.emit("${bc} = bitcast ${t} ${v} to i8*"); }
+            }
             this.emit("call void @__List__set(%__List* ${listVal}, i64 ${i}, i8* ${bc})");
             return "";
         }
@@ -1220,7 +1297,11 @@ public class CodeGen {
             String v = this.emitExpr(args.get(1));
             String t = this.inferExprLLTy(args.get(1));
             String bc = v;
-            if (t != "i8*") { bc = this.nextReg(); this.emit("${bc} = bitcast ${t} ${v} to i8*"); }
+            if (t != "i8*") {
+                bc = this.nextReg();
+                if (this.isIntTy(t)) { this.emit("${bc} = inttoptr ${t} ${v} to i8*"); }
+                else { this.emit("${bc} = bitcast ${t} ${v} to i8*"); }
+            }
             this.emit("call void @__HashMap__set(%__HashMap* ${mapVal}, i8* ${k}, i8* ${bc})");
             return "";
         }
@@ -1252,13 +1333,11 @@ public class CodeGen {
                 String vt = this.inferExprLLTy(s.initExpr);
                 String sv = v;
                 if (vt != llt && llt != "void" && vt != "void") {
-                    if ((vt == "i8*" && llt == "i64") || (vt == "i64" && llt == "i8*")) {
-                        sv = v;
-                    } else {
-                        String bc = this.nextReg();
-                        this.emit("${bc} = bitcast ${vt} ${v} to ${llt}");
-                        sv = bc;
-                    }
+                    String bc = this.nextReg();
+                    if (this.isIntTy(vt) && llt.endsWith("*")) { this.emit("${bc} = inttoptr ${vt} ${v} to ${llt}"); }
+                    else if (vt.endsWith("*") && this.isIntTy(llt)) { this.emit("${bc} = ptrtoint ${vt} ${v} to ${llt}"); }
+                    else { this.emit("${bc} = bitcast ${vt} ${v} to ${llt}"); }
+                    sv = bc;
                 }
                 if (llt != "void") { this.emit("store ${llt} ${sv}, ${llt}* ${reg}"); }
             } else if (llt != "void") {
@@ -1285,7 +1364,9 @@ public class CodeGen {
                 String rv = v;
                 if (vt != this.retTyStr && vt != "void" && this.retTyStr != "void") {
                     String bc = this.nextReg();
-                    this.emit("${bc} = bitcast ${vt} ${v} to ${this.retTyStr}");
+                    if (this.isIntTy(vt) && this.retTyStr.endsWith("*")) { this.emit("${bc} = inttoptr ${vt} ${v} to ${this.retTyStr}"); }
+                    else if (vt.endsWith("*") && this.isIntTy(this.retTyStr)) { this.emit("${bc} = ptrtoint ${vt} ${v} to ${this.retTyStr}"); }
+                    else { this.emit("${bc} = bitcast ${vt} ${v} to ${this.retTyStr}"); }
                     rv = bc;
                 }
                 this.emit("ret ${this.retTyStr} ${rv}");
