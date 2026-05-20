@@ -145,7 +145,7 @@ public class TypeChecker {
         }
     }
 
-    private checkItems(module: ArimoModule) : Void {
+    public checkItems(module: ArimoModule) : Void {
         Integer i = 0;
         while (i < module.items.length()) {
             Item item = module.items.get(i);
