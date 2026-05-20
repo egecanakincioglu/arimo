@@ -31,6 +31,7 @@ import arimo.compiler.ast.decl.FieldDecl;
 import arimo.compiler.ast.decl.MethodDecl;
 import arimo.compiler.ast.decl.ConstructorDecl;
 import arimo.compiler.ast.decl.ExternFnDecl;
+import arimo.compiler.ast.decl.EnumVariant;
 import arimo.compiler.ast.item.ItemKind;
 import arimo.compiler.ast.item.Item;
 import arimo.compiler.ast.item.ClassDecl;
@@ -441,33 +442,61 @@ public class TypeChecker {
         List<FieldDecl> result = List();
         ClassDecl? c = this.findClass(name);
         if (c != null) {
-            if (c.extends_ != "") {
-                List<FieldDecl> pf = this.allFieldsOf(c.extends_);
+            ClassDecl cn = c as ClassDecl;
+            if (cn.extends_ != "") {
+                List<FieldDecl> pf = this.allFieldsOf(cn.extends_);
                 Integer i = 0;
-                while (i < pf.length()) { result.append(pf.get(i)); i++; }
+                while (i < pf.length()) {
+                    FieldDecl pfd = pf.get(i) as FieldDecl;
+                    result.append(pfd);
+                    i++;
+                }
             }
             Integer i = 0;
-            while (i < c.fields.length()) { result.append(c.fields.get(i)); i++; }
+            while (i < cn.fields.length()) {
+                FieldDecl cfd = cn.fields.get(i) as FieldDecl;
+                result.append(cfd);
+                i++;
+            }
         } else {
             ExceptionDecl? ex = this.findException(name);
             if (ex != null) {
-                if (ex.extends_ != "" && ex.extends_ != "Exception") {
-                    List<FieldDecl> pf = this.allFieldsOf(ex.extends_);
+                ExceptionDecl exn = ex as ExceptionDecl;
+                if (exn.extends_ != "" && exn.extends_ != "Exception") {
+                    List<FieldDecl> pf = this.allFieldsOf(exn.extends_);
                     Integer i = 0;
-                    while (i < pf.length()) { result.append(pf.get(i)); i++; }
+                    while (i < pf.length()) {
+                        FieldDecl pfd = pf.get(i) as FieldDecl;
+                        result.append(pfd);
+                        i++;
+                    }
                 }
                 Integer i = 0;
-                while (i < ex.fields.length()) { result.append(ex.fields.get(i)); i++; }
+                while (i < exn.fields.length()) {
+                    FieldDecl exfd = exn.fields.get(i) as FieldDecl;
+                    result.append(exfd);
+                    i++;
+                }
             } else {
                 StructDecl? s = this.findStruct(name);
                 if (s != null) {
+                    StructDecl sn = s as StructDecl;
                     Integer i = 0;
-                    while (i < s.fields.length()) { result.append(s.fields.get(i)); i++; }
+                    while (i < sn.fields.length()) {
+                        FieldDecl sfd = sn.fields.get(i) as FieldDecl;
+                        result.append(sfd);
+                        i++;
+                    }
                 } else {
                     UnionDecl? u = this.findUnion(name);
                     if (u != null) {
+                        UnionDecl un = u as UnionDecl;
                         Integer i = 0;
-                        while (i < u.fields.length()) { result.append(u.fields.get(i)); i++; }
+                        while (i < un.fields.length()) {
+                            FieldDecl ufd = un.fields.get(i) as FieldDecl;
+                            result.append(ufd);
+                            i++;
+                        }
                     }
                 }
             }
@@ -479,7 +508,8 @@ public class TypeChecker {
         List<FieldDecl> fields = this.allFieldsOf(name);
         Integer i = 0;
         while (i < fields.length()) {
-            if (fields.get(i).name == fieldName) { return i; }
+            FieldDecl fd = fields.get(i) as FieldDecl;
+            if (fd.name == fieldName) { return i; }
             i++;
         }
         return -1;
@@ -488,34 +518,42 @@ public class TypeChecker {
     public findMethodOn(className: String, methodName: String) : MethodDecl? {
         ClassDecl? c = this.findClass(className);
         if (c != null) {
+            ClassDecl cn = c as ClassDecl;
             Integer i = 0;
-            while (i < c.methods.length()) {
-                if (c.methods.get(i).name == methodName) { return c.methods.get(i); }
+            while (i < cn.methods.length()) {
+                MethodDecl md = cn.methods.get(i) as MethodDecl;
+                if (md.name == methodName) { return md; }
                 i++;
             }
-            if (c.extends_ != "") { return this.findMethodOn(c.extends_, methodName); }
+            if (cn.extends_ != "") { return this.findMethodOn(cn.extends_, methodName); }
         }
         ExceptionDecl? ex = this.findException(className);
         if (ex != null) {
+            ExceptionDecl exn = ex as ExceptionDecl;
             Integer i = 0;
-            while (i < ex.methods.length()) {
-                if (ex.methods.get(i).name == methodName) { return ex.methods.get(i); }
+            while (i < exn.methods.length()) {
+                MethodDecl md = exn.methods.get(i) as MethodDecl;
+                if (md.name == methodName) { return md; }
                 i++;
             }
         }
         StructDecl? s = this.findStruct(className);
         if (s != null) {
+            StructDecl sn = s as StructDecl;
             Integer i = 0;
-            while (i < s.methods.length()) {
-                if (s.methods.get(i).name == methodName) { return s.methods.get(i); }
+            while (i < sn.methods.length()) {
+                MethodDecl md = sn.methods.get(i) as MethodDecl;
+                if (md.name == methodName) { return md; }
                 i++;
             }
         }
         ExtensionDecl? ext = this.findExtension(className);
         if (ext != null) {
+            ExtensionDecl extn = ext as ExtensionDecl;
             Integer i = 0;
-            while (i < ext.methods.length()) {
-                if (ext.methods.get(i).name == methodName) { return ext.methods.get(i); }
+            while (i < extn.methods.length()) {
+                MethodDecl md = extn.methods.get(i) as MethodDecl;
+                if (md.name == methodName) { return md; }
                 i++;
             }
         }
@@ -533,9 +571,11 @@ public class TypeChecker {
     public enumVariantIndex(enumName: String, variantName: String) : Integer {
         EnumDecl? e = this.findEnum(enumName);
         if (e != null) {
+            EnumDecl en = e as EnumDecl;
             Integer ei = 0;
-            while (ei < e.variants.length()) {
-                if (e.variants.get(ei).name == variantName) { return ei; }
+            while (ei < en.variants.length()) {
+                EnumVariant ev = en.variants.get(ei) as EnumVariant;
+                if (ev.name == variantName) { return ei; }
                 ei++;
             }
         }
