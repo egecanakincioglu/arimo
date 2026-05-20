@@ -302,7 +302,11 @@ public class CodeGen {
 
         if (k == ExprKind.NULL_LIT)   { return "null"; }
         if (k == ExprKind.INT_LIT)    { return "${e.intVal}"; }
-        if (k == ExprKind.FLOAT_LIT)  { return "${e.floatVal}"; }
+        if (k == ExprKind.FLOAT_LIT)  {
+            String fstr = "${e.floatVal}";
+            if (!fstr.contains(".") && !fstr.contains("e")) { fstr = fstr.concat(".0"); }
+            return fstr;
+        }
         if (k == ExprKind.BOOL_LIT)   { if (e.boolVal) { return "1"; } return "0"; }
         if (k == ExprKind.STR_LIT)    { return this.emitStrLit(e.strVal); }
         if (k == ExprKind.STR_INTERP) { return this.emitStrInterp(e); }
