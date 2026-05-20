@@ -394,7 +394,21 @@ public class CodeGen {
     private emitFieldLoad(e: Expr) : String {
         String objVal = this.emitExpr(e.object);
         String cls    = this.resolveObjClassName(e.object);
-        if (cls == "") { return "0"; }
+        if (cls == "") {
+            String on = e.object.strVal;
+            if (on.length() > 0) {
+                List<FieldDecl> sfs = this.tc.allFieldsOf(on);
+                Integer sfi = 0;
+                while (sfi < sfs.length()) {
+                    FieldDecl sf = sfs.get(sfi);
+                    if (sf.isStatic && sf.name == e.field && sf.init != null) {
+                        return this.emitExpr(sf.init);
+                    }
+                    sfi++;
+                }
+            }
+            return "0";
+        }
         Integer slot  = this.fieldSlot(cls, e.field);
         if (slot < 0) {
             String r = this.nextReg();
