@@ -733,7 +733,9 @@ public class Parser {
             k == TokenKind.TYPE_EXCEPTION) { return true; }
         if (k == TokenKind.IDENT) {
             Integer nk = this.peekAt(1).kind;
-            return nk == TokenKind.IDENT;
+            if (nk == TokenKind.IDENT) { return true; }
+            if (nk == TokenKind.QUESTION) { return this.peekAt(2).kind == TokenKind.IDENT; }
+            return false;
         }
         return false;
     }
