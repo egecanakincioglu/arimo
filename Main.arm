@@ -88,6 +88,21 @@ public class Main {
         return path == "--emit-ir";
     }
 
+    private static importToPath(imp: String) : String {
+        String result = "";
+        Integer i = 0;
+        while (i < imp.length()) {
+            String ch = imp.substring(i, i + 1);
+            if (ch == ".") {
+                result = result.concat("/");
+            } else {
+                result = result.concat(ch);
+            }
+            i++;
+        }
+        return result.concat(".arm");
+    }
+
     public static main() : Void {
         IO.println("arc stage 1");
 
@@ -142,6 +157,22 @@ public class Main {
 
         IO.println("arc: type checking...");
         TypeChecker tc = TypeChecker();
+        Integer ii = 0;
+        while (ii < mod.imports.length()) {
+            String imp = mod.imports.get(ii);
+            String impPath = Main.importToPath(imp);
+            if (File.exists(impPath)) {
+                String impSrc = File.read(impPath);
+                if (impSrc != null && impSrc.length() > 0) {
+                    Lexer impLexer = Lexer(impSrc);
+                    List<Token> impTokens = impLexer.tokenize();
+                    Parser impParser = Parser(impTokens);
+                    ArimoModule impMod = impParser.parse();
+                    tc.registerModule(impMod);
+                }
+            }
+            ii++;
+        }
         tc.check(mod);
         Integer errCount = tc.errors.length();
         if (errCount > 0) {
