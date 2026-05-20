@@ -280,9 +280,10 @@ public class CodeGen {
 
     private nonStaticFields(className: String) : List<FieldDecl> {
         List<FieldDecl> all = this.tc.allFieldsOf(className);
+        Integer allLen = all.length();
         List<FieldDecl> res = List();
         Integer i = 0;
-        while (i < all.length()) {
+        while (i < allLen) {
             FieldDecl fd = all.get(i) as FieldDecl;
             if (!fd.isStatic) { res.append(fd); }
             i++;
@@ -291,7 +292,9 @@ public class CodeGen {
     }
 
     private structByteSize(className: String) : Integer {
-        return (1 + this.nonStaticFields(className).length()) * 8;
+        List<FieldDecl> nsList = this.nonStaticFields(className);
+        Integer sz = (1 + nsList.length()) * 8;
+        return sz;
     }
 
     private fieldSlot(className: String, fieldName: String) : Integer {
@@ -1143,6 +1146,7 @@ public class CodeGen {
             if (args.length() == 0) {
                 String nl = this.emitStrLit("\n");
                 this.emit("call i32 (i8*, ...) @printf(i8* ${fmtNlP}, i8* ${nl})");
+                this.emit("call i32 @fflush(i8* null)");
                 return "";
             }
             Expr arg = args.get(0);
@@ -1157,6 +1161,7 @@ public class CodeGen {
             } else {
                 this.emit("call i32 (i8*, ...) @printf(i8* ${fmtIP}, i64 ${av})");
             }
+            this.emit("call i32 @fflush(i8* null)");
         } else if (method == "read") {
             String r = this.nextReg();
             this.emit("${r} = call i8* @__arimo_readline()");
@@ -1777,7 +1782,8 @@ public class CodeGen {
         this.curFn = ""; this.selfType = ed.name; this.retTyStr = "%${ed.name}*";
         this.varNames = List(); this.varRegs = List(); this.varLLTys = List(); this.varElemClass = List();
         this.scopeMarks = List(); this.loopExits = List(); this.loopConds = List();
-        Integer sz = (1 + this.nonStaticFields(ed.name).length()) * 8;
+        List<FieldDecl> edFlds = this.nonStaticFields(ed.name);
+        Integer sz = (1 + edFlds.length()) * 8;
         String raw = this.nextReg();
         this.emit("${raw} = call i8* @malloc(i64 ${sz})");
         String self = this.nextReg();
@@ -1862,6 +1868,10 @@ public class CodeGen {
                 if (f.isStatic) {
                     String llt = this.llvmTy(f.ty);
                     String init = this.defVal(llt);
+                    if (f.init != null) {
+                        String iv = this.emitExpr(f.init);
+                        if (iv.length() > 0 && iv != "null") { init = iv; }
+                    }
                     this.addHeader("@${cn.name}__${f.name} = global ${llt} ${init}");
                 }
                 fi++;
@@ -1895,6 +1905,7 @@ public class CodeGen {
         this.addHeader("declare i8* @strstr(i8*, i8*)");
         this.addHeader("declare i32 @printf(i8*, ...)");
         this.addHeader("declare i32 @sprintf(i8*, i8*, ...)");
+        this.addHeader("declare i32 @fflush(i8*)");
         this.addHeader("declare void @abort()");
         this.addHeader("declare void @llvm.memset.p0i8.i64(i8*, i8, i64, i1)");
         this.addHeader("declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i1)");
@@ -1938,7 +1949,7 @@ public class CodeGen {
         this.addRuntime("define i8* @__arimo_time_now() {\nentry:\n  %buf = call i8* @malloc(i64 32)\n  %fmt = getelementptr [3 x i8], [3 x i8]* @.fmt_now, i32 0, i32 0\n  call i32 (i8*, i8*, ...) @sprintf(i8* %buf, i8* %fmt, i64 0)\n  ret i8* %buf\n}\n@.fmt_now = private constant [3 x i8] c\"0s\\00\"\n");
         this.addRuntime("define i8* @__arimo_generate_id() {\nentry:\n  %buf = call i8* @malloc(i64 64)\n  %fmt = getelementptr [10 x i8], [10 x i8]* @.fmt_id, i32 0, i32 0\n  call i32 (i8*, i8*, ...) @sprintf(i8* %buf, i8* %fmt, i64 0, i64 0)\n  ret i8* %buf\n}\n@.fmt_id = private constant [10 x i8] c\"%llx-%llx\\00\"\n");
         this.addRuntime("define i64 @__arimo_now_millis() {\nentry:\n  ret i64 0\n}\n");
-        this.addRuntime("define i8* @__arimo_readline() {\nentry:\n  %buf = call i8* @malloc(i64 1024)\n  %fmt = getelementptr [11 x i8], [11 x i8]* @.fmt_rd, i32 0, i32 0\n  %n = call i32 (i8*, ...) @scanf(i8* %fmt, i8* %buf)\n  ret i8* %buf\n}\n@.fmt_rd = private constant [11 x i8] c\" %1023[^\\0A]\\00\"\ndeclare i32 @scanf(i8*, ...)\n");
+        this.addRuntime("define i8* @__arimo_readline() {\nentry:\n  %buf = call i8* @malloc(i64 1024)\n  store i8 0, i8* %buf\n  %fmt = getelementptr [11 x i8], [11 x i8]* @.fmt_rd, i32 0, i32 0\n  %n = call i32 (i8*, ...) @scanf(i8* %fmt, i8* %buf)\n  ret i8* %buf\n}\n@.fmt_rd = private constant [11 x i8] c\" %1023[^\\0A]\\00\"\ndeclare i32 @scanf(i8*, ...)\n");
         this.addRuntime("define %__HashMap* @__HashMap__new() {\nentry:\n  %raw = call i8* @malloc(i64 64)\n  %p = bitcast i8* %raw to %__HashMap*\n  %z = bitcast %__HashMap* %p to i8*\n  call void @llvm.memset.p0i8.i64(i8* %z, i8 0, i64 64, i1 false)\n  ret %__HashMap* %p\n}\n");
         this.addRuntime("define void @__HashMap__set(%__HashMap* %m, i8* %k, i8* %v) {\nentry:\n  ret void\n}\ndefine i8* @__HashMap__get(%__HashMap* %m, i8* %k) {\nentry:\n  ret i8* null\n}\ndefine i8* @__HashMap__getOrDefault(%__HashMap* %m, i8* %k, i8* %d) {\nentry:\n  ret i8* %d\n}\n");
         this.addRuntime("define %__Pair* @__Pair__new() {\nentry:\n  %raw = call i8* @malloc(i64 16)\n  %p = bitcast i8* %raw to %__Pair*\n  %z = bitcast %__Pair* %p to i8*\n  call void @llvm.memset.p0i8.i64(i8* %z, i8 0, i64 16, i1 false)\n  ret %__Pair* %p\n}\ndefine void @__Pair__setFirst(%__Pair* %p, i8* %v) {\nentry:\n  %fp = getelementptr inbounds %__Pair, %__Pair* %p, i32 0, i32 0\n  store i8* %v, i8** %fp\n  ret void\n}\ndefine void @__Pair__setSecond(%__Pair* %p, i8* %v) {\nentry:\n  %sp = getelementptr inbounds %__Pair, %__Pair* %p, i32 0, i32 1\n  store i8* %v, i8** %sp\n  ret void\n}\n");
