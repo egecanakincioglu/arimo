@@ -328,13 +328,17 @@ public class TypeChecker {
 
     private define(name: String, ty: AstType) : Void {
         Integer last = this.scopeStack.length() - 1;
-        if (last >= 0) { this.scopeStack.get(last).define(name, ty); }
+        if (last >= 0) {
+            ScopeFrame frame = this.scopeStack.get(last) as ScopeFrame;
+            frame.define(name, ty);
+        }
     }
 
     public lookupVar(name: String) : AstType? {
         Integer i = this.scopeStack.length() - 1;
         while (i >= 0) {
-            AstType? ty = this.scopeStack.get(i).lookup(name);
+            ScopeFrame frame = this.scopeStack.get(i) as ScopeFrame;
+            AstType? ty = frame.lookup(name);
             if (ty != null) { return ty; }
             i--;
         }
