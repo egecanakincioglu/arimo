@@ -191,7 +191,8 @@ public class CodeGen {
         this.strIdx++;
         Integer len = s.length() + 1;
         String esc  = this.escapeStr(s);
-        this.strConsts = this.strConsts.concat("@.str.${idx} = private constant [${len} x i8] c\"${esc}\\00\"\n");
+        String prefix = "@.str.${idx} = private constant [${len} x i8] c\"";
+        this.strConsts = this.strConsts.concat(prefix).concat(esc).concat("\\00\"\n");
         return "@.str.${idx}";
     }
 
@@ -224,8 +225,9 @@ public class CodeGen {
     }
 
     private defineVar(name: String, llt: String) : String {
+        Integer n = this.counter;
         this.counter++;
-        String reg = "%v.${name}";
+        String reg = "%v${n}";
         this.emit("${reg} = alloca ${llt}");
         this.varNames.append(name);
         this.varRegs.append(reg);
@@ -1542,7 +1544,12 @@ public class CodeGen {
 
     private emitConstructor(c: ClassDecl?) : Void {
         if (c != null) {
-        ConstructorDecl ctor = c.ctor;
+            if (c.ctor != null) { this.emitConstructorInner(c, c.ctor); }
+        }
+    }
+
+    private emitConstructorInner(c: ClassDecl, ctor: ConstructorDecl) : Void {
+        if (ctor.params == null) { return; }
         String paramStr = "";
         Integer i = 0;
         while (i < ctor.params.length()) {
@@ -1585,7 +1592,43 @@ public class CodeGen {
         this.emitStmts(ctor.body);
         this.emit("ret %${c.name}* ${self}");
         this.flushFn(sig);
+    }
+
+    private emitExceptionCtorInner(ed: ExceptionDecl, ctor: ConstructorDecl) : Void {
+        if (ctor.params == null) { return; }
+        String paramStr = "";
+        Integer pi = 0;
+        while (pi < ctor.params.length()) {
+            Param p = ctor.params.get(pi);
+            String pt = this.llvmTy(p.ty);
+            if (paramStr.length() > 0) { paramStr = paramStr.concat(", "); }
+            paramStr = paramStr.concat("${pt} %p.${p.name}");
+            pi++;
         }
+        String sig = "define %${ed.name}* @${ed.name}__new(${paramStr})";
+        this.curFn = ""; this.selfType = ed.name; this.retTyStr = "%${ed.name}*";
+        this.varNames = List(); this.varRegs = List(); this.varLLTys = List();
+        this.scopeMarks = List(); this.loopExits = List(); this.loopConds = List();
+        Integer sz = (1 + this.nonStaticFields(ed.name).length()) * 8;
+        String raw = this.nextReg();
+        this.emit("${raw} = call i8* @malloc(i64 ${sz})");
+        String self = this.nextReg();
+        this.emit("${self} = bitcast i8* ${raw} to %${ed.name}*");
+        String zraw = this.nextReg();
+        this.emit("${zraw} = bitcast %${ed.name}* ${self} to i8*");
+        this.emit("call void @llvm.memset.p0i8.i64(i8* ${zraw}, i8 0, i64 ${sz}, i1 false)");
+        this.emit("%self = bitcast %${ed.name}* ${self} to %${ed.name}*");
+        Integer pi2 = 0;
+        while (pi2 < ctor.params.length()) {
+            Param p = ctor.params.get(pi2);
+            String pt = this.llvmTy(p.ty);
+            String reg = this.defineVar(p.name, pt);
+            this.emit("store ${pt} %p.${p.name}, ${pt}* ${reg}");
+            pi2++;
+        }
+        this.emitStmts(ctor.body);
+        this.emit("ret %${ed.name}* ${self}");
+        this.flushFn(sig);
     }
 
     private emitMethod(className: String, m: MethodDecl) : Void {
@@ -1781,90 +1824,57 @@ public class CodeGen {
         }
     }
 
+    private emitClassFunctions(c: ClassDecl) : Void {
+        this.emitConstructor(c);
+        Integer mi = 0;
+        while (mi < c.methods.length()) {
+            this.emitMethod(c.name, c.methods.get(mi));
+            mi++;
+        }
+        if (c.ctor == null) {
+            Integer sz = this.structByteSize(c.name);
+            String sig = "define %${c.name}* @${c.name}__new()";
+            this.curFn = "";
+            this.selfType = c.name;
+            this.retTyStr = "%${c.name}*";
+            this.varNames = List(); this.varRegs = List(); this.varLLTys = List();
+            this.scopeMarks = List(); this.loopExits = List(); this.loopConds = List();
+            String raw = this.nextReg();
+            this.emit("${raw} = call i8* @malloc(i64 ${sz})");
+            String self = this.nextReg();
+            this.emit("${self} = bitcast i8* ${raw} to %${c.name}*");
+            String zraw = this.nextReg();
+            this.emit("${zraw} = bitcast %${c.name}* ${self} to i8*");
+            this.emit("call void @llvm.memset.p0i8.i64(i8* ${zraw}, i8 0, i64 ${sz}, i1 false)");
+            String rcPtr = this.nextReg();
+            this.emit("${rcPtr} = getelementptr inbounds %${c.name}, %${c.name}* ${self}, i32 0, i32 0");
+            this.emit("store i64 1, i64* ${rcPtr}");
+            this.emit("ret %${c.name}* ${self}");
+            this.flushFn(sig);
+        }
+        if (c.name == this.entryClass || this.entryClass == "") {
+            Integer hasMain = 0;
+            Integer mi2 = 0;
+            while (mi2 < c.methods.length()) {
+                if (c.methods.get(mi2).name == "main" && c.methods.get(mi2).isStatic) { hasMain = 1; }
+                mi2++;
+            }
+            if (hasMain == 1) { this.entryClass = c.name; }
+        }
+    }
+
     private emitFunctionBodies(module: ArimoModule) : Void {
         Integer j = 0;
         while (j < module.items.length()) {
             Item item = module.items.get(j);
             if (item.kind == ItemKind.CLASS) {
                 ClassDecl c = item.classDecl;
-                if (c != null) { if (c.ctor != null) { this.emitConstructor(c); } }
-                if (c != null) {
-                Integer mi = 0;
-                while (mi < c.methods.length()) {
-                    this.emitMethod(c.name, c.methods.get(mi));
-                    mi++;
-                }
-                if (c.ctor == null) {
-                    Integer sz = this.structByteSize(c.name);
-                    String sig = "define %${c.name}* @${c.name}__new()";
-                    this.curFn = "";
-                    this.selfType = c.name;
-                    this.retTyStr = "%${c.name}*";
-                    this.varNames = List(); this.varRegs = List(); this.varLLTys = List();
-                    this.scopeMarks = List(); this.loopExits = List(); this.loopConds = List();
-                    String raw = this.nextReg();
-                    this.emit("${raw} = call i8* @malloc(i64 ${sz})");
-                    String self = this.nextReg();
-                    this.emit("${self} = bitcast i8* ${raw} to %${c.name}*");
-                    String zraw = this.nextReg();
-                    this.emit("${zraw} = bitcast %${c.name}* ${self} to i8*");
-                    this.emit("call void @llvm.memset.p0i8.i64(i8* ${zraw}, i8 0, i64 ${sz}, i1 false)");
-                    String rcPtr = this.nextReg();
-                    this.emit("${rcPtr} = getelementptr inbounds %${c.name}, %${c.name}* ${self}, i32 0, i32 0");
-                    this.emit("store i64 1, i64* ${rcPtr}");
-                    this.emit("ret %${c.name}* ${self}");
-                    this.flushFn(sig);
-                }
-                if (c.name == this.entryClass || this.entryClass == "") {
-                    Integer hasMain = 0;
-                    Integer mi2 = 0;
-                    while (mi2 < c.methods.length()) {
-                        if (c.methods.get(mi2).name == "main" && c.methods.get(mi2).isStatic) { hasMain = 1; }
-                        mi2++;
-                    }
-                    if (hasMain == 1) { this.entryClass = c.name; }
-                }
-                }
+                if (c != null) { this.emitClassFunctions(c); }
             }
             else if (item.kind == ItemKind.EXCEPTION) {
                 ExceptionDecl ed = item.exDecl;
                 if (ed != null) {
-                    if (ed.ctor != null) {
-                        ConstructorDecl ctor = ed.ctor;
-                        String paramStr = "";
-                        Integer pi = 0;
-                        while (pi < ctor.params.length()) {
-                            Param p = ctor.params.get(pi);
-                            String pt = this.llvmTy(p.ty);
-                            if (paramStr.length() > 0) { paramStr = paramStr.concat(", "); }
-                            paramStr = paramStr.concat("${pt} %p.${p.name}");
-                            pi++;
-                        }
-                        String sig = "define %${ed.name}* @${ed.name}__new(${paramStr})";
-                        this.curFn = ""; this.selfType = ed.name; this.retTyStr = "%${ed.name}*";
-                        this.varNames = List(); this.varRegs = List(); this.varLLTys = List();
-                        this.scopeMarks = List(); this.loopExits = List(); this.loopConds = List();
-                        Integer sz = (1 + this.nonStaticFields(ed.name).length()) * 8;
-                        String raw = this.nextReg();
-                        this.emit("${raw} = call i8* @malloc(i64 ${sz})");
-                        String self = this.nextReg();
-                        this.emit("${self} = bitcast i8* ${raw} to %${ed.name}*");
-                        String zraw = this.nextReg();
-                        this.emit("${zraw} = bitcast %${ed.name}* ${self} to i8*");
-                        this.emit("call void @llvm.memset.p0i8.i64(i8* ${zraw}, i8 0, i64 ${sz}, i1 false)");
-                        this.emit("%self = bitcast %${ed.name}* ${self} to %${ed.name}*");
-                        Integer pi2 = 0;
-                        while (pi2 < ctor.params.length()) {
-                            Param p = ctor.params.get(pi2);
-                            String pt = this.llvmTy(p.ty);
-                            String reg = this.defineVar(p.name, pt);
-                            this.emit("store ${pt} %p.${p.name}, ${pt}* ${reg}");
-                            pi2++;
-                        }
-                        this.emitStmts(ctor.body);
-                        this.emit("ret %${ed.name}* ${self}");
-                        this.flushFn(sig);
-                    }
+                    if (ed.ctor != null) { this.emitExceptionCtorInner(ed, ed.ctor); }
                     Integer mi = 0;
                     while (mi < ed.methods.length()) {
                         this.emitMethod(ed.name, ed.methods.get(mi));
