@@ -618,6 +618,20 @@ public class CodeGen {
                 method == "compareTo" || method == "contains" || method == "startsWith" ||
                 method == "endsWith" || method == "isEmpty") { return "i64"; }
             if (method == "exists" || method == "success" || method == "delete") { return "i64"; }
+            if (e.object != null) {
+                String cls2 = this.resolveObjClassName(e.object);
+                if (cls2 != "" && cls2 != "String" && cls2 != "__List" && cls2 != "__HashMap") {
+                    MethodDecl? mm = this.tc.findMethodOn(cls2, method);
+                    if (mm != null) { if (mm.returnTy != null) { return this.llvmTy(mm.returnTy); } }
+                }
+                if (cls2 == "" && e.object.strVal.length() > 0) {
+                    String llt2 = this.lookupLLTy(e.object.strVal);
+                    if (llt2 == "") {
+                        MethodDecl? mm2 = this.tc.findMethodOn(e.object.strVal, method);
+                        if (mm2 != null) { if (mm2.returnTy != null) { return this.llvmTy(mm2.returnTy); } }
+                    }
+                }
+            }
             return "i8*";
         }
         if (k == ExprKind.STATIC_CALL) {
@@ -1201,9 +1215,13 @@ public class CodeGen {
                 String vt = this.inferExprLLTy(s.initExpr);
                 String sv = v;
                 if (vt != llt && llt != "void" && vt != "void") {
-                    String bc = this.nextReg();
-                    this.emit("${bc} = bitcast ${vt} ${v} to ${llt}");
-                    sv = bc;
+                    if ((vt == "i8*" && llt == "i64") || (vt == "i64" && llt == "i8*")) {
+                        sv = v;
+                    } else {
+                        String bc = this.nextReg();
+                        this.emit("${bc} = bitcast ${vt} ${v} to ${llt}");
+                        sv = bc;
+                    }
                 }
                 if (llt != "void") { this.emit("store ${llt} ${sv}, ${llt}* ${reg}"); }
             } else if (llt != "void") {
