@@ -224,6 +224,7 @@ public class CodeGen {
     }
 
     private defineVar(name: String, llt: String) : String {
+        this.counter++;
         String reg = "%v.${name}";
         this.emit("${reg} = alloca ${llt}");
         this.varNames.append(name);
