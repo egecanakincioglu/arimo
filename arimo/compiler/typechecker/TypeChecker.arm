@@ -43,8 +43,8 @@ import arimo.compiler.ast.item.ExternDecl;
 import arimo.compiler.ast.item.UnionDecl;
 
 public class TypeChecker {
-    private classNames    : List<String>;
-    private classItems    : List<ClassDecl>;
+    public classNames    : List<String>;
+    public classItems    : List<ClassDecl>;
     private enumNames     : List<String>;
     private enumItems     : List<EnumDecl>;
     private structNames   : List<String>;
@@ -97,6 +97,10 @@ public class TypeChecker {
     public check(module: ArimoModule) : Void {
         this.collectDecls(module);
         this.checkItems(module);
+    }
+
+    public registerModule(module: ArimoModule) : Void {
+        this.collectDecls(module);
     }
 
     private collectDecls(module: ArimoModule) : Void {
