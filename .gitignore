@@ -61,7 +61,22 @@ node_modules/
 
 # Test artifacts
 test_*.arm
+test_*.txt
+test_*.bin
+test.arm
+test2.arm
 input*.txt
 out*.txt
 err*.txt
 __*.txt
+stdin_*.txt
+arc_*.txt
+s2*.txt
+stage*_out.txt
+stage*_err.txt
+stage*_stdin.txt
+Memories.md
+*.bin
+
+# Obsidian
+.obsidian
