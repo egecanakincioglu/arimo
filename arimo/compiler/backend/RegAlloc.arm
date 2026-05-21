@@ -1,0 +1,254 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+import arimo.compiler.backend.X64Reg;
+import arimo.compiler.backend.IRFunction;
+import arimo.compiler.backend.IRInstr;
+import arimo.compiler.backend.IRValue;
+import arimo.compiler.backend.IRValueKind;
+
+public class LiveInterval {
+    public name  : String;
+    public start : Integer;
+    public end   : Integer;
+    public reg   : Integer;
+    public spill : Integer;
+
+    public constructor(name: String, start: Integer) {
+        this.name  = name;
+        this.start = start;
+        this.end   = start;
+        this.reg   = -1;
+        this.spill = -1;
+    }
+
+    public isSpilled() : Boolean { return this.spill >= 0; }
+    public stackOffset() : Integer { return -(this.spill + 1) * 8; }
+}
+
+public class RegAlloc {
+    public  ivals      : List<LiveInterval>;
+    private freePool   : List<Integer>;
+    private active     : List<Integer>;
+    private spillCount : Integer;
+
+    public constructor() {
+        this.ivals      = List();
+        this.freePool   = List();
+        this.active     = List();
+        this.spillCount = 0;
+    }
+
+    public totalSpillBytes() : Integer { return this.spillCount * 8; }
+
+    private allocSpill() : Integer {
+        Integer slot = this.spillCount;
+        this.spillCount = this.spillCount + 1;
+        return slot;
+    }
+
+    private initPool() {
+        this.freePool = List();
+        this.freePool.append(X64Reg.R11);
+        this.freePool.append(X64Reg.R10);
+        this.freePool.append(X64Reg.R9);
+        this.freePool.append(X64Reg.R8);
+        this.freePool.append(X64Reg.RDX);
+        this.freePool.append(X64Reg.RCX);
+        this.freePool.append(X64Reg.RAX);
+        this.freePool.append(X64Reg.R15);
+        this.freePool.append(X64Reg.R14);
+        this.freePool.append(X64Reg.R13);
+        this.freePool.append(X64Reg.R12);
+        this.freePool.append(X64Reg.RDI);
+        this.freePool.append(X64Reg.RSI);
+        this.freePool.append(X64Reg.RBX);
+    }
+
+    private ivFindOrCreate(name: String, pos: Integer) : Integer {
+        Integer i = 0;
+        while (i < this.ivals.length()) {
+            LiveInterval iv = this.ivals.get(i) as LiveInterval;
+            if (iv.name == name) { return i; }
+            i = i + 1;
+        }
+        this.ivals.append(LiveInterval(name, pos));
+        return this.ivals.length() - 1;
+    }
+
+    private ivExtendEnd(idx: Integer, pos: Integer) {
+        LiveInterval iv = this.ivals.get(idx) as LiveInterval;
+        if (pos > iv.end) { iv.end = pos; }
+    }
+
+    private computeIntervals(fn: IRFunction) {
+        this.ivals = List();
+        Integer instrLen = fn.instrs.length();
+        Integer i = 0;
+        while (i < instrLen) {
+            IRInstr instr = fn.instrs.get(i) as IRInstr;
+
+            if (!instr.dst.isNone() && instr.dst.kind == IRValueKind.REG) {
+                Integer didx = this.ivFindOrCreate(instr.dst.name, i);
+                LiveInterval div = this.ivals.get(didx) as LiveInterval;
+                if (i < div.start) { div.start = i; }
+                this.ivExtendEnd(didx, i);
+            }
+
+            Integer j = 0;
+            while (j < instr.operands.length()) {
+                IRValue op = instr.operands.get(j) as IRValue;
+                if (op.kind == IRValueKind.REG) {
+                    Integer oidx = this.ivFindOrCreate(op.name, i);
+                    this.ivExtendEnd(oidx, i);
+                }
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+    }
+
+    private sortByStart() {
+        Integer n = this.ivals.length();
+        Integer i = 1;
+        while (i < n) {
+            Integer j = i;
+            while (j > 0) {
+                LiveInterval a = this.ivals.get(j - 1) as LiveInterval;
+                LiveInterval b = this.ivals.get(j) as LiveInterval;
+                if (a.start > b.start) {
+                    Integer ts = a.start; Integer te = a.end;
+                    Integer tr = a.reg;   Integer tp = a.spill;
+                    String  tn = a.name;
+                    a.start = b.start; a.end = b.end;
+                    a.reg   = b.reg;   a.spill = b.spill;
+                    a.name  = b.name;
+                    b.start = ts; b.end = te;
+                    b.reg   = tr; b.spill = tp;
+                    b.name  = tn;
+                    j = j - 1;
+                } else { j = 0; }
+            }
+            i = i + 1;
+        }
+    }
+
+    private popFree() : Integer {
+        Integer last = this.freePool.length() - 1;
+        Integer r = this.freePool.get(last) as Integer;
+        this.freePool.removeAt(last);
+        return r;
+    }
+
+    private expireOld(ivStart: Integer) {
+        List<Integer> keep = List();
+        Integer ai = 0;
+        while (ai < this.active.length()) {
+            Integer aidx = this.active.get(ai) as Integer;
+            LiveInterval a = this.ivals.get(aidx) as LiveInterval;
+            if (a.end >= ivStart) {
+                keep.append(aidx);
+            } else {
+                if (a.reg >= 0) { this.freePool.append(a.reg); }
+            }
+            ai = ai + 1;
+        }
+        this.active = keep;
+    }
+
+    private findSpillCandidate() : Integer {
+        Integer bestIdx = -1;
+        Integer bestEnd = -1;
+        Integer si = 0;
+        while (si < this.active.length()) {
+            Integer aidx = this.active.get(si) as Integer;
+            LiveInterval a = this.ivals.get(aidx) as LiveInterval;
+            if (a.end > bestEnd) {
+                bestEnd = a.end;
+                bestIdx = si;
+            }
+            si = si + 1;
+        }
+        return bestIdx;
+    }
+
+    public allocate(fn: IRFunction) {
+        this.spillCount = 0;
+        this.active     = List();
+        this.computeIntervals(fn);
+        if (this.ivals.length() == 0) { return; }
+        this.sortByStart();
+        this.initPool();
+
+        Integer n = this.ivals.length();
+        Integer i = 0;
+        while (i < n) {
+            LiveInterval iv = this.ivals.get(i) as LiveInterval;
+            this.expireOld(iv.start);
+
+            if (this.freePool.length() > 0) {
+                iv.reg = this.popFree();
+                this.active.append(i);
+            } else {
+                Integer spillPos = this.findSpillCandidate();
+                if (spillPos >= 0) {
+                    Integer candIdx = this.active.get(spillPos) as Integer;
+                    LiveInterval cand = this.ivals.get(candIdx) as LiveInterval;
+                    if (cand.end > iv.end) {
+                        iv.reg      = cand.reg;
+                        cand.reg    = -1;
+                        cand.spill  = this.allocSpill();
+                        this.active.removeAt(spillPos);
+                        this.active.append(i);
+                    } else {
+                        iv.spill = this.allocSpill();
+                    }
+                } else {
+                    iv.spill = this.allocSpill();
+                }
+            }
+            i = i + 1;
+        }
+    }
+
+    public physReg(name: String) : Integer {
+        Integer i = 0;
+        while (i < this.ivals.length()) {
+            LiveInterval iv = this.ivals.get(i) as LiveInterval;
+            if (iv.name == name) { return iv.reg; }
+            i = i + 1;
+        }
+        return -1;
+    }
+
+    public spillSlot(name: String) : Integer {
+        Integer i = 0;
+        while (i < this.ivals.length()) {
+            LiveInterval iv = this.ivals.get(i) as LiveInterval;
+            if (iv.name == name) { return iv.spill; }
+            i = i + 1;
+        }
+        return -1;
+    }
+
+    public isSpilled(name: String) : Boolean {
+        return this.spillSlot(name) >= 0;
+    }
+}
