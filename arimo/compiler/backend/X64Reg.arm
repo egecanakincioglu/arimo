@@ -1,0 +1,70 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+public class X64Reg {
+    public static readonly RAX : Integer = 0;
+    public static readonly RCX : Integer = 1;
+    public static readonly RDX : Integer = 2;
+    public static readonly RBX : Integer = 3;
+    public static readonly RSP : Integer = 4;
+    public static readonly RBP : Integer = 5;
+    public static readonly RSI : Integer = 6;
+    public static readonly RDI : Integer = 7;
+    public static readonly R8  : Integer = 8;
+    public static readonly R9  : Integer = 9;
+    public static readonly R10 : Integer = 10;
+    public static readonly R11 : Integer = 11;
+    public static readonly R12 : Integer = 12;
+    public static readonly R13 : Integer = 13;
+    public static readonly R14 : Integer = 14;
+    public static readonly R15 : Integer = 15;
+
+    public static name(r: Integer) : String {
+        if (r == X64Reg.RAX) { return "rax"; }
+        if (r == X64Reg.RCX) { return "rcx"; }
+        if (r == X64Reg.RDX) { return "rdx"; }
+        if (r == X64Reg.RBX) { return "rbx"; }
+        if (r == X64Reg.RSP) { return "rsp"; }
+        if (r == X64Reg.RBP) { return "rbp"; }
+        if (r == X64Reg.RSI) { return "rsi"; }
+        if (r == X64Reg.RDI) { return "rdi"; }
+        if (r == X64Reg.R8)  { return "r8";  }
+        if (r == X64Reg.R9)  { return "r9";  }
+        if (r == X64Reg.R10) { return "r10"; }
+        if (r == X64Reg.R11) { return "r11"; }
+        if (r == X64Reg.R12) { return "r12"; }
+        if (r == X64Reg.R13) { return "r13"; }
+        if (r == X64Reg.R14) { return "r14"; }
+        if (r == X64Reg.R15) { return "r15"; }
+        return "?";
+    }
+
+    public static isCallerSaved(r: Integer) : Boolean {
+        return r == X64Reg.RAX || r == X64Reg.RCX || r == X64Reg.RDX ||
+               r == X64Reg.R8  || r == X64Reg.R9  || r == X64Reg.R10 ||
+               r == X64Reg.R11;
+    }
+
+    public static isCalleeSaved(r: Integer) : Boolean {
+        return r == X64Reg.RBX || r == X64Reg.RBP || r == X64Reg.RSI ||
+               r == X64Reg.RDI || r == X64Reg.R12 || r == X64Reg.R13 ||
+               r == X64Reg.R14 || r == X64Reg.R15;
+    }
+}

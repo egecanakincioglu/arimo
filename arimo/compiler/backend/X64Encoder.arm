@@ -1,0 +1,467 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+import arimo.compiler.backend.X64Reg;
+
+public class X64FixupKind {
+    public static readonly JUMP : Integer = 1;
+    public static readonly RIP  : Integer = 2;
+}
+
+public class X64Fixup {
+    public offset : Integer;
+    public label  : String;
+    public kind   : Integer;
+
+    public constructor(offset: Integer, label: String, kind: Integer) {
+        this.offset = offset;
+        this.label  = label;
+        this.kind   = kind;
+    }
+}
+
+public class X64Encoder {
+    public  buf      : List<Integer>;
+    private lblNames : List<String>;
+    private lblOffs  : List<Integer>;
+    private fixups   : List<X64Fixup>;
+
+    public constructor() {
+        this.buf      = List();
+        this.lblNames = List();
+        this.lblOffs  = List();
+        this.fixups   = List();
+    }
+
+    public size() : Integer {
+        return this.buf.length();
+    }
+
+    // ===== Low-level emitters =====
+
+    public emit8(b: Integer) {
+        this.buf.append(b & 0xFF);
+    }
+
+    public emit32(v: Integer) {
+        this.emit8(v & 0xFF);
+        this.emit8((v >> 8) & 0xFF);
+        this.emit8((v >> 16) & 0xFF);
+        this.emit8((v >> 24) & 0xFF);
+    }
+
+    public emit64(v: Integer) {
+        this.emit32(v);
+        this.emit32((v >> 32) & 0xFFFFFFFF);
+    }
+
+    private rexW() {
+        this.emit8(0x48);
+    }
+
+    private rexWR(reg: Integer) {
+        Integer rex = 0x48;
+        if (reg >= 8) { rex = rex | 0x04; }
+        this.emit8(rex);
+    }
+
+    private rexWB(rm: Integer) {
+        Integer rex = 0x48;
+        if (rm >= 8) { rex = rex | 0x01; }
+        this.emit8(rex);
+    }
+
+    private rexWRB(reg: Integer, rm: Integer) {
+        Integer rex = 0x48;
+        if (reg >= 8) { rex = rex | 0x04; }
+        if (rm  >= 8) { rex = rex | 0x01; }
+        this.emit8(rex);
+    }
+
+    private modRM(mod: Integer, reg: Integer, rm: Integer) {
+        this.emit8((mod << 6) | ((reg & 7) << 3) | (rm & 7));
+    }
+
+    private emitRel32(label: String, kind: Integer) {
+        Integer pos = this.buf.length();
+        this.fixups.append(X64Fixup(pos, label, kind));
+        this.emit32(0);
+    }
+
+    // ===== Label management =====
+
+    public defineLabel(name: String) {
+        this.lblNames.append(name);
+        this.lblOffs.append(this.buf.length());
+    }
+
+    public labelOffset(name: String) : Integer {
+        Integer i = 0;
+        while (i < this.lblNames.length()) {
+            String n = this.lblNames.get(i) as String;
+            if (n == name) {
+                return this.lblOffs.get(i) as Integer;
+            }
+            i = i + 1;
+        }
+        return -1;
+    }
+
+    public applyFixups() {
+        Integer i = 0;
+        while (i < this.fixups.length()) {
+            X64Fixup f = this.fixups.get(i) as X64Fixup;
+            if (f.kind == X64FixupKind.JUMP) {
+                Integer target = this.labelOffset(f.label);
+                Integer rel32  = target - (f.offset + 4);
+                this.buf.set(f.offset,     rel32         & 0xFF);
+                this.buf.set(f.offset + 1, (rel32 >> 8)  & 0xFF);
+                this.buf.set(f.offset + 2, (rel32 >> 16) & 0xFF);
+                this.buf.set(f.offset + 3, (rel32 >> 24) & 0xFF);
+            }
+            i = i + 1;
+        }
+    }
+
+    public ripFixups() : List<X64Fixup> {
+        List<X64Fixup> result = List();
+        Integer i = 0;
+        while (i < this.fixups.length()) {
+            X64Fixup f = this.fixups.get(i) as X64Fixup;
+            if (f.kind == X64FixupKind.RIP) {
+                result.append(f);
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+
+    // ===== MOV =====
+
+    public movRR(dst: Integer, src: Integer) {
+        this.rexWRB(src, dst);
+        this.emit8(0x89);
+        this.modRM(3, src, dst);
+    }
+
+    public movRI(dst: Integer, imm: Integer) {
+        this.rexWB(dst);
+        this.emit8(0xB8 | (dst & 7));
+        this.emit64(imm);
+    }
+
+    public movRI32(dst: Integer, imm: Integer) {
+        this.rexWB(dst);
+        this.emit8(0xC7);
+        this.modRM(3, 0, dst);
+        this.emit32(imm);
+    }
+
+    public movRMem(dst: Integer, base: Integer, disp: Integer) {
+        this.rexWRB(dst, base);
+        this.emit8(0x8B);
+        if (base == X64Reg.RSP || base == X64Reg.R12) {
+            this.modRM(2, dst, 4);
+            this.emit8(0x24);
+            this.emit32(disp);
+        } else {
+            this.modRM(2, dst, base);
+            this.emit32(disp);
+        }
+    }
+
+    public movMemR(base: Integer, disp: Integer, src: Integer) {
+        this.rexWRB(src, base);
+        this.emit8(0x89);
+        if (base == X64Reg.RSP || base == X64Reg.R12) {
+            this.modRM(2, src, 4);
+            this.emit8(0x24);
+            this.emit32(disp);
+        } else {
+            this.modRM(2, src, base);
+            this.emit32(disp);
+        }
+    }
+
+    public movRMemBase(dst: Integer, base: Integer) {
+        this.rexWRB(dst, base);
+        this.emit8(0x8B);
+        if (base == X64Reg.RSP || base == X64Reg.R12) {
+            this.modRM(0, dst, 4);
+            this.emit8(0x24);
+        } else {
+            this.modRM(0, dst, base);
+        }
+    }
+
+    public movMemBaseR(base: Integer, src: Integer) {
+        this.rexWRB(src, base);
+        this.emit8(0x89);
+        if (base == X64Reg.RSP || base == X64Reg.R12) {
+            this.modRM(0, src, 4);
+            this.emit8(0x24);
+        } else {
+            this.modRM(0, src, base);
+        }
+    }
+
+    public movsx32(dst: Integer, src: Integer) {
+        this.rexWRB(dst, src);
+        this.emit8(0x63);
+        this.modRM(3, dst, src);
+    }
+
+    // ===== LEA =====
+
+    public leaRip(dst: Integer, label: String) {
+        this.rexWR(dst);
+        this.emit8(0x8D);
+        this.modRM(0, dst, 5);
+        this.emitRel32(label, X64FixupKind.RIP);
+    }
+
+    public leaMem(dst: Integer, base: Integer, disp: Integer) {
+        this.rexWRB(dst, base);
+        this.emit8(0x8D);
+        if (base == X64Reg.RSP || base == X64Reg.R12) {
+            this.modRM(2, dst, 4);
+            this.emit8(0x24);
+            this.emit32(disp);
+        } else {
+            this.modRM(2, dst, base);
+            this.emit32(disp);
+        }
+    }
+
+    // ===== PUSH / POP =====
+
+    public pushR(reg: Integer) {
+        if (reg >= 8) { this.emit8(0x41); }
+        this.emit8(0x50 | (reg & 7));
+    }
+
+    public popR(reg: Integer) {
+        if (reg >= 8) { this.emit8(0x41); }
+        this.emit8(0x58 | (reg & 7));
+    }
+
+    // ===== Arithmetic: ADD SUB IMUL IDIV =====
+
+    public addRR(dst: Integer, src: Integer) {
+        this.rexWRB(src, dst);
+        this.emit8(0x01);
+        this.modRM(3, src, dst);
+    }
+
+    public addRI(dst: Integer, imm: Integer) {
+        this.rexWB(dst);
+        this.emit8(0x81);
+        this.modRM(3, 0, dst);
+        this.emit32(imm);
+    }
+
+    public subRR(dst: Integer, src: Integer) {
+        this.rexWRB(src, dst);
+        this.emit8(0x29);
+        this.modRM(3, src, dst);
+    }
+
+    public subRI(dst: Integer, imm: Integer) {
+        this.rexWB(dst);
+        this.emit8(0x81);
+        this.modRM(3, 5, dst);
+        this.emit32(imm);
+    }
+
+    public imulRR(dst: Integer, src: Integer) {
+        this.rexWRB(dst, src);
+        this.emit8(0x0F);
+        this.emit8(0xAF);
+        this.modRM(3, dst, src);
+    }
+
+    public cqo() {
+        this.emit8(0x48);
+        this.emit8(0x99);
+    }
+
+    public idivR(reg: Integer) {
+        this.rexWB(reg);
+        this.emit8(0xF7);
+        this.modRM(3, 7, reg);
+    }
+
+    public negR(reg: Integer) {
+        this.rexWB(reg);
+        this.emit8(0xF7);
+        this.modRM(3, 3, reg);
+    }
+
+    // ===== Bitwise: AND OR XOR NOT SHL SHR SAR =====
+
+    public andRR(dst: Integer, src: Integer) {
+        this.rexWRB(src, dst);
+        this.emit8(0x21);
+        this.modRM(3, src, dst);
+    }
+
+    public orRR(dst: Integer, src: Integer) {
+        this.rexWRB(src, dst);
+        this.emit8(0x09);
+        this.modRM(3, src, dst);
+    }
+
+    public xorRR(dst: Integer, src: Integer) {
+        this.rexWRB(src, dst);
+        this.emit8(0x31);
+        this.modRM(3, src, dst);
+    }
+
+    public notR(reg: Integer) {
+        this.rexWB(reg);
+        this.emit8(0xF7);
+        this.modRM(3, 2, reg);
+    }
+
+    public shlRI(reg: Integer, imm: Integer) {
+        this.rexWB(reg);
+        this.emit8(0xC1);
+        this.modRM(3, 4, reg);
+        this.emit8(imm & 0x3F);
+    }
+
+    public shrRI(reg: Integer, imm: Integer) {
+        this.rexWB(reg);
+        this.emit8(0xC1);
+        this.modRM(3, 5, reg);
+        this.emit8(imm & 0x3F);
+    }
+
+    public sarRI(reg: Integer, imm: Integer) {
+        this.rexWB(reg);
+        this.emit8(0xC1);
+        this.modRM(3, 7, reg);
+        this.emit8(imm & 0x3F);
+    }
+
+    public shlRCL(reg: Integer) {
+        this.rexWB(reg);
+        this.emit8(0xD3);
+        this.modRM(3, 4, reg);
+    }
+
+    public shrRCL(reg: Integer) {
+        this.rexWB(reg);
+        this.emit8(0xD3);
+        this.modRM(3, 5, reg);
+    }
+
+    // ===== Compare / Test =====
+
+    public cmpRR(a: Integer, b: Integer) {
+        this.rexWRB(a, b);
+        this.emit8(0x3B);
+        this.modRM(3, a, b);
+    }
+
+    public cmpRI(reg: Integer, imm: Integer) {
+        this.rexWB(reg);
+        this.emit8(0x81);
+        this.modRM(3, 7, reg);
+        this.emit32(imm);
+    }
+
+    public testRR(a: Integer, b: Integer) {
+        this.rexWRB(b, a);
+        this.emit8(0x85);
+        this.modRM(3, b, a);
+    }
+
+    // ===== Jumps / Calls / Ret =====
+
+    public jmp(label: String) {
+        this.emit8(0xE9);
+        this.emitRel32(label, X64FixupKind.JUMP);
+    }
+
+    public je(label: String) {
+        this.emit8(0x0F);
+        this.emit8(0x84);
+        this.emitRel32(label, X64FixupKind.JUMP);
+    }
+
+    public jne(label: String) {
+        this.emit8(0x0F);
+        this.emit8(0x85);
+        this.emitRel32(label, X64FixupKind.JUMP);
+    }
+
+    public jg(label: String) {
+        this.emit8(0x0F);
+        this.emit8(0x8F);
+        this.emitRel32(label, X64FixupKind.JUMP);
+    }
+
+    public jl(label: String) {
+        this.emit8(0x0F);
+        this.emit8(0x8C);
+        this.emitRel32(label, X64FixupKind.JUMP);
+    }
+
+    public jge(label: String) {
+        this.emit8(0x0F);
+        this.emit8(0x8D);
+        this.emitRel32(label, X64FixupKind.JUMP);
+    }
+
+    public jle(label: String) {
+        this.emit8(0x0F);
+        this.emit8(0x8E);
+        this.emitRel32(label, X64FixupKind.JUMP);
+    }
+
+    public jz(label: String)  { this.je(label); }
+    public jnz(label: String) { this.jne(label); }
+
+    public callRel(label: String) {
+        this.emit8(0xE8);
+        this.emitRel32(label, X64FixupKind.JUMP);
+    }
+
+    public callR(reg: Integer) {
+        if (reg >= 8) { this.emit8(0x41); }
+        this.emit8(0xFF);
+        this.modRM(3, 2, reg);
+    }
+
+    public ret() {
+        this.emit8(0xC3);
+    }
+
+    public nop() {
+        this.emit8(0x90);
+    }
+
+    // ===== XOR zero (common idiom) =====
+
+    public xorZero(reg: Integer) {
+        this.xorRR(reg, reg);
+    }
+}
