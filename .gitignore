@@ -29,7 +29,7 @@ orchestrator/venv/
 orchestrator/
 brain/
 CLAUDE.md
-reference/
+/reference/
 
 # obsidian-mind — vault kişisel içerik (tümü local)
 work/
