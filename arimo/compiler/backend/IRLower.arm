@@ -1,0 +1,578 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+import arimo.compiler.ast.ArimoModule;
+import arimo.compiler.ast.item.Item;
+import arimo.compiler.ast.item.ItemKind;
+import arimo.compiler.ast.item.ClassDecl;
+import arimo.compiler.ast.decl.MethodDecl;
+import arimo.compiler.ast.stmt.Stmt;
+import arimo.compiler.ast.stmt.StmtKind;
+import arimo.compiler.ast.expr.Expr;
+import arimo.compiler.ast.expr.ExprKind;
+import arimo.compiler.ast.expr.BinaryOp;
+import arimo.compiler.backend.IRFunction;
+import arimo.compiler.backend.IRInstr;
+import arimo.compiler.backend.IRValue;
+import arimo.compiler.backend.IRValueKind;
+import arimo.compiler.backend.IROpcode;
+import arimo.compiler.backend.IRType;
+
+public class IRLower {
+    public  irFns    : List<IRFunction>;
+    public  strNames : List<String>;
+    public  strConts : List<String>;
+    private strCnt   : Integer;
+    private labelCnt : Integer;
+    private regCnt   : Integer;
+    private varNames : List<String>;
+    private varRegs  : List<String>;
+    private breakLbl : String;
+    private contLbl  : String;
+    private mainFn   : String;
+
+    public constructor() {
+        this.irFns    = List();
+        this.strNames = List();
+        this.strConts = List();
+        this.strCnt   = 0;
+        this.labelCnt = 0;
+        this.regCnt   = 0;
+        this.varNames = List();
+        this.varRegs  = List();
+        this.breakLbl = "";
+        this.contLbl  = "";
+        this.mainFn   = "";
+        this.irFns.append(IRFunction("__placeholder", IRType.VOID));
+    }
+
+    private beginFn(name: String, retTy: Integer) {
+        this.irFns.append(IRFunction(name, retTy));
+    }
+
+    private lastFn() : IRFunction {
+        Integer last = this.irFns.length() - 1;
+        return this.irFns.get(last) as IRFunction;
+    }
+
+    private addParamToLast(name: String, ty: Integer) {
+        IRFunction f = this.lastFn();
+        f.addParam(name, ty);
+    }
+
+    private finishFn() {
+        // last fn already in irFns — nothing to do
+    }
+
+    private newReg() : String {
+        Integer n = this.regCnt;
+        this.regCnt = this.regCnt + 1;
+        return "t${n}";
+    }
+
+    private newLabel(prefix: String) : String {
+        Integer n = this.labelCnt;
+        this.labelCnt = this.labelCnt + 1;
+        return "${prefix}${n}";
+    }
+
+    private internStr(content: String) : String {
+        Integer i = 0;
+        while (i < this.strConts.length()) {
+            String c = this.strConts.get(i) as String;
+            if (c == content) { return this.strNames.get(i) as String; }
+            i = i + 1;
+        }
+        String name = "__str${this.strCnt}";
+        this.strCnt = this.strCnt + 1;
+        this.strNames.append(name);
+        this.strConts.append(content);
+        return name;
+    }
+
+    private emit(instr: IRInstr) {
+        IRFunction f = this.lastFn();
+        f.instrs.append(instr);
+    }
+
+    private varLookup(name: String) : String {
+        Integer i = 0;
+        while (i < this.varNames.length()) {
+            String n = this.varNames.get(i) as String;
+            if (n == name) { return this.varRegs.get(i) as String; }
+            i = i + 1;
+        }
+        return "";
+    }
+
+    private varDefine(name: String, reg: String) {
+        Integer i = 0;
+        while (i < this.varNames.length()) {
+            String n = this.varNames.get(i) as String;
+            if (n == name) { this.varRegs.set(i, reg); return; }
+            i = i + 1;
+        }
+        this.varNames.append(name);
+        this.varRegs.append(reg);
+    }
+
+    private lowerCond(expr: Expr) : Integer {
+        if (expr.kind == ExprKind.BINOP) {
+            Integer bop = expr.op;
+            if (bop == BinaryOp.EQ || bop == BinaryOp.NE ||
+                bop == BinaryOp.LT || bop == BinaryOp.LE ||
+                bop == BinaryOp.GT || bop == BinaryOp.GE) {
+                IRValue lv = this.lowerExpr(expr.left);
+                IRValue rv = this.lowerExpr(expr.right);
+                this.emit(IRInstr.cmp(lv, rv));
+                if (bop == BinaryOp.EQ) { return IROpcode.JNE; }
+                if (bop == BinaryOp.NE) { return IROpcode.JE;  }
+                if (bop == BinaryOp.LT) { return IROpcode.JGE; }
+                if (bop == BinaryOp.LE) { return IROpcode.JG;  }
+                if (bop == BinaryOp.GT) { return IROpcode.JLE; }
+                return IROpcode.JL;
+            }
+        }
+        IRValue cv = this.lowerExpr(expr);
+        IRValue zero = IRValue.ofInt(0, IRType.I64);
+        this.emit(IRInstr.cmp(cv, zero));
+        return IROpcode.JE;
+    }
+
+    private lowerStmt(stmt: Stmt) {
+        if (stmt.kind == StmtKind.RETURN) {
+            if (stmt.expr.kind != ExprKind.NULL_LIT) {
+                IRValue rv = this.lowerExpr(stmt.expr);
+                this.emit(IRInstr.ret(rv));
+            } else {
+                this.emit(IRInstr.retVoid());
+            }
+            return;
+        }
+
+        if (stmt.kind == StmtKind.EXPR) {
+            this.lowerExpr(stmt.expr);
+            return;
+        }
+
+        if (stmt.kind == StmtKind.VAR_DECL) {
+            String reg = this.newReg();
+            IRValue dst = IRValue.reg(reg, IRType.I64);
+            if (stmt.initExpr.kind != ExprKind.NULL_LIT) {
+                IRValue src = this.lowerExpr(stmt.initExpr);
+                this.emit(IRInstr.mov(dst, src));
+            } else {
+                this.emit(IRInstr.mov(dst, IRValue.ofInt(0, IRType.I64)));
+            }
+            this.varDefine(stmt.name, reg);
+            return;
+        }
+
+        if (stmt.kind == StmtKind.IF) {
+            String elseL = this.newLabel("if_else");
+            String endL  = this.newLabel("if_end");
+            Integer jmpOp = this.lowerCond(stmt.cond);
+            this.emit(IRInstr.branch(jmpOp, elseL));
+            this.lowerBody(stmt.thenBody);
+            this.emit(IRInstr.jmp(endL));
+            this.emit(IRInstr.label(elseL));
+            if (stmt.elseBody.length() > 0) {
+                this.lowerBody(stmt.elseBody);
+            }
+            this.emit(IRInstr.label(endL));
+            return;
+        }
+
+        if (stmt.kind == StmtKind.WHILE) {
+            String loopL  = this.newLabel("while_loop");
+            String breakL = this.newLabel("while_brk");
+            String savedBreak = this.breakLbl;
+            String savedCont  = this.contLbl;
+            this.breakLbl = breakL;
+            this.contLbl  = loopL;
+            this.emit(IRInstr.label(loopL));
+            Integer jmpOp = this.lowerCond(stmt.cond);
+            this.emit(IRInstr.branch(jmpOp, breakL));
+            this.lowerBody(stmt.body);
+            this.emit(IRInstr.jmp(loopL));
+            this.emit(IRInstr.label(breakL));
+            this.breakLbl = savedBreak;
+            this.contLbl  = savedCont;
+            return;
+        }
+
+        if (stmt.kind == StmtKind.BREAK) {
+            this.emit(IRInstr.jmp(this.breakLbl));
+            return;
+        }
+
+        if (stmt.kind == StmtKind.CONTINUE) {
+            this.emit(IRInstr.jmp(this.contLbl));
+            return;
+        }
+
+        if (stmt.kind == StmtKind.BLOCK) {
+            this.lowerBody(stmt.body);
+            return;
+        }
+    }
+
+    private lowerBody(stmts: List<Stmt>) {
+        Integer i = 0;
+        while (i < stmts.length()) {
+            Stmt s = stmts.get(i) as Stmt;
+            this.lowerStmt(s);
+            i = i + 1;
+        }
+    }
+
+    private lowerExpr(expr: Expr) : IRValue {
+        if (expr.kind == ExprKind.INT_LIT) {
+            return IRValue.ofInt(expr.intVal, IRType.I64);
+        }
+
+        if (expr.kind == ExprKind.BOOL_LIT) {
+            if (expr.boolVal) { return IRValue.ofInt(1, IRType.I64); }
+            return IRValue.ofInt(0, IRType.I64);
+        }
+
+        if (expr.kind == ExprKind.NULL_LIT) {
+            return IRValue.ofInt(0, IRType.I64);
+        }
+
+        if (expr.kind == ExprKind.STR_LIT) {
+            String name = this.internStr(expr.strVal);
+            return IRValue.global(name);
+        }
+
+        if (expr.kind == ExprKind.IDENT) {
+            String reg = this.varLookup(expr.strVal);
+            if (reg != "") { return IRValue.reg(reg, IRType.I64); }
+            return IRValue.ofInt(0, IRType.I64);
+        }
+
+        if (expr.kind == ExprKind.STATIC_CALL) {
+            return this.lowerStaticCall(expr.class_, expr.method, expr.args);
+        }
+
+        if (expr.kind == ExprKind.METHOD) {
+            return this.lowerMethodCall(expr.object, expr.method, expr.args);
+        }
+
+        if (expr.kind == ExprKind.BINOP) {
+            return this.lowerBinop(expr);
+        }
+
+        if (expr.kind == ExprKind.UNARY) {
+            IRValue operand = this.lowerExpr(expr.operand);
+            String dr = this.newReg();
+            IRValue dst = IRValue.reg(dr, IRType.I64);
+            Integer uop = expr.op;
+            if (uop == 1) {
+                this.emit(IRInstr.unop(IROpcode.NEG, dst, operand));
+            } else if (uop == 2) {
+                this.emit(IRInstr.unop(IROpcode.NOT, dst, operand));
+            } else {
+                this.emit(IRInstr.mov(dst, operand));
+            }
+            return dst;
+        }
+
+        if (expr.kind == ExprKind.CAST) {
+            IRValue src = this.lowerExpr(expr.operand);
+            String dr = this.newReg();
+            IRValue dst = IRValue.reg(dr, IRType.I64);
+            this.emit(IRInstr.conv(IROpcode.SEXT, dst, src, IRType.I64));
+            return dst;
+        }
+
+        if (expr.kind == ExprKind.TERNARY) {
+            String trueL  = this.newLabel("tern_t");
+            String falseL = this.newLabel("tern_f");
+            String endL   = this.newLabel("tern_e");
+            String resReg = this.newReg();
+            IRValue resDst = IRValue.reg(resReg, IRType.I64);
+            Integer jop = this.lowerCond(expr.cond);
+            this.emit(IRInstr.branch(jop, falseL));
+            this.emit(IRInstr.label(trueL));
+            IRValue tv = this.lowerExpr(expr.then_);
+            this.emit(IRInstr.mov(resDst, tv));
+            this.emit(IRInstr.jmp(endL));
+            this.emit(IRInstr.label(falseL));
+            IRValue fv = this.lowerExpr(expr.else_);
+            this.emit(IRInstr.mov(resDst, fv));
+            this.emit(IRInstr.label(endL));
+            return resDst;
+        }
+
+        return IRValue.ofInt(0, IRType.I64);
+    }
+
+    private lowerBinop(expr: Expr) : IRValue {
+        Integer bop = expr.op;
+
+        if (bop == BinaryOp.ASSIGN) {
+            IRValue rv = this.lowerExpr(expr.right);
+            if (expr.left.kind == ExprKind.IDENT) {
+                String vReg = this.varLookup(expr.left.strVal);
+                if (vReg != "") {
+                    IRValue dst = IRValue.reg(vReg, IRType.I64);
+                    this.emit(IRInstr.mov(dst, rv));
+                    return dst;
+                }
+            }
+            return rv;
+        }
+
+        Integer irop = IROpcode.ADD;
+        if (bop == BinaryOp.ADD) { irop = IROpcode.ADD; }
+        if (bop == BinaryOp.SUB) { irop = IROpcode.SUB; }
+        if (bop == BinaryOp.MUL) { irop = IROpcode.MUL; }
+        if (bop == BinaryOp.DIV) { irop = IROpcode.DIV; }
+        if (bop == BinaryOp.MOD) { irop = IROpcode.MOD; }
+        if (bop == BinaryOp.BITAND) { irop = IROpcode.AND; }
+        if (bop == BinaryOp.BITOR)  { irop = IROpcode.OR;  }
+        if (bop == BinaryOp.XOR)    { irop = IROpcode.XOR; }
+        if (bop == BinaryOp.SHL)    { irop = IROpcode.SHL; }
+        if (bop == BinaryOp.SHR)    { irop = IROpcode.SHR; }
+
+        if (bop == BinaryOp.AND || bop == BinaryOp.OR) {
+            IRValue lv = this.lowerExpr(expr.left);
+            IRValue rv = this.lowerExpr(expr.right);
+            String dr  = this.newReg();
+            IRValue dst = IRValue.reg(dr, IRType.I64);
+            if (bop == BinaryOp.AND) { this.emit(IRInstr.binop(IROpcode.AND, dst, lv, rv)); }
+            else                     { this.emit(IRInstr.binop(IROpcode.OR,  dst, lv, rv)); }
+            return dst;
+        }
+
+        if (bop == BinaryOp.EQ || bop == BinaryOp.NE ||
+            bop == BinaryOp.LT || bop == BinaryOp.LE ||
+            bop == BinaryOp.GT || bop == BinaryOp.GE) {
+            IRValue lv  = this.lowerExpr(expr.left);
+            IRValue rv  = this.lowerExpr(expr.right);
+            String trueL = this.newLabel("cmp_t");
+            String endL  = this.newLabel("cmp_e");
+            String dr    = this.newReg();
+            IRValue dst  = IRValue.reg(dr, IRType.I64);
+            this.emit(IRInstr.cmp(lv, rv));
+            Integer trueJmp = IROpcode.JE;
+            if (bop == BinaryOp.EQ) { trueJmp = IROpcode.JE;  }
+            if (bop == BinaryOp.NE) { trueJmp = IROpcode.JNE; }
+            if (bop == BinaryOp.LT) { trueJmp = IROpcode.JL;  }
+            if (bop == BinaryOp.LE) { trueJmp = IROpcode.JLE; }
+            if (bop == BinaryOp.GT) { trueJmp = IROpcode.JG;  }
+            if (bop == BinaryOp.GE) { trueJmp = IROpcode.JGE; }
+            this.emit(IRInstr.branch(trueJmp, trueL));
+            this.emit(IRInstr.mov(dst, IRValue.ofInt(0, IRType.I64)));
+            this.emit(IRInstr.jmp(endL));
+            this.emit(IRInstr.label(trueL));
+            this.emit(IRInstr.mov(dst, IRValue.ofInt(1, IRType.I64)));
+            this.emit(IRInstr.label(endL));
+            return dst;
+        }
+
+        IRValue lv2 = this.lowerExpr(expr.left);
+        IRValue rv2 = this.lowerExpr(expr.right);
+        String dr2  = this.newReg();
+        IRValue dst2 = IRValue.reg(dr2, IRType.I64);
+        this.emit(IRInstr.binop(irop, dst2, lv2, rv2));
+        return dst2;
+    }
+
+    private lowerStaticCall(class_: String, method: String, args: List<Expr>) : IRValue {
+        if (class_ == "IO" && method == "println") {
+            IRValue strArg = this.lowerExpr(args.get(0) as Expr);
+            List<IRValue> callArgs = List();
+            callArgs.append(strArg);
+            String dr = this.newReg();
+            IRValue dst = IRValue.reg(dr, IRType.VOID);
+            this.emit(IRInstr.call(dst, "__arimo_println", callArgs));
+            return IRValue.none();
+        }
+        if (class_ == "IO" && method == "print") {
+            IRValue strArg2 = this.lowerExpr(args.get(0) as Expr);
+            List<IRValue> callArgs2 = List();
+            callArgs2.append(strArg2);
+            String dr2 = this.newReg();
+            IRValue dst2 = IRValue.reg(dr2, IRType.VOID);
+            this.emit(IRInstr.call(dst2, "__arimo_print", callArgs2));
+            return IRValue.none();
+        }
+        String fnName = "${class_}__${method}";
+        List<IRValue> callArgsFn = List();
+        Integer ai = 0;
+        while (ai < args.length()) {
+            Expr arg = args.get(ai) as Expr;
+            callArgsFn.append(this.lowerExpr(arg));
+            ai = ai + 1;
+        }
+        String dr3 = this.newReg();
+        IRValue dst3 = IRValue.reg(dr3, IRType.I64);
+        this.emit(IRInstr.call(dst3, fnName, callArgsFn));
+        return dst3;
+    }
+
+    private lowerMethodCall(obj: Expr, method: String, args: List<Expr>) : IRValue {
+        IRValue objVal = this.lowerExpr(obj);
+        List<IRValue> callArgsMC = List();
+        callArgsMC.append(objVal);
+        Integer ai2 = 0;
+        while (ai2 < args.length()) {
+            Expr arg2 = args.get(ai2) as Expr;
+            callArgsMC.append(this.lowerExpr(arg2));
+            ai2 = ai2 + 1;
+        }
+        String dr4 = this.newReg();
+        IRValue dst4 = IRValue.reg(dr4, IRType.I64);
+        this.emit(IRInstr.call(dst4, "__method_${method}", callArgsMC));
+        return dst4;
+    }
+
+    private lowerMethod(className: String, md: MethodDecl) {
+        String fnName = "${className}__${md.name}";
+        this.beginFn(fnName, IRType.I64);
+        this.varNames = List();
+        this.varRegs  = List();
+        this.regCnt   = 0;
+        this.emit(IRInstr.label("entry"));
+        this.lowerBody(md.body);
+        this.emit(IRInstr.ret(IRValue.ofInt(0, IRType.I64)));
+
+        if (md.isStatic && md.name == "main" && this.mainFn == "") {
+            this.mainFn = fnName;
+        }
+    }
+
+    private lowerClass(cd: ClassDecl) {
+        Integer i = 0;
+        while (i < cd.methods.length()) {
+            MethodDecl md = cd.methods.get(i) as MethodDecl;
+            if (md.body.length() > 0) {
+                this.lowerMethod(cd.name, md);
+            }
+            i = i + 1;
+        }
+    }
+
+    private lowerModule(m: ArimoModule) {
+        Integer i = 0;
+        while (i < m.items.length()) {
+            Item it = m.items.get(i) as Item;
+            if (it.kind == ItemKind.CLASS) {
+                this.lowerClass(it.classDecl);
+            }
+            i = i + 1;
+        }
+    }
+
+    private generatePrintHelper(name: String, addNewline: Boolean) {
+        this.beginFn(name, IRType.VOID);
+        this.addParamToLast("str", IRType.PTR);
+        this.emit(IRInstr.label("entry"));
+
+        String nlName = this.internStr("\n");
+        IRValue hDst = IRValue.reg("ph_h", IRType.I64);
+        List<IRValue> hsArgs = List();
+        hsArgs.append(IRValue.ofInt(-11, IRType.I64));
+        this.emit(IRInstr.call(hDst, "GetStdHandle", hsArgs));
+
+        IRValue strPtr = IRValue.reg("str", IRType.PTR);
+
+        String lenReg = "plen";
+        IRValue lenDst = IRValue.reg(lenReg, IRType.I64);
+        List<IRValue> lenArgs = List();
+        lenArgs.append(strPtr);
+        this.emit(IRInstr.call(lenDst, "__arimo_strlen", lenArgs));
+
+        List<IRValue> wfArgs = List();
+        wfArgs.append(hDst);
+        wfArgs.append(strPtr);
+        wfArgs.append(lenDst);
+        wfArgs.append(IRValue.ofInt(0, IRType.I64));
+        wfArgs.append(IRValue.ofInt(0, IRType.I64));
+        IRValue wfDst = IRValue.reg("pwf", IRType.VOID);
+        this.emit(IRInstr.call(wfDst, "WriteFile", wfArgs));
+
+        if (addNewline) {
+            List<IRValue> wfArgs2 = List();
+            wfArgs2.append(hDst);
+            wfArgs2.append(IRValue.global(nlName));
+            wfArgs2.append(IRValue.ofInt(1, IRType.I64));
+            wfArgs2.append(IRValue.ofInt(0, IRType.I64));
+            wfArgs2.append(IRValue.ofInt(0, IRType.I64));
+            IRValue wfDst2 = IRValue.reg("pwf2", IRType.VOID);
+            this.emit(IRInstr.call(wfDst2, "WriteFile", wfArgs2));
+        }
+        this.emit(IRInstr.retVoid());
+    }
+
+    private generateStrlenHelper() {
+        this.beginFn("__arimo_strlen", IRType.I64);
+        this.addParamToLast("s", IRType.PTR);
+        this.emit(IRInstr.label("entry"));
+        IRValue cnt = IRValue.reg("cnt", IRType.I64);
+        this.emit(IRInstr.mov(cnt, IRValue.ofInt(0, IRType.I64)));
+        this.emit(IRInstr.label("strlen_loop"));
+        IRValue ptr = IRValue.reg("s", IRType.PTR);
+        IRValue idx = IRValue.reg("cidx", IRType.I64);
+        this.emit(IRInstr.binop(IROpcode.ADD, idx, ptr, cnt));
+        IRValue ch = IRValue.reg("ch", IRType.I64);
+        this.emit(IRInstr.load(ch, idx, IRType.I64));
+        this.emit(IRInstr.cmp(ch, IRValue.ofInt(0, IRType.I64)));
+        this.emit(IRInstr.branch(IROpcode.JE, "strlen_done"));
+        IRValue cnt2 = IRValue.reg("cnt", IRType.I64);
+        this.emit(IRInstr.binop(IROpcode.ADD, cnt2, cnt, IRValue.ofInt(1, IRType.I64)));
+        this.emit(IRInstr.jmp("strlen_loop"));
+        this.emit(IRInstr.label("strlen_done"));
+        this.emit(IRInstr.ret(cnt));
+    }
+
+    private generateStartFn() {
+        this.beginFn("_start", IRType.VOID);
+        this.emit(IRInstr.label("entry"));
+        List<IRValue> mainArgs = List();
+        IRValue mainResult = IRValue.reg("main_result", IRType.I64);
+        if (this.mainFn != "") {
+            this.emit(IRInstr.call(mainResult, this.mainFn, mainArgs));
+        } else {
+            this.emit(IRInstr.mov(mainResult, IRValue.ofInt(0, IRType.I64)));
+        }
+        List<IRValue> exitArgs = List();
+        exitArgs.append(mainResult);
+        IRValue exitDst = IRValue.reg("ex", IRType.VOID);
+        this.emit(IRInstr.call(exitDst, "ExitProcess", exitArgs));
+        this.emit(IRInstr.retVoid());
+    }
+
+    public lower(modules: List<ArimoModule>) {
+        this.internStr("\n");
+        Integer i = 0;
+        while (i < modules.length()) {
+            ArimoModule m = modules.get(i) as ArimoModule;
+            this.lowerModule(m);
+            i = i + 1;
+        }
+        this.generateStrlenHelper();
+        this.generatePrintHelper("__arimo_println", true);
+        this.generatePrintHelper("__arimo_print", false);
+        this.generateStartFn();
+    }
+}
