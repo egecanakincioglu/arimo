@@ -1,0 +1,402 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+import arimo.compiler.backend.X64Encoder;
+import arimo.compiler.backend.X64Fixup;
+import arimo.compiler.backend.X64FixupKind;
+import arimo.compiler.backend.X64Reg;
+
+extern "C" {
+    fopen(path: String, mode: String) : RawPtr<Void>;
+    fputc(c: Integer, f: RawPtr<Void>) : Integer;
+    fclose(f: RawPtr<Void>) : Integer;
+}
+
+public class PEImport {
+    public funcName : String;
+    public constructor(fn: String) {
+        this.funcName = fn;
+    }
+}
+
+public class PEWriter {
+    private enc       : X64Encoder;
+    private strNames  : List<String>;
+    private strConts  : List<String>;
+    private imports   : List<PEImport>;
+    private fileAlign : Integer;
+    private sectAlign : Integer;
+    private textRVA   : Integer;
+    private imageBase : Integer;
+    private dllName   : String;
+
+    public constructor(enc: X64Encoder) {
+        this.enc       = enc;
+        this.strNames  = List();
+        this.strConts  = List();
+        this.imports   = List();
+        this.fileAlign = 512;
+        this.sectAlign = 4096;
+        this.textRVA   = 4096;
+        this.imageBase = 0x400000;
+        this.dllName   = "kernel32.dll";
+    }
+
+    public addImport(fn: String) {
+        this.imports.append(PEImport(fn));
+    }
+
+    public addString(name: String, content: String) {
+        this.strNames.append(name);
+        this.strConts.append(content);
+    }
+
+    private alignTo(v: Integer, a: Integer) : Integer {
+        Integer rem = v % a;
+        if (rem == 0) { return v; }
+        return v + (a - rem);
+    }
+
+    private w8(lst: List<Integer>, b: Integer) {
+        lst.append(b & 0xFF);
+    }
+
+    private w16(lst: List<Integer>, v: Integer) {
+        lst.append(v & 0xFF);
+        lst.append((v >> 8) & 0xFF);
+    }
+
+    private w32(lst: List<Integer>, v: Integer) {
+        lst.append(v & 0xFF);
+        lst.append((v >> 8) & 0xFF);
+        lst.append((v >> 16) & 0xFF);
+        lst.append((v >> 24) & 0xFF);
+    }
+
+    private w64(lst: List<Integer>, v: Integer) {
+        this.w32(lst, v);
+        this.w32(lst, (v >> 32) & 0xFFFFFFFF);
+    }
+
+    private wStr(lst: List<Integer>, s: String) {
+        Integer i = 0;
+        while (i < s.length()) {
+            lst.append(s.charCodeAt(i));
+            i = i + 1;
+        }
+        lst.append(0);
+    }
+
+    private wPad(lst: List<Integer>, count: Integer) {
+        Integer i = 0;
+        while (i < count) { lst.append(0); i = i + 1; }
+    }
+
+    private wSectionName(lst: List<Integer>, name: String) {
+        Integer i = 0;
+        while (i < 8) {
+            if (i < name.length()) { lst.append(name.charCodeAt(i)); }
+            else { lst.append(0); }
+            i = i + 1;
+        }
+    }
+
+    private patchW32(lst: List<Integer>, offset: Integer, v: Integer) {
+        lst.set(offset,     v & 0xFF);
+        lst.set(offset + 1, (v >> 8) & 0xFF);
+        lst.set(offset + 2, (v >> 16) & 0xFF);
+        lst.set(offset + 3, (v >> 24) & 0xFF);
+    }
+
+    private fnEntrySize(fn: String) : Integer {
+        Integer raw = 2 + fn.length() + 1;
+        if ((raw % 2) != 0) { return raw + 1; }
+        return raw;
+    }
+
+    public build(entryOff: Integer) : List<Integer> {
+        Integer N = this.imports.length();
+        Integer S = this.strNames.length();
+        Integer codeSize = this.enc.size();
+
+        // ===== Step 1: Precompute thunk layout =====
+        // Each thunk: FF 25 rel32 = 6 bytes (JMP [rip+disp32])
+        Integer thunkSize = N * 6;
+        Integer textVirtSize = codeSize + thunkSize;
+        Integer textFileSize = this.alignTo(textVirtSize, this.fileAlign);
+        Integer textFileOff  = this.fileAlign;  // headers fit in one fileAlign block
+
+        // ===== Step 2: Precompute .rdata layout =====
+        // String literals
+        List<Integer> strOffsets = List();
+        Integer strCursor = 0;
+        Integer si = 0;
+        while (si < S) {
+            strOffsets.append(strCursor);
+            String c = this.strConts.get(si) as String;
+            strCursor = strCursor + c.length() + 1;
+            si = si + 1;
+        }
+        Integer strAreaSize = this.alignTo(strCursor, 8);
+
+        // IDT: 2 entries (1 real + 1 null), 20 bytes each
+        Integer idtOff  = strAreaSize;
+        Integer intOff  = idtOff + 40;
+        Integer iatOff  = intOff + (N + 1) * 8;
+        Integer dllNameOff = iatOff + (N + 1) * 8;
+        Integer fnNameBase = dllNameOff + this.dllName.length() + 1;
+
+        List<Integer> fnNameOffs = List();
+        Integer fnCursor = fnNameBase;
+        Integer fi = 0;
+        while (fi < N) {
+            fnNameOffs.append(fnCursor);
+            PEImport imp = this.imports.get(fi) as PEImport;
+            fnCursor = fnCursor + this.fnEntrySize(imp.funcName);
+            fi = fi + 1;
+        }
+        Integer rdataVirtSize = fnCursor;
+        Integer rdataFileSize = this.alignTo(rdataVirtSize, this.fileAlign);
+        Integer rdataRVA = this.alignTo(this.textRVA + textVirtSize, this.sectAlign);
+        Integer rdataFileOff = textFileOff + textFileSize;
+
+        // ===== Step 3: Generate thunks in encoder =====
+        Integer ti = 0;
+        while (ti < N) {
+            PEImport imp2 = this.imports.get(ti) as PEImport;
+            String thunkLabel = "${imp2.funcName}__thunk";
+            this.enc.defineLabel(thunkLabel);
+            // FF 25 disp32: JMP [rip+disp32]
+            this.enc.emit8(0xFF);
+            this.enc.emit8(0x25);
+            // disp32 = IAT_entry_VA - (instr_end_VA)
+            // instr_end_VA = imageBase + textRVA + current_offset + 4 (after disp32)
+            Integer thunkEndOff = this.enc.size() + 4;  // offset of byte after disp32
+            Integer iatEntryVA  = this.imageBase + rdataRVA + iatOff + ti * 8;
+            Integer instrEndVA  = this.imageBase + this.textRVA + thunkEndOff;
+            Integer disp32      = iatEntryVA - instrEndVA;
+            this.enc.emit32(disp32);
+            ti = ti + 1;
+        }
+
+        // Apply intra-.text jump fixups
+        this.enc.applyFixups();
+
+        // Apply RIP fixups (string references: LEA [rip+str_label])
+        List<X64Fixup> ripFix = this.enc.ripFixups();
+        Integer ri = 0;
+        while (ri < ripFix.length()) {
+            X64Fixup rf = ripFix.get(ri) as X64Fixup;
+            // Find string offset for this label
+            Integer strOff = -1;
+            Integer sj = 0;
+            while (sj < S) {
+                String nm = this.strNames.get(sj) as String;
+                if (nm == rf.label) { strOff = strOffsets.get(sj) as Integer; }
+                sj = sj + 1;
+            }
+            Integer targetRVA = rdataRVA + strOff;
+            Integer ripRVA    = this.textRVA + rf.offset + 4;
+            Integer rel32     = targetRVA - ripRVA;
+            List<Integer> buf = this.enc.buf;
+            buf.set(rf.offset,     rel32         & 0xFF);
+            buf.set(rf.offset + 1, (rel32 >> 8)  & 0xFF);
+            buf.set(rf.offset + 2, (rel32 >> 16) & 0xFF);
+            buf.set(rf.offset + 3, (rel32 >> 24) & 0xFF);
+            ri = ri + 1;
+        }
+
+        // ===== Step 4: Build .rdata bytes =====
+        List<Integer> rdata = List();
+
+        // String literals
+        Integer sq = 0;
+        while (sq < S) {
+            String cs = this.strConts.get(sq) as String;
+            this.wStr(rdata, cs);
+            sq = sq + 1;
+        }
+        // Pad strings to 8-byte align
+        this.wPad(rdata, strAreaSize - strCursor);
+
+        // IDT: real entry
+        Integer intRVA     = rdataRVA + intOff;
+        Integer iatRVA     = rdataRVA + iatOff;
+        Integer dllNameRVA = rdataRVA + dllNameOff;
+        this.w32(rdata, intRVA);      // OriginalFirstThunk
+        this.w32(rdata, 0);            // TimeDateStamp
+        this.w32(rdata, 0);            // ForwarderChain
+        this.w32(rdata, dllNameRVA);   // Name RVA
+        this.w32(rdata, iatRVA);       // FirstThunk (IAT)
+        // IDT: null terminator
+        this.wPad(rdata, 20);
+
+        // INT entries
+        Integer ii = 0;
+        while (ii < N) {
+            Integer fnRVA = rdataRVA + (fnNameOffs.get(ii) as Integer);
+            this.w64(rdata, fnRVA);
+            ii = ii + 1;
+        }
+        this.w64(rdata, 0);  // INT null terminator
+
+        // IAT entries (same as INT initially; OS patches at load time)
+        Integer ia = 0;
+        while (ia < N) {
+            Integer fnRVA2 = rdataRVA + (fnNameOffs.get(ia) as Integer);
+            this.w64(rdata, fnRVA2);
+            ia = ia + 1;
+        }
+        this.w64(rdata, 0);  // IAT null terminator
+
+        // DLL name
+        this.wStr(rdata, this.dllName);
+
+        // Function name entries (Hint + Name + null + optional pad)
+        Integer fni = 0;
+        while (fni < N) {
+            PEImport fnimp = this.imports.get(fni) as PEImport;
+            this.w16(rdata, 0);
+            this.wStr(rdata, fnimp.funcName);
+            Integer rawSz = 2 + fnimp.funcName.length() + 1;
+            if ((rawSz % 2) != 0) { rdata.append(0); }
+            fni = fni + 1;
+        }
+
+        // ===== Step 5: Assemble file =====
+        List<Integer> file = List();
+
+        // --- DOS stub (64 bytes) ---
+        // MZ signature
+        this.w16(file, 0x5A4D);
+        this.wPad(file, 56);
+        // e_lfanew at offset 60 = 64 (0x40)
+        this.w32(file, 64);
+
+        // --- PE signature ---
+        file.append(0x50); file.append(0x45); file.append(0); file.append(0);
+
+        // --- COFF header (20 bytes) ---
+        this.w16(file, 0x8664);  // Machine: AMD64
+        this.w16(file, 2);       // NumberOfSections
+        this.w32(file, 0);       // TimeDateStamp
+        this.w32(file, 0);       // PointerToSymbolTable
+        this.w32(file, 0);       // NumberOfSymbols
+        this.w16(file, 240);     // SizeOfOptionalHeader
+        this.w16(file, 0x0022);  // Characteristics: executable, no relocations
+
+        // --- Optional header PE32+ (240 bytes) ---
+        Integer entryRVA   = this.textRVA + entryOff;
+        Integer rdataVirtSizeAligned = this.alignTo(rdataVirtSize, this.sectAlign);
+        Integer sizeOfImage = this.alignTo(rdataRVA + rdataVirtSizeAligned, this.sectAlign);
+
+        // Standard fields (24 bytes)
+        this.w16(file, 0x020B);  // Magic: PE32+
+        file.append(0);          // MajorLinkerVersion
+        file.append(0);          // MinorLinkerVersion
+        this.w32(file, textVirtSize);   // SizeOfCode
+        this.w32(file, rdataVirtSize);  // SizeOfInitializedData
+        this.w32(file, 0);       // SizeOfUninitializedData
+        this.w32(file, entryRVA);       // AddressOfEntryPoint
+        this.w32(file, this.textRVA);   // BaseOfCode
+
+        // Windows-specific fields (88 bytes)
+        this.w64(file, this.imageBase);    // ImageBase
+        this.w32(file, this.sectAlign);    // SectionAlignment
+        this.w32(file, this.fileAlign);    // FileAlignment
+        this.w16(file, 6);  this.w16(file, 0);   // MajorOS, MinorOS
+        this.w16(file, 0);  this.w16(file, 0);   // MajorImage, MinorImage
+        this.w16(file, 6);  this.w16(file, 0);   // MajorSubsystem, MinorSubsystem
+        this.w32(file, 0);                 // Win32VersionValue
+        this.w32(file, sizeOfImage);       // SizeOfImage
+        this.w32(file, this.fileAlign);    // SizeOfHeaders
+        this.w32(file, 0);                 // CheckSum
+        this.w16(file, 3);                 // Subsystem: console
+        this.w16(file, 0x8100);            // DllCharacteristics: NX+no-SEH
+        this.w64(file, 0x100000);          // SizeOfStackReserve
+        this.w64(file, 0x1000);            // SizeOfStackCommit
+        this.w64(file, 0x100000);          // SizeOfHeapReserve
+        this.w64(file, 0x1000);            // SizeOfHeapCommit
+        this.w32(file, 0);                 // LoaderFlags
+        this.w32(file, 16);                // NumberOfRvaAndSizes
+
+        // Data directories (16 * 8 = 128 bytes)
+        this.w32(file, 0); this.w32(file, 0);          // [0] exports
+        this.w32(file, rdataRVA + idtOff);              // [1] import table RVA
+        this.w32(file, 40);                             // [1] import table size
+        Integer dd = 2;
+        while (dd < 16) { this.w32(file, 0); this.w32(file, 0); dd = dd + 1; }
+
+        // --- Section table: .text (40 bytes) ---
+        this.wSectionName(file, ".text");
+        this.w32(file, textVirtSize);         // VirtualSize
+        this.w32(file, this.textRVA);         // VirtualAddress
+        this.w32(file, textFileSize);         // SizeOfRawData
+        this.w32(file, textFileOff);          // PointerToRawData
+        this.w32(file, 0);                    // PointerToRelocations
+        this.w32(file, 0);                    // PointerToLinenumbers
+        this.w16(file, 0); this.w16(file, 0); // NumberOfRelocs, NumberOfLinenums
+        this.w32(file, 0x60000020);           // Characteristics: code, exec, read
+
+        // --- Section table: .rdata (40 bytes) ---
+        this.wSectionName(file, ".rdata");
+        this.w32(file, rdataVirtSize);        // VirtualSize
+        this.w32(file, rdataRVA);             // VirtualAddress
+        this.w32(file, rdataFileSize);        // SizeOfRawData
+        this.w32(file, rdataFileOff);         // PointerToRawData
+        this.w32(file, 0);
+        this.w32(file, 0);
+        this.w16(file, 0); this.w16(file, 0);
+        this.w32(file, 0xC0000040);           // Characteristics: read+write+init_data
+
+        // Pad headers to fileAlign
+        this.wPad(file, this.fileAlign - file.length());
+
+        // --- .text section ---
+        Integer bi = 0;
+        while (bi < this.enc.buf.length()) {
+            file.append(this.enc.buf.get(bi) as Integer);
+            bi = bi + 1;
+        }
+        this.wPad(file, textFileSize - textVirtSize);
+
+        // --- .rdata section ---
+        Integer rdi = 0;
+        while (rdi < rdata.length()) {
+            file.append(rdata.get(rdi) as Integer);
+            rdi = rdi + 1;
+        }
+        this.wPad(file, rdataFileSize - rdata.length());
+
+        return file;
+    }
+
+    public writeTo(path: String, bytes: List<Integer>) {
+        RawPtr<Void> f = fopen(path, "wb");
+        if (f == null) { return; }
+        Integer i = 0;
+        while (i < bytes.length()) {
+            Integer b = bytes.get(i) as Integer;
+            fputc(b, f);
+            i = i + 1;
+        }
+        fclose(f);
+    }
+}
