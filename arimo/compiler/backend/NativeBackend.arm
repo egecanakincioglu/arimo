@@ -71,7 +71,6 @@ public class NativeBackend {
             irx.emitFunction(fn);
             fi = fi + 1;
         }
-
         List<Integer> peBytes = this.pe.build(entryOff);
         this.pe.writeTo(outPath, peBytes);
     }

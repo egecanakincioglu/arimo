@@ -1,0 +1,7 @@
+package test;
+
+public class Return42 {
+    public static main() : Integer {
+        return 42;
+    }
+}

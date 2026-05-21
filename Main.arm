@@ -60,6 +60,7 @@ import arimo.compiler.parser.Parser;
 import arimo.compiler.typechecker.ScopeFrame;
 import arimo.compiler.typechecker.TypeChecker;
 import arimo.compiler.codegen.CodeGen;
+import arimo.compiler.backend.NativeBackend;
 import arimo.fs.File;
 import arimo.process.Process;
 
@@ -145,6 +146,7 @@ public class Main {
         String stdlibPath = "";
         Boolean emitIR    = false;
         Boolean checkOnly = false;
+        Boolean useNative = false;
 
         String line0 = IO.read();
         if (line0 != null && line0.length() > 0) {
@@ -160,8 +162,9 @@ public class Main {
         String next = IO.read();
         while (next != null && next.length() > 0) {
             String flag = next.trim();
-            if (flag == "--emit-ir")  { emitIR   = true; }
-            if (flag == "--check")    { checkOnly = true; }
+            if (flag == "--emit-ir")  { emitIR    = true; }
+            if (flag == "--check")    { checkOnly  = true; }
+            if (flag == "--native")   { useNative  = true; }
             if (flag == "--stdlib-path") {
                 String sp = IO.read();
                 if (sp != null && sp.length() > 0) { stdlibPath = sp.trim(); }
@@ -280,6 +283,17 @@ public class Main {
             return;
         }
 
+        String stem    = Main.resolveOutStem(inputPath);
+        String exeFile = stem.concat(".exe");
+
+        if (useNative) {
+            IO.println("arc: generating native code...");
+            NativeBackend nb = NativeBackend();
+            nb.compile(modules, exeFile);
+            IO.println("arc: done -> ${exeFile}");
+            return;
+        }
+
         IO.println("arc: generating LLVM IR...");
         CodeGen cg = CodeGen(tc);
         String ir = cg.generateAll(modules);
@@ -289,10 +303,8 @@ public class Main {
             return;
         }
 
-        String stem    = Main.resolveOutStem(inputPath);
         String llFile  = stem.concat(".ll");
         String objFile = stem.concat(".o");
-        String exeFile = stem.concat(".exe");
 
         IO.println("arc: writing ${llFile}");
         File.write(llFile, ir);

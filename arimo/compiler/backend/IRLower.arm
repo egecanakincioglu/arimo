@@ -431,6 +431,12 @@ public class IRLower {
     }
 
     private lowerMethodCall(obj: Expr, method: String, args: List<Expr>) : IRValue {
+        if (obj.kind == ExprKind.IDENT) {
+            String objName = obj.strVal;
+            if (objName == "IO") {
+                return this.lowerStaticCall("IO", method, args);
+            }
+        }
         IRValue objVal = this.lowerExpr(obj);
         List<IRValue> callArgsMC = List();
         callArgsMC.append(objVal);
@@ -488,13 +494,18 @@ public class IRLower {
         this.addParamToLast("str", IRType.PTR);
         this.emit(IRInstr.label("entry"));
 
+        // Save str param immediately (RCX will be clobbered by GetStdHandle call)
+        IRValue strSaved = IRValue.reg("str_saved", IRType.PTR);
+        this.emit(IRInstr.mov(strSaved, IRValue.reg("str", IRType.PTR)));
+
         String nlName = this.internStr("\n");
         IRValue hDst = IRValue.reg("ph_h", IRType.I64);
         List<IRValue> hsArgs = List();
         hsArgs.append(IRValue.ofInt(-11, IRType.I64));
-        this.emit(IRInstr.call(hDst, "GetStdHandle", hsArgs));
+        this.emit(IRInstr.call(hDst, "__ext__GetStdHandle", hsArgs));
 
-        IRValue strPtr = IRValue.reg("str", IRType.PTR);
+        IRValue strPtr = IRValue.reg("str_saved", IRType.PTR);
+        IRValue hRef  = IRValue.reg("ph_h", IRType.I64);
 
         String lenReg = "plen";
         IRValue lenDst = IRValue.reg(lenReg, IRType.I64);
@@ -502,24 +513,32 @@ public class IRLower {
         lenArgs.append(strPtr);
         this.emit(IRInstr.call(lenDst, "__arimo_strlen", lenArgs));
 
+        // Allocate stack slot for lpNumberOfBytesWritten (cannot be NULL for sync write)
+        IRValue bwPtr = IRValue.reg("bwPtr", IRType.PTR);
+        this.emit(IRInstr.alloc(bwPtr, 4));
+
+        IRValue hRef2  = IRValue.reg("ph_h", IRType.I64);
+        IRValue lenRef = IRValue.reg("plen", IRType.I64);
         List<IRValue> wfArgs = List();
-        wfArgs.append(hDst);
+        wfArgs.append(hRef2);
         wfArgs.append(strPtr);
-        wfArgs.append(lenDst);
-        wfArgs.append(IRValue.ofInt(0, IRType.I64));
+        wfArgs.append(lenRef);
+        wfArgs.append(IRValue.reg("bwPtr", IRType.PTR));
         wfArgs.append(IRValue.ofInt(0, IRType.I64));
         IRValue wfDst = IRValue.reg("pwf", IRType.VOID);
-        this.emit(IRInstr.call(wfDst, "WriteFile", wfArgs));
+        this.emit(IRInstr.call(wfDst, "__ext__WriteFile", wfArgs));
 
         if (addNewline) {
+            IRValue hRef3 = IRValue.reg("ph_h", IRType.I64);
+            IRValue bwPtr2 = IRValue.reg("bwPtr", IRType.PTR);
             List<IRValue> wfArgs2 = List();
-            wfArgs2.append(hDst);
+            wfArgs2.append(hRef3);
             wfArgs2.append(IRValue.global(nlName));
             wfArgs2.append(IRValue.ofInt(1, IRType.I64));
-            wfArgs2.append(IRValue.ofInt(0, IRType.I64));
+            wfArgs2.append(bwPtr2);
             wfArgs2.append(IRValue.ofInt(0, IRType.I64));
             IRValue wfDst2 = IRValue.reg("pwf2", IRType.VOID);
-            this.emit(IRInstr.call(wfDst2, "WriteFile", wfArgs2));
+            this.emit(IRInstr.call(wfDst2, "__ext__WriteFile", wfArgs2));
         }
         this.emit(IRInstr.retVoid());
     }
@@ -528,21 +547,27 @@ public class IRLower {
         this.beginFn("__arimo_strlen", IRType.I64);
         this.addParamToLast("s", IRType.PTR);
         this.emit(IRInstr.label("entry"));
+        // Save "s" to sBase before the loop so its interval spans the entire loop body
+        // This prevents RegAlloc from assigning sBase the same register as "ch"
+        IRValue sBase = IRValue.reg("sBase", IRType.PTR);
+        this.emit(IRInstr.mov(sBase, IRValue.reg("s", IRType.PTR)));
         IRValue cnt = IRValue.reg("cnt", IRType.I64);
         this.emit(IRInstr.mov(cnt, IRValue.ofInt(0, IRType.I64)));
         this.emit(IRInstr.label("strlen_loop"));
-        IRValue ptr = IRValue.reg("s", IRType.PTR);
         IRValue idx = IRValue.reg("cidx", IRType.I64);
-        this.emit(IRInstr.binop(IROpcode.ADD, idx, ptr, cnt));
+        this.emit(IRInstr.binop(IROpcode.ADD, idx, IRValue.reg("sBase", IRType.PTR), IRValue.reg("cnt", IRType.I64)));
         IRValue ch = IRValue.reg("ch", IRType.I64);
-        this.emit(IRInstr.load(ch, idx, IRType.I64));
-        this.emit(IRInstr.cmp(ch, IRValue.ofInt(0, IRType.I64)));
+        this.emit(IRInstr.load(ch, IRValue.reg("cidx", IRType.I64), IRType.I8));
+        this.emit(IRInstr.cmp(IRValue.reg("ch", IRType.I64), IRValue.ofInt(0, IRType.I64)));
         this.emit(IRInstr.branch(IROpcode.JE, "strlen_done"));
         IRValue cnt2 = IRValue.reg("cnt", IRType.I64);
-        this.emit(IRInstr.binop(IROpcode.ADD, cnt2, cnt, IRValue.ofInt(1, IRType.I64)));
+        this.emit(IRInstr.binop(IROpcode.ADD, cnt2, IRValue.reg("cnt", IRType.I64), IRValue.ofInt(1, IRType.I64)));
+        // Dummy use of sBase at loop end — extends its interval past "ch", forcing different register
+        IRValue sKeep = IRValue.reg("sKeep", IRType.PTR);
+        this.emit(IRInstr.mov(sKeep, IRValue.reg("sBase", IRType.PTR)));
         this.emit(IRInstr.jmp("strlen_loop"));
         this.emit(IRInstr.label("strlen_done"));
-        this.emit(IRInstr.ret(cnt));
+        this.emit(IRInstr.ret(IRValue.reg("cnt", IRType.I64)));
     }
 
     private generateStartFn() {
@@ -558,7 +583,7 @@ public class IRLower {
         List<IRValue> exitArgs = List();
         exitArgs.append(mainResult);
         IRValue exitDst = IRValue.reg("ex", IRType.VOID);
-        this.emit(IRInstr.call(exitDst, "ExitProcess", exitArgs));
+        this.emit(IRInstr.call(exitDst, "__ext__ExitProcess", exitArgs));
         this.emit(IRInstr.retVoid());
     }
 

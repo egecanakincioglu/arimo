@@ -29,16 +29,18 @@ import arimo.compiler.backend.IRType;
 import arimo.compiler.backend.IROpcode;
 
 public class IRToX64 {
-    private enc     : X64Encoder;
-    private ra      : RegAlloc;
-    private curName : String;
-    private frame   : Integer;
+    private enc        : X64Encoder;
+    private ra         : RegAlloc;
+    private curName    : String;
+    private frame      : Integer;
+    private savedCount : Integer;
 
     public constructor(enc: X64Encoder, ra: RegAlloc) {
-        this.enc     = enc;
-        this.ra      = ra;
-        this.curName = "";
-        this.frame   = 0;
+        this.enc        = enc;
+        this.ra         = ra;
+        this.curName    = "";
+        this.frame      = 0;
+        this.savedCount = 0;
     }
 
     private argRegs() : List<Integer> {
@@ -51,7 +53,9 @@ public class IRToX64 {
     }
 
     private spillOff(slot: Integer) : Integer {
-        return -(slot + 1) * 8;
+        // Callee-saved pushes occupy [rbp-8]..[rbp-8*savedCount]
+        // Spill slots start below: [rbp-8*(savedCount+1)], [rbp-8*(savedCount+2)], ...
+        return -(this.savedCount + slot + 1) * 8;
     }
 
     private loadVal(val: IRValue) : Integer {
@@ -64,6 +68,10 @@ public class IRToX64 {
             if (pr >= 0) { return pr; }
             Integer slot = this.ra.spillSlot(val.name);
             this.enc.movRMem(X64Reg.R11, X64Reg.RBP, this.spillOff(slot));
+            return X64Reg.R11;
+        }
+        if (val.kind == IRValueKind.GLOBAL) {
+            this.enc.leaRip(X64Reg.R11, val.name);
             return X64Reg.R11;
         }
         this.enc.xorZero(X64Reg.R11);
@@ -80,6 +88,10 @@ public class IRToX64 {
             if (pr >= 0) { return pr; }
             Integer slot = this.ra.spillSlot(val.name);
             this.enc.movRMem(X64Reg.R10, X64Reg.RBP, this.spillOff(slot));
+            return X64Reg.R10;
+        }
+        if (val.kind == IRValueKind.GLOBAL) {
+            this.enc.leaRip(X64Reg.R10, val.name);
             return X64Reg.R10;
         }
         this.enc.xorZero(X64Reg.R10);
@@ -136,19 +148,73 @@ public class IRToX64 {
         this.flushDst(instr.dst.name, dr);
     }
 
+    private collectCalleeSaved() : List<Integer> {
+        List<Integer> used = List();
+        Integer i = 0;
+        while (i < this.ra.ivals.length()) {
+            LiveInterval iv = this.ra.ivals.get(i) as LiveInterval;
+            if (iv.reg >= 0 && X64Reg.isCalleeSaved(iv.reg)) {
+                Boolean found = false;
+                Integer j = 0;
+                while (j < used.length()) {
+                    Integer u = used.get(j) as Integer;
+                    if (u == iv.reg) { found = true; }
+                    j = j + 1;
+                }
+                if (!found) { used.append(iv.reg); }
+            }
+            i = i + 1;
+        }
+        return used;
+    }
+
     public emitFunction(fn: IRFunction) {
         this.ra.allocate(fn);
         Integer spillBytes = this.ra.totalSpillBytes() * 8;
-        Integer frameSize  = spillBytes + 32;
-        Integer rem = frameSize % 16;
-        if (rem != 0) { frameSize = frameSize + (16 - rem); }
-        this.frame   = frameSize;
-        this.curName = fn.name;
+
+        // Collect callee-saved registers used by this function
+        List<Integer> calleeSaved = this.collectCalleeSaved();
+        Integer N = calleeSaved.length();
+
+        // Frame must satisfy: 8*N + frameSize ≡ 0 (mod 16)
+        Integer frameRaw = spillBytes + 32;
+        Integer needMod = (8 * N + frameRaw) % 16;
+        Integer frameSize = frameRaw;
+        if (needMod != 0) { frameSize = frameRaw + (16 - needMod); }
+
+        this.frame      = frameSize;
+        this.curName    = fn.name;
+        this.savedCount = N;
 
         this.enc.defineLabel(fn.name);
         this.enc.pushR(X64Reg.RBP);
         this.enc.movRR(X64Reg.RBP, X64Reg.RSP);
+
+        // Save callee-saved registers (Microsoft x64 ABI requirement)
+        Integer ci = 0;
+        while (ci < N) {
+            Integer cr = calleeSaved.get(ci) as Integer;
+            this.enc.pushR(cr);
+            ci = ci + 1;
+        }
+
         if (frameSize > 0) { this.enc.subRI(X64Reg.RSP, frameSize); }
+
+        // Save incoming parameters from arg regs to their allocated physical regs
+        List<Integer> paramArgRegs = this.argRegs();
+        Integer pi = 0;
+        while (pi < fn.params.length() && pi < 4) {
+            IRParam param = fn.params.get(pi) as IRParam;
+            Integer argReg  = paramArgRegs.get(pi) as Integer;
+            Integer physR   = this.ra.physReg(param.name);
+            if (physR >= 0) {
+                if (physR != argReg) { this.enc.movRR(physR, argReg); }
+            } else {
+                Integer slot = this.ra.spillSlot(param.name);
+                if (slot >= 0) { this.enc.movMemR(X64Reg.RBP, this.spillOff(slot), argReg); }
+            }
+            pi = pi + 1;
+        }
 
         Integer i = 0;
         while (i < fn.instrs.length()) {
@@ -159,6 +225,15 @@ public class IRToX64 {
 
         this.enc.defineLabel("${fn.name}__epilog");
         if (frameSize > 0) { this.enc.addRI(X64Reg.RSP, frameSize); }
+
+        // Restore callee-saved registers in reverse order
+        Integer ri = N - 1;
+        while (ri >= 0) {
+            Integer rr = calleeSaved.get(ri) as Integer;
+            this.enc.popR(rr);
+            ri = ri - 1;
+        }
+
         this.enc.popR(X64Reg.RBP);
         this.enc.ret();
     }
@@ -232,17 +307,10 @@ public class IRToX64 {
         }
 
         if (op == IROpcode.ALLOC) {
-            // Stack alloc: dst = RBP + offset
-            // We just store the rbp-relative address in dst
-            // The spill slot for the alloc result holds the pointer offset
-            // For simplicity: treat ALLOC as LEA dst, [rbp + spillOff(dst_slot)]
-            // This requires dst to be spilled to give it a fixed stack location
-            // OR: use a dedicated stack slot tracked separately
-            // For now: just use a fixed slot below the spill area
+            // Use shadow space [RSP+0] as the allocation target — always writable,
+            // never read back by caller, safe for out-params like lpNumberOfBytesWritten
             Integer dr = this.dstReg(instr.dst.name);
-            Integer slotCount = this.ra.totalSpillBytes();
-            Integer allocOff  = -(slotCount + 1) * 8 - 8;
-            this.enc.leaMem(dr, X64Reg.RBP, allocOff);
+            this.enc.leaMem(dr, X64Reg.RSP, 0);
             this.flushDst(instr.dst.name, dr);
             return;
         }
@@ -251,7 +319,11 @@ public class IRToX64 {
             IRValue ptr = instr.operands.get(0) as IRValue;
             Integer pr  = this.loadVal(ptr);
             Integer dr  = this.dstReg(instr.dst.name);
-            this.enc.movRMemBase(dr, pr);
+            if (instr.ty == IRType.I8) {
+                this.enc.movzxByteMem(dr, pr);
+            } else {
+                this.enc.movRMemBase(dr, pr);
+            }
             this.flushDst(instr.dst.name, dr);
             return;
         }
@@ -314,9 +386,33 @@ public class IRToX64 {
                 }
                 ai = ai + 1;
             }
-            // TODO: stack args for argc > 4
-            String thunkLabel = "${instr.label}__thunk";
-            this.enc.callRel(thunkLabel);
+            // Stack args for argc > 4 (5th+ args go at [RSP+32], [RSP+40], ...)
+            Integer sai = 4;
+            while (sai < argc) {
+                IRValue sarg = instr.operands.get(sai) as IRValue;
+                Integer soff = 32 + (sai - 4) * 8;
+                if (sarg.kind == IRValueKind.IMM_INT) {
+                    this.enc.movRI(X64Reg.RAX, sarg.immInt);
+                    this.enc.movMemR(X64Reg.RSP, soff, X64Reg.RAX);
+                } else if (sarg.kind == IRValueKind.REG) {
+                    Integer spr = this.ra.physReg(sarg.name);
+                    if (spr >= 0) { this.enc.movMemR(X64Reg.RSP, soff, spr); }
+                    else {
+                        Integer ssl = this.ra.spillSlot(sarg.name);
+                        this.enc.movRMem(X64Reg.RAX, X64Reg.RBP, this.spillOff(ssl));
+                        this.enc.movMemR(X64Reg.RSP, soff, X64Reg.RAX);
+                    }
+                }
+                sai = sai + 1;
+            }
+            String callTarget = "";
+            if (instr.label.startsWith("__ext__")) {
+                String extName = instr.label.substring(7, instr.label.length());
+                callTarget = "${extName}__thunk";
+            } else {
+                callTarget = instr.label;
+            }
+            this.enc.callRel(callTarget);
             if (!instr.dst.isNone() && instr.dst.kind == IRValueKind.REG) {
                 this.storeDst(instr.dst.name, X64Reg.RAX);
             }
