@@ -1,0 +1,103 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+import arimo.compiler.backend.IRType;
+import arimo.compiler.backend.IRParam;
+import arimo.compiler.backend.IRInstr;
+import arimo.compiler.backend.IRValue;
+import arimo.compiler.backend.IRValueKind;
+
+public class IRFunction {
+    public name       : String;
+    public retTy      : Integer;
+    public params     : List<IRParam>;
+    public instrs     : List<IRInstr>;
+    public isExtern   : Boolean;
+    private regCount  : Integer;
+    private lblCount  : Integer;
+
+    public constructor(name: String, retTy: Integer) {
+        this.name      = name;
+        this.retTy     = retTy;
+        this.params    = List();
+        this.instrs    = List();
+        this.isExtern  = false;
+        this.regCount  = 0;
+        this.lblCount  = 0;
+    }
+
+    public static extern_(name: String, retTy: Integer) : IRFunction {
+        IRFunction f  = IRFunction(name, retTy);
+        f.isExtern    = true;
+        return f;
+    }
+
+    public addParam(name: String, ty: Integer) {
+        this.params.append(IRParam(name, ty));
+    }
+
+    public emit(instr: IRInstr) {
+        this.instrs.append(instr);
+    }
+
+    public newReg(ty: Integer) : IRValue {
+        Integer n   = this.regCount;
+        this.regCount = this.regCount + 1;
+        return IRValue.reg("r${n}", ty);
+    }
+
+    public newLabel(prefix: String) : String {
+        Integer n   = this.lblCount;
+        this.lblCount = this.lblCount + 1;
+        return "${prefix}${n}";
+    }
+
+    public dump() : String {
+        if (this.isExtern) {
+            String es = "extern fn @" + this.name + "(";
+            Integer ei = 0;
+            while (ei < this.params.length()) {
+                IRParam ep = this.params.get(ei) as IRParam;
+                if (ei > 0) { es = es + ", "; }
+                es = es + IRType.name(ep.ty);
+                ei = ei + 1;
+            }
+            es = es + ") -> " + IRType.name(this.retTy) + "\n";
+            return es;
+        }
+        String s = "fn @" + this.name + "(";
+        Integer i = 0;
+        while (i < this.params.length()) {
+            IRParam p = this.params.get(i) as IRParam;
+            if (i > 0) { s = s + ", "; }
+            s = s + p.emit();
+            i = i + 1;
+        }
+        s = s + ") -> " + IRType.name(this.retTy) + " {\n";
+        Integer j = 0;
+        while (j < this.instrs.length()) {
+            IRInstr instr = this.instrs.get(j) as IRInstr;
+            s = s + instr.emit() + "\n";
+            j = j + 1;
+        }
+        s = s + "}\n";
+        return s;
+    }
+}

@@ -1,0 +1,53 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+public class IRType {
+    public static readonly I8   : Integer = 1;
+    public static readonly I16  : Integer = 2;
+    public static readonly I32  : Integer = 3;
+    public static readonly I64  : Integer = 4;
+    public static readonly F32  : Integer = 5;
+    public static readonly F64  : Integer = 6;
+    public static readonly PTR  : Integer = 7;
+    public static readonly VOID : Integer = 8;
+
+    public static name(ty: Integer) : String {
+        if (ty == IRType.I8)   { return "i8"; }
+        if (ty == IRType.I16)  { return "i16"; }
+        if (ty == IRType.I32)  { return "i32"; }
+        if (ty == IRType.I64)  { return "i64"; }
+        if (ty == IRType.F32)  { return "f32"; }
+        if (ty == IRType.F64)  { return "f64"; }
+        if (ty == IRType.PTR)  { return "ptr"; }
+        if (ty == IRType.VOID) { return "void"; }
+        return "?";
+    }
+
+    public static byteSize(ty: Integer) : Integer {
+        if (ty == IRType.I8)            { return 1; }
+        if (ty == IRType.I16)           { return 2; }
+        if (ty == IRType.I32)           { return 4; }
+        if (ty == IRType.I64)           { return 8; }
+        if (ty == IRType.F32)           { return 4; }
+        if (ty == IRType.F64)           { return 8; }
+        if (ty == IRType.PTR)           { return 8; }
+        return 0;
+    }
+}

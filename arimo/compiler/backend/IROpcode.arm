@@ -1,0 +1,100 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+public class IROpcode {
+    public static readonly ADD   : Integer = 1;
+    public static readonly SUB   : Integer = 2;
+    public static readonly MUL   : Integer = 3;
+    public static readonly DIV   : Integer = 4;
+    public static readonly MOD   : Integer = 5;
+    public static readonly AND   : Integer = 6;
+    public static readonly OR    : Integer = 7;
+    public static readonly XOR   : Integer = 8;
+    public static readonly SHL   : Integer = 9;
+    public static readonly SHR   : Integer = 10;
+    public static readonly NEG   : Integer = 11;
+    public static readonly NOT   : Integer = 12;
+
+    public static readonly CMP   : Integer = 13;
+
+    public static readonly LABEL : Integer = 14;
+    public static readonly JMP   : Integer = 15;
+    public static readonly JE    : Integer = 16;
+    public static readonly JNE   : Integer = 17;
+    public static readonly JG    : Integer = 18;
+    public static readonly JL    : Integer = 19;
+    public static readonly JGE   : Integer = 20;
+    public static readonly JLE   : Integer = 21;
+    public static readonly JZ    : Integer = 22;
+    public static readonly JNZ   : Integer = 23;
+
+    public static readonly ALLOC : Integer = 24;
+    public static readonly LOAD  : Integer = 25;
+    public static readonly STORE : Integer = 26;
+
+    public static readonly CALL  : Integer = 27;
+    public static readonly RET   : Integer = 28;
+
+    public static readonly ZEXT  : Integer = 29;
+    public static readonly SEXT  : Integer = 30;
+    public static readonly TRUNC : Integer = 31;
+    public static readonly ITOP  : Integer = 32;
+    public static readonly PTOI  : Integer = 33;
+
+    public static readonly MOV   : Integer = 34;
+
+    public static name(op: Integer) : String {
+        if (op == IROpcode.ADD)   { return "add"; }
+        if (op == IROpcode.SUB)   { return "sub"; }
+        if (op == IROpcode.MUL)   { return "mul"; }
+        if (op == IROpcode.DIV)   { return "div"; }
+        if (op == IROpcode.MOD)   { return "mod"; }
+        if (op == IROpcode.AND)   { return "and"; }
+        if (op == IROpcode.OR)    { return "or"; }
+        if (op == IROpcode.XOR)   { return "xor"; }
+        if (op == IROpcode.SHL)   { return "shl"; }
+        if (op == IROpcode.SHR)   { return "shr"; }
+        if (op == IROpcode.NEG)   { return "neg"; }
+        if (op == IROpcode.NOT)   { return "not"; }
+        if (op == IROpcode.CMP)   { return "cmp"; }
+        if (op == IROpcode.LABEL) { return "label"; }
+        if (op == IROpcode.JMP)   { return "jmp"; }
+        if (op == IROpcode.JE)    { return "je"; }
+        if (op == IROpcode.JNE)   { return "jne"; }
+        if (op == IROpcode.JG)    { return "jg"; }
+        if (op == IROpcode.JL)    { return "jl"; }
+        if (op == IROpcode.JGE)   { return "jge"; }
+        if (op == IROpcode.JLE)   { return "jle"; }
+        if (op == IROpcode.JZ)    { return "jz"; }
+        if (op == IROpcode.JNZ)   { return "jnz"; }
+        if (op == IROpcode.ALLOC) { return "alloc"; }
+        if (op == IROpcode.LOAD)  { return "load"; }
+        if (op == IROpcode.STORE) { return "store"; }
+        if (op == IROpcode.CALL)  { return "call"; }
+        if (op == IROpcode.RET)   { return "ret"; }
+        if (op == IROpcode.ZEXT)  { return "zext"; }
+        if (op == IROpcode.SEXT)  { return "sext"; }
+        if (op == IROpcode.TRUNC) { return "trunc"; }
+        if (op == IROpcode.ITOP)  { return "itop"; }
+        if (op == IROpcode.PTOI)  { return "ptoi"; }
+        if (op == IROpcode.MOV)   { return "mov"; }
+        return "?";
+    }
+}
