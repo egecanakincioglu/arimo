@@ -2,6 +2,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-v1.0.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/license-AGPL--3.0-darkred?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/compiler-arc-orange?style=flat-square" alt="compiler">
   <img src="https://img.shields.io/badge/extension-.arm-green?style=flat-square" alt="extension">
   <img src="https://img.shields.io/badge/memory-ARC%20%2B%20BorrowChecker%20%2B%20Manual-purple?style=flat-square" alt="memory">
@@ -496,7 +497,9 @@ Full language reference: **[documentation/index.md](documentation/index.md)**
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+GNU Affero General Public License v3.0 — see [LICENSE](LICENSE)
+
+Any use, modification, or distribution — including network services — must be released under the same AGPL-3.0 terms.
 
 ---
 
