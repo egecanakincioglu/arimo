@@ -1,0 +1,78 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+import arimo.compiler.ast.ArimoModule;
+import arimo.compiler.backend.IRLower;
+import arimo.compiler.backend.IRToX64;
+import arimo.compiler.backend.IRFunction;
+import arimo.compiler.backend.RegAlloc;
+import arimo.compiler.backend.X64Encoder;
+import arimo.compiler.backend.PEWriter;
+
+public class NativeBackend {
+    private lowerer : IRLower;
+    private enc     : X64Encoder;
+    private ra      : RegAlloc;
+    private pe      : PEWriter;
+
+    public constructor() {
+        this.lowerer = IRLower();
+        this.enc     = X64Encoder();
+        this.ra      = RegAlloc();
+        this.pe      = PEWriter(this.enc);
+        this.setupImports();
+    }
+
+    private setupImports() {
+        this.pe.addImport("ExitProcess");
+        this.pe.addImport("GetStdHandle");
+        this.pe.addImport("WriteFile");
+        this.pe.addImport("ReadFile");
+        this.pe.addImport("HeapAlloc");
+        this.pe.addImport("HeapFree");
+        this.pe.addImport("GetProcessHeap");
+    }
+
+    public compile(modules: List<ArimoModule>, outPath: String) {
+        this.lowerer.lower(modules);
+
+        Integer si = 0;
+        while (si < this.lowerer.strNames.length()) {
+            String nm = this.lowerer.strNames.get(si) as String;
+            String ct = this.lowerer.strConts.get(si) as String;
+            this.pe.addString(nm, ct);
+            si = si + 1;
+        }
+
+        IRToX64 irx = IRToX64(this.enc, this.ra);
+
+        Integer entryOff = 0;
+        Integer fi = 0;
+        while (fi < this.lowerer.irFns.length()) {
+            IRFunction fn = this.lowerer.irFns.get(fi) as IRFunction;
+            if (fn.name == "_start") { entryOff = this.enc.size(); }
+            irx.emitFunction(fn);
+            fi = fi + 1;
+        }
+
+        List<Integer> peBytes = this.pe.build(entryOff);
+        this.pe.writeTo(outPath, peBytes);
+    }
+}

@@ -1,0 +1,326 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+import arimo.compiler.backend.X64Reg;
+import arimo.compiler.backend.X64Encoder;
+import arimo.compiler.backend.RegAlloc;
+import arimo.compiler.backend.IRFunction;
+import arimo.compiler.backend.IRInstr;
+import arimo.compiler.backend.IRValue;
+import arimo.compiler.backend.IRValueKind;
+import arimo.compiler.backend.IRType;
+import arimo.compiler.backend.IROpcode;
+
+public class IRToX64 {
+    private enc     : X64Encoder;
+    private ra      : RegAlloc;
+    private curName : String;
+    private frame   : Integer;
+
+    public constructor(enc: X64Encoder, ra: RegAlloc) {
+        this.enc     = enc;
+        this.ra      = ra;
+        this.curName = "";
+        this.frame   = 0;
+    }
+
+    private argRegs() : List<Integer> {
+        List<Integer> r = List();
+        r.append(X64Reg.RCX);
+        r.append(X64Reg.RDX);
+        r.append(X64Reg.R8);
+        r.append(X64Reg.R9);
+        return r;
+    }
+
+    private spillOff(slot: Integer) : Integer {
+        return -(slot + 1) * 8;
+    }
+
+    private loadVal(val: IRValue) : Integer {
+        if (val.kind == IRValueKind.IMM_INT) {
+            this.enc.movRI(X64Reg.R11, val.immInt);
+            return X64Reg.R11;
+        }
+        if (val.kind == IRValueKind.REG) {
+            Integer pr = this.ra.physReg(val.name);
+            if (pr >= 0) { return pr; }
+            Integer slot = this.ra.spillSlot(val.name);
+            this.enc.movRMem(X64Reg.R11, X64Reg.RBP, this.spillOff(slot));
+            return X64Reg.R11;
+        }
+        this.enc.xorZero(X64Reg.R11);
+        return X64Reg.R11;
+    }
+
+    private loadVal2(val: IRValue) : Integer {
+        if (val.kind == IRValueKind.IMM_INT) {
+            this.enc.movRI(X64Reg.R10, val.immInt);
+            return X64Reg.R10;
+        }
+        if (val.kind == IRValueKind.REG) {
+            Integer pr = this.ra.physReg(val.name);
+            if (pr >= 0) { return pr; }
+            Integer slot = this.ra.spillSlot(val.name);
+            this.enc.movRMem(X64Reg.R10, X64Reg.RBP, this.spillOff(slot));
+            return X64Reg.R10;
+        }
+        this.enc.xorZero(X64Reg.R10);
+        return X64Reg.R10;
+    }
+
+    private storeDst(name: String, srcReg: Integer) {
+        Integer pr = this.ra.physReg(name);
+        if (pr >= 0) {
+            if (pr != srcReg) { this.enc.movRR(pr, srcReg); }
+        } else {
+            Integer slot = this.ra.spillSlot(name);
+            this.enc.movMemR(X64Reg.RBP, this.spillOff(slot), srcReg);
+        }
+    }
+
+    private dstReg(name: String) : Integer {
+        Integer pr = this.ra.physReg(name);
+        if (pr >= 0) { return pr; }
+        return X64Reg.RAX;
+    }
+
+    private flushDst(name: String, used: Integer) {
+        Integer pr = this.ra.physReg(name);
+        if (pr < 0) {
+            Integer slot = this.ra.spillSlot(name);
+            this.enc.movMemR(X64Reg.RBP, this.spillOff(slot), used);
+        }
+    }
+
+    private emitBinop(op: Integer, instr: IRInstr) {
+        IRValue a = instr.operands.get(0) as IRValue;
+        IRValue b = instr.operands.get(1) as IRValue;
+        Integer ra = this.loadVal(a);
+        Integer rb = this.loadVal2(b);
+        Integer dr = this.dstReg(instr.dst.name);
+
+        if (ra != dr) { this.enc.movRR(dr, ra); }
+        if (op == IROpcode.ADD) { this.enc.addRR(dr, rb); }
+        if (op == IROpcode.SUB) { this.enc.subRR(dr, rb); }
+        if (op == IROpcode.AND) { this.enc.andRR(dr, rb); }
+        if (op == IROpcode.OR)  { this.enc.orRR(dr, rb);  }
+        if (op == IROpcode.XOR) { this.enc.xorRR(dr, rb); }
+        if (op == IROpcode.MUL) { this.enc.imulRR(dr, rb); }
+        if (op == IROpcode.SHL) { this.enc.movRR(X64Reg.RCX, rb); this.enc.shlRCL(dr); }
+        if (op == IROpcode.SHR) { this.enc.movRR(X64Reg.RCX, rb); this.enc.shrRCL(dr); }
+        if (op == IROpcode.DIV || op == IROpcode.MOD) {
+            this.enc.movRR(X64Reg.RAX, dr);
+            this.enc.cqo();
+            this.enc.idivR(rb);
+            if (op == IROpcode.DIV) { this.enc.movRR(dr, X64Reg.RAX); }
+            else                    { this.enc.movRR(dr, X64Reg.RDX); }
+        }
+        this.flushDst(instr.dst.name, dr);
+    }
+
+    public emitFunction(fn: IRFunction) {
+        this.ra.allocate(fn);
+        Integer spillBytes = this.ra.totalSpillBytes() * 8;
+        Integer frameSize  = spillBytes + 32;
+        Integer rem = frameSize % 16;
+        if (rem != 0) { frameSize = frameSize + (16 - rem); }
+        this.frame   = frameSize;
+        this.curName = fn.name;
+
+        this.enc.defineLabel(fn.name);
+        this.enc.pushR(X64Reg.RBP);
+        this.enc.movRR(X64Reg.RBP, X64Reg.RSP);
+        if (frameSize > 0) { this.enc.subRI(X64Reg.RSP, frameSize); }
+
+        Integer i = 0;
+        while (i < fn.instrs.length()) {
+            IRInstr instr = fn.instrs.get(i) as IRInstr;
+            this.emitInstr(instr);
+            i = i + 1;
+        }
+
+        this.enc.defineLabel("${fn.name}__epilog");
+        if (frameSize > 0) { this.enc.addRI(X64Reg.RSP, frameSize); }
+        this.enc.popR(X64Reg.RBP);
+        this.enc.ret();
+    }
+
+    private emitInstr(instr: IRInstr) {
+        Integer op = instr.op;
+
+        if (op == IROpcode.LABEL) { this.enc.defineLabel(instr.label); return; }
+        if (op == IROpcode.JMP)   { this.enc.jmp(instr.label); return; }
+        if (op == IROpcode.JE)    { this.enc.je(instr.label);  return; }
+        if (op == IROpcode.JNE)   { this.enc.jne(instr.label); return; }
+        if (op == IROpcode.JG)    { this.enc.jg(instr.label);  return; }
+        if (op == IROpcode.JL)    { this.enc.jl(instr.label);  return; }
+        if (op == IROpcode.JGE)   { this.enc.jge(instr.label); return; }
+        if (op == IROpcode.JLE)   { this.enc.jle(instr.label); return; }
+        if (op == IROpcode.JZ)    { this.enc.jz(instr.label);  return; }
+        if (op == IROpcode.JNZ)   { this.enc.jnz(instr.label); return; }
+
+        if (op == IROpcode.RET) {
+            if (instr.operands.length() > 0) {
+                IRValue rv = instr.operands.get(0) as IRValue;
+                Integer rr = this.loadVal(rv);
+                if (rr != X64Reg.RAX) { this.enc.movRR(X64Reg.RAX, rr); }
+            }
+            this.enc.jmp("${this.curName}__epilog");
+            return;
+        }
+
+        if (op == IROpcode.MOV) {
+            IRValue src = instr.operands.get(0) as IRValue;
+            Integer sr = this.loadVal(src);
+            this.storeDst(instr.dst.name, sr);
+            return;
+        }
+
+        if (op == IROpcode.ADD || op == IROpcode.SUB || op == IROpcode.MUL ||
+            op == IROpcode.DIV || op == IROpcode.MOD ||
+            op == IROpcode.AND || op == IROpcode.OR  || op == IROpcode.XOR ||
+            op == IROpcode.SHL || op == IROpcode.SHR) {
+            this.emitBinop(op, instr);
+            return;
+        }
+
+        if (op == IROpcode.NEG) {
+            IRValue src = instr.operands.get(0) as IRValue;
+            Integer sr = this.loadVal(src);
+            Integer dr = this.dstReg(instr.dst.name);
+            if (dr != sr) { this.enc.movRR(dr, sr); }
+            this.enc.negR(dr);
+            this.flushDst(instr.dst.name, dr);
+            return;
+        }
+
+        if (op == IROpcode.NOT) {
+            IRValue src = instr.operands.get(0) as IRValue;
+            Integer sr = this.loadVal(src);
+            Integer dr = this.dstReg(instr.dst.name);
+            if (dr != sr) { this.enc.movRR(dr, sr); }
+            this.enc.notR(dr);
+            this.flushDst(instr.dst.name, dr);
+            return;
+        }
+
+        if (op == IROpcode.CMP) {
+            IRValue a = instr.operands.get(0) as IRValue;
+            IRValue b = instr.operands.get(1) as IRValue;
+            Integer ra = this.loadVal(a);
+            Integer rb = this.loadVal2(b);
+            this.enc.cmpRR(ra, rb);
+            return;
+        }
+
+        if (op == IROpcode.ALLOC) {
+            // Stack alloc: dst = RBP + offset
+            // We just store the rbp-relative address in dst
+            // The spill slot for the alloc result holds the pointer offset
+            // For simplicity: treat ALLOC as LEA dst, [rbp + spillOff(dst_slot)]
+            // This requires dst to be spilled to give it a fixed stack location
+            // OR: use a dedicated stack slot tracked separately
+            // For now: just use a fixed slot below the spill area
+            Integer dr = this.dstReg(instr.dst.name);
+            Integer slotCount = this.ra.totalSpillBytes();
+            Integer allocOff  = -(slotCount + 1) * 8 - 8;
+            this.enc.leaMem(dr, X64Reg.RBP, allocOff);
+            this.flushDst(instr.dst.name, dr);
+            return;
+        }
+
+        if (op == IROpcode.LOAD) {
+            IRValue ptr = instr.operands.get(0) as IRValue;
+            Integer pr  = this.loadVal(ptr);
+            Integer dr  = this.dstReg(instr.dst.name);
+            this.enc.movRMemBase(dr, pr);
+            this.flushDst(instr.dst.name, dr);
+            return;
+        }
+
+        if (op == IROpcode.STORE) {
+            IRValue val = instr.operands.get(0) as IRValue;
+            IRValue ptr = instr.operands.get(1) as IRValue;
+            Integer vr  = this.loadVal(val);
+            Integer pr  = this.loadVal2(ptr);
+            this.enc.movMemBaseR(pr, vr);
+            return;
+        }
+
+        if (op == IROpcode.ITOP) {
+            IRValue src = instr.operands.get(0) as IRValue;
+            Integer sr  = this.loadVal(src);
+            Integer dr  = this.dstReg(instr.dst.name);
+            if (dr != sr) { this.enc.movRR(dr, sr); }
+            this.flushDst(instr.dst.name, dr);
+            return;
+        }
+
+        if (op == IROpcode.PTOI) {
+            IRValue src = instr.operands.get(0) as IRValue;
+            Integer sr  = this.loadVal(src);
+            Integer dr  = this.dstReg(instr.dst.name);
+            if (dr != sr) { this.enc.movRR(dr, sr); }
+            this.flushDst(instr.dst.name, dr);
+            return;
+        }
+
+        if (op == IROpcode.ZEXT || op == IROpcode.SEXT || op == IROpcode.TRUNC) {
+            IRValue src = instr.operands.get(0) as IRValue;
+            Integer sr  = this.loadVal(src);
+            Integer dr  = this.dstReg(instr.dst.name);
+            if (dr != sr) { this.enc.movRR(dr, sr); }
+            this.flushDst(instr.dst.name, dr);
+            return;
+        }
+
+        if (op == IROpcode.CALL) {
+            List<Integer> argRegsLocal = this.argRegs();
+            Integer argc = instr.operands.length();
+            Integer ai = 0;
+            while (ai < argc && ai < 4) {
+                IRValue arg = instr.operands.get(ai) as IRValue;
+                Integer areg = argRegsLocal.get(ai) as Integer;
+                if (arg.kind == IRValueKind.IMM_INT) {
+                    this.enc.movRI(areg, arg.immInt);
+                } else if (arg.kind == IRValueKind.REG) {
+                    Integer pr = this.ra.physReg(arg.name);
+                    if (pr >= 0) {
+                        if (pr != areg) { this.enc.movRR(areg, pr); }
+                    } else {
+                        Integer slot = this.ra.spillSlot(arg.name);
+                        this.enc.movRMem(areg, X64Reg.RBP, this.spillOff(slot));
+                    }
+                } else if (arg.kind == IRValueKind.GLOBAL) {
+                    this.enc.leaRip(areg, arg.name);
+                }
+                ai = ai + 1;
+            }
+            // TODO: stack args for argc > 4
+            String thunkLabel = "${instr.label}__thunk";
+            this.enc.callRel(thunkLabel);
+            if (!instr.dst.isNone() && instr.dst.kind == IRValueKind.REG) {
+                this.storeDst(instr.dst.name, X64Reg.RAX);
+            }
+            return;
+        }
+    }
+}
