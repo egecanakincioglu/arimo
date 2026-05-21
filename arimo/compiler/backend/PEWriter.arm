@@ -187,8 +187,10 @@ public class PEWriter {
             this.enc.emit8(0xFF);
             this.enc.emit8(0x25);
             // disp32 = IAT_entry_VA - (instr_end_VA)
-            // instr_end_VA = imageBase + textRVA + current_offset + 4 (after disp32)
-            Integer thunkEndOff = this.enc.size() + 4;  // offset of byte after disp32
+            // JMP [rip+disp32] = FF 25 disp32 = 6 bytes total
+            // RIP at execution = instrStart + 6
+            // instrStart = enc.size() - 2 (FF 25 already emitted)
+            Integer thunkEndOff = this.enc.size() + 4;  // enc.size()-2 + 6 = enc.size()+4 ✓
             Integer iatEntryVA  = this.imageBase + rdataRVA + iatOff + ti * 8;
             Integer instrEndVA  = this.imageBase + this.textRVA + thunkEndOff;
             Integer disp32      = iatEntryVA - instrEndVA;
@@ -284,10 +286,11 @@ public class PEWriter {
         List<Integer> file = List();
 
         // --- DOS stub (64 bytes) ---
-        // MZ signature
+        // MZ signature at offset 0
         this.w16(file, 0x5A4D);
-        this.wPad(file, 56);
-        // e_lfanew at offset 60 = 64 (0x40)
+        // zeros to offset 60 (58 bytes of padding after MZ)
+        this.wPad(file, 58);
+        // e_lfanew at offset 60 = 64 (0x40) — PE sig starts at byte 64
         this.w32(file, 64);
 
         // --- PE signature ---

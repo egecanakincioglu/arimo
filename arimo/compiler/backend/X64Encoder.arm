@@ -228,6 +228,18 @@ public class X64Encoder {
         this.modRM(3, dst, src);
     }
 
+    public movzxByteMem(dst: Integer, base: Integer) {
+        this.rexWRB(dst, base);
+        this.emit8(0x0F);
+        this.emit8(0xB6);
+        if (base == X64Reg.RSP || base == X64Reg.R12) {
+            this.modRM(0, dst, 4);
+            this.emit8(0x24);
+        } else {
+            this.modRM(0, dst, base);
+        }
+    }
+
     // ===== LEA =====
 
     public leaRip(dst: Integer, label: String) {
