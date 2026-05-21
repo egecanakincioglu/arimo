@@ -1,0 +1,70 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+import arimo.compiler.backend.IRType;
+
+public class IRGlobalKind {
+    public static readonly STR_CONST : Integer = 1;
+    public static readonly INT_VAR   : Integer = 2;
+    public static readonly BYTES     : Integer = 3;
+}
+
+public class IRGlobal {
+    public name     : String;
+    public kind     : Integer;
+    public ty       : Integer;
+    public initStr  : String;
+    public initInt  : Integer;
+    public byteSize : Integer;
+    public isConst  : Boolean;
+
+    public constructor(name: String, kind: Integer) {
+        this.name     = name;
+        this.kind     = kind;
+        this.ty       = IRType.PTR;
+        this.initStr  = "";
+        this.initInt  = 0;
+        this.byteSize = 0;
+        this.isConst  = false;
+    }
+
+    public static strConst(name: String, content: String) : IRGlobal {
+        IRGlobal g  = IRGlobal(name, IRGlobalKind.STR_CONST);
+        g.initStr   = content;
+        g.byteSize  = content.length() + 1;
+        g.isConst   = true;
+        return g;
+    }
+
+    public static intVar(name: String, ty: Integer, init: Integer) : IRGlobal {
+        IRGlobal g = IRGlobal(name, IRGlobalKind.INT_VAR);
+        g.ty       = ty;
+        g.initInt  = init;
+        g.byteSize = IRType.byteSize(ty);
+        return g;
+    }
+
+    public static bytes(name: String, size: Integer, isConst: Boolean) : IRGlobal {
+        IRGlobal g  = IRGlobal(name, IRGlobalKind.BYTES);
+        g.byteSize  = size;
+        g.isConst   = isConst;
+        return g;
+    }
+}

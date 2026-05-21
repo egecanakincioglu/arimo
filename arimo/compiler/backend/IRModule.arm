@@ -1,0 +1,95 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+import arimo.compiler.backend.IRFunction;
+import arimo.compiler.backend.IRGlobal;
+import arimo.compiler.backend.IRType;
+
+public class IRModule {
+    public functions   : List<IRFunction>;
+    public globals     : List<IRGlobal>;
+    private strCounter : Integer;
+    private gblCounter : Integer;
+
+    public constructor() {
+        this.functions   = List();
+        this.globals     = List();
+        this.strCounter  = 0;
+        this.gblCounter  = 0;
+    }
+
+    public addFunction(fn: IRFunction) {
+        this.functions.append(fn);
+    }
+
+    public addGlobal(g: IRGlobal) {
+        this.globals.append(g);
+    }
+
+    public internStr(content: String) : String {
+        Integer n = this.strCounter;
+        this.strCounter = this.strCounter + 1;
+        String name = "__str${n}";
+        this.globals.append(IRGlobal.strConst(name, content));
+        return name;
+    }
+
+    public newGlobalName(prefix: String) : String {
+        Integer n = this.gblCounter;
+        this.gblCounter = this.gblCounter + 1;
+        return "${prefix}${n}";
+    }
+
+    public hasFunction(name: String) : Boolean {
+        Integer i = 0;
+        while (i < this.functions.length()) {
+            IRFunction f = this.functions.get(i) as IRFunction;
+            if (f.name == name) { return true; }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    public dump() : String {
+        String s = "; ArimoIR Module\n\n";
+        Integer i = 0;
+        while (i < this.globals.length()) {
+            IRGlobal g = this.globals.get(i) as IRGlobal;
+            if (g.kind == IRGlobalKind.STR_CONST) {
+                s = s + "global @${g.name} [${g.byteSize} x i8] = \"${g.initStr}\"\n";
+            }
+            if (g.kind == IRGlobalKind.INT_VAR) {
+                s = s + "global @${g.name} ${IRType.name(g.ty)} = ${g.initInt}\n";
+            }
+            if (g.kind == IRGlobalKind.BYTES) {
+                s = s + "global @${g.name} [${g.byteSize} x i8] zeroinit\n";
+            }
+            i = i + 1;
+        }
+        if (this.globals.length() > 0) { s = s + "\n"; }
+        Integer j = 0;
+        while (j < this.functions.length()) {
+            IRFunction f = this.functions.get(j) as IRFunction;
+            s = s + f.dump() + "\n";
+            j = j + 1;
+        }
+        return s;
+    }
+}

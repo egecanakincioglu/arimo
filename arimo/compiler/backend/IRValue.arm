@@ -1,0 +1,94 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+import arimo.compiler.backend.IRType;
+
+public class IRValueKind {
+    public static readonly NONE      : Integer = 0;
+    public static readonly REG       : Integer = 1;
+    public static readonly IMM_INT   : Integer = 2;
+    public static readonly IMM_FLOAT : Integer = 3;
+    public static readonly GLOBAL    : Integer = 4;
+    public static readonly LABEL_REF : Integer = 5;
+}
+
+public class IRValue {
+    public kind     : Integer;
+    public name     : String;
+    public immInt   : Integer;
+    public immFloat : Float;
+    public ty       : Integer;
+
+    public constructor(kind: Integer, ty: Integer) {
+        this.kind     = kind;
+        this.ty       = ty;
+        this.name     = "";
+        this.immInt   = 0;
+        this.immFloat = 0.0;
+    }
+
+    public static none() : IRValue {
+        return IRValue(IRValueKind.NONE, IRType.VOID);
+    }
+
+    public static reg(name: String, ty: Integer) : IRValue {
+        IRValue v = IRValue(IRValueKind.REG, ty);
+        v.name = name;
+        return v;
+    }
+
+    public static ofInt(val: Integer, ty: Integer) : IRValue {
+        IRValue v = IRValue(IRValueKind.IMM_INT, ty);
+        v.immInt = val;
+        return v;
+    }
+
+    public static ofFloat(val: Float, ty: Integer) : IRValue {
+        IRValue v = IRValue(IRValueKind.IMM_FLOAT, ty);
+        v.immFloat = val;
+        return v;
+    }
+
+    public static global(name: String) : IRValue {
+        IRValue v = IRValue(IRValueKind.GLOBAL, IRType.PTR);
+        v.name = name;
+        return v;
+    }
+
+    public static labelRef(name: String) : IRValue {
+        IRValue v = IRValue(IRValueKind.LABEL_REF, IRType.VOID);
+        v.name = name;
+        return v;
+    }
+
+    public isNone() : Boolean {
+        return this.kind == IRValueKind.NONE;
+    }
+
+    public emit() : String {
+        if (this.kind == IRValueKind.NONE)      { return "void"; }
+        if (this.kind == IRValueKind.REG)       { return "%" + this.name; }
+        if (this.kind == IRValueKind.IMM_INT)   { return "${this.immInt}${IRType.name(this.ty)}"; }
+        if (this.kind == IRValueKind.IMM_FLOAT) { return "${this.immFloat}${IRType.name(this.ty)}"; }
+        if (this.kind == IRValueKind.GLOBAL)    { return "@" + this.name; }
+        if (this.kind == IRValueKind.LABEL_REF) { return this.name; }
+        return "?";
+    }
+}

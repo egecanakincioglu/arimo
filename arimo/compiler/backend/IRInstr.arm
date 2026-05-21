@@ -1,0 +1,184 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+import arimo.compiler.backend.IROpcode;
+import arimo.compiler.backend.IRValue;
+import arimo.compiler.backend.IRType;
+
+public class IRInstr {
+    public op       : Integer;
+    public dst      : IRValue;
+    public operands : List<IRValue>;
+    public ty       : Integer;
+    public label    : String;
+
+    public constructor(op: Integer) {
+        this.op       = op;
+        this.dst      = IRValue.none();
+        this.operands = List();
+        this.ty       = IRType.VOID;
+        this.label    = "";
+    }
+
+    public static binop(op: Integer, dst: IRValue, a: IRValue, b: IRValue) : IRInstr {
+        IRInstr i = IRInstr(op);
+        i.ty  = dst.ty;
+        i.dst = dst;
+        i.operands.append(a);
+        i.operands.append(b);
+        return i;
+    }
+
+    public static unop(op: Integer, dst: IRValue, src: IRValue) : IRInstr {
+        IRInstr i = IRInstr(op);
+        i.ty  = dst.ty;
+        i.dst = dst;
+        i.operands.append(src);
+        return i;
+    }
+
+    public static mov(dst: IRValue, src: IRValue) : IRInstr {
+        IRInstr i = IRInstr(IROpcode.MOV);
+        i.ty  = dst.ty;
+        i.dst = dst;
+        i.operands.append(src);
+        return i;
+    }
+
+    public static cmp(a: IRValue, b: IRValue) : IRInstr {
+        IRInstr i = IRInstr(IROpcode.CMP);
+        i.ty = a.ty;
+        i.operands.append(a);
+        i.operands.append(b);
+        return i;
+    }
+
+    public static label(name: String) : IRInstr {
+        IRInstr i = IRInstr(IROpcode.LABEL);
+        i.label = name;
+        return i;
+    }
+
+    public static jmp(target: String) : IRInstr {
+        IRInstr i = IRInstr(IROpcode.JMP);
+        i.label = target;
+        return i;
+    }
+
+    public static branch(op: Integer, target: String) : IRInstr {
+        IRInstr i = IRInstr(op);
+        i.label = target;
+        return i;
+    }
+
+    public static alloc(dst: IRValue, size: Integer) : IRInstr {
+        IRInstr i = IRInstr(IROpcode.ALLOC);
+        i.ty  = dst.ty;
+        i.dst = dst;
+        i.operands.append(IRValue.ofInt(size, IRType.I64));
+        return i;
+    }
+
+    public static load(dst: IRValue, ptr: IRValue, ty: Integer) : IRInstr {
+        IRInstr i = IRInstr(IROpcode.LOAD);
+        i.ty  = ty;
+        i.dst = dst;
+        i.operands.append(ptr);
+        return i;
+    }
+
+    public static store(val: IRValue, ptr: IRValue, ty: Integer) : IRInstr {
+        IRInstr i = IRInstr(IROpcode.STORE);
+        i.ty = ty;
+        i.operands.append(val);
+        i.operands.append(ptr);
+        return i;
+    }
+
+    public static call(dst: IRValue, fnName: String, args: List<IRValue>) : IRInstr {
+        IRInstr i = IRInstr(IROpcode.CALL);
+        i.dst   = dst;
+        i.label = fnName;
+        Integer j = 0;
+        while (j < args.length()) {
+            i.operands.append(args.get(j) as IRValue);
+            j = j + 1;
+        }
+        return i;
+    }
+
+    public static ret(val: IRValue) : IRInstr {
+        IRInstr i = IRInstr(IROpcode.RET);
+        i.ty = val.ty;
+        i.operands.append(val);
+        return i;
+    }
+
+    public static retVoid() : IRInstr {
+        return IRInstr(IROpcode.RET);
+    }
+
+    public static conv(op: Integer, dst: IRValue, src: IRValue, toTy: Integer) : IRInstr {
+        IRInstr i = IRInstr(op);
+        i.ty  = toTy;
+        i.dst = dst;
+        i.operands.append(src);
+        return i;
+    }
+
+    public emit() : String {
+        String s = "";
+        if (this.op == IROpcode.LABEL) {
+            return this.label + ":";
+        }
+        if (!this.dst.isNone()) {
+            s = s + this.dst.emit() + " = ";
+        }
+        s = s + IROpcode.name(this.op);
+        if (this.op == IROpcode.JMP || this.op == IROpcode.JE || this.op == IROpcode.JNE ||
+            this.op == IROpcode.JG  || this.op == IROpcode.JL  || this.op == IROpcode.JGE ||
+            this.op == IROpcode.JLE || this.op == IROpcode.JZ  || this.op == IROpcode.JNZ) {
+            s = s + " " + this.label;
+            return "  " + s;
+        }
+        if (this.op == IROpcode.CALL) {
+            s = s + " @" + this.label;
+            Integer k = 0;
+            while (k < this.operands.length()) {
+                IRValue arg = this.operands.get(k) as IRValue;
+                s = s + ", " + arg.emit();
+                k = k + 1;
+            }
+            return "  " + s;
+        }
+        if (IRType.name(this.ty) != "void" && IRType.name(this.ty) != "?") {
+            s = s + " " + IRType.name(this.ty);
+        }
+        Integer m = 0;
+        while (m < this.operands.length()) {
+            IRValue op = this.operands.get(m) as IRValue;
+            if (m == 0) { s = s + " " + op.emit(); }
+            else        { s = s + ", " + op.emit(); }
+            m = m + 1;
+        }
+        if (this.label != "") { s = s + " -> " + this.label; }
+        return "  " + s;
+    }
+}
