@@ -40,8 +40,8 @@ public class CatchClause {
 
     public constructor(exTypes: List<AstType>, name: String, body: List<Stmt>) {
         this.exTypes = exTypes;
-        if (exTypes.length() > 0) {
-            this.exType = exTypes.get(0);
+        if (this.exTypes.length() > 0) {
+            this.exType = this.exTypes.get(0);
         }
         this.name = name;
         this.body = body;

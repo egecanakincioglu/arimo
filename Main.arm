@@ -63,6 +63,7 @@ import arimo.compiler.codegen.CodeGen;
 import arimo.compiler.backend.NativeBackend;
 import arimo.fs.File;
 import arimo.process.Process;
+import arimo.env.Env;
 
 public class Main {
 
@@ -85,10 +86,6 @@ public class Main {
         return stem;
     }
 
-    private static parseFlags(path: String) : Boolean {
-        return path == "--emit-ir";
-    }
-
     private static importToPath(imp: String) : String {
         String result = "";
         Integer i = 0;
@@ -109,13 +106,14 @@ public class Main {
         if (imp.startsWith("arimo.util."))     { return true; }
         if (imp.startsWith("arimo.lang."))     { return true; }
         if (imp.startsWith("arimo.env."))      { return true; }
+        if (imp.startsWith("arimo.math."))     { return true; }
         return false;
     }
 
     private static dirOf(path: String) : String {
         Integer lastSlash = path.indexOf("/");
         Integer lastBs    = path.indexOf("\\");
-        Integer sep = lastSlash;
+        Integer sep       = lastSlash;
         if (lastBs > sep) { sep = lastBs; }
         if (sep >= 0) { return path.substring(0, sep + 1); }
         return "";
@@ -130,6 +128,30 @@ public class Main {
         return false;
     }
 
+    private static parseTomlValue(toml: String, key: String) : String {
+        Integer ki = toml.indexOf(key);
+        if (ki < 0) { return ""; }
+        Integer eq = toml.indexOf("=", ki);
+        if (eq < 0) { return ""; }
+        Integer qs = toml.indexOf("\"", eq);
+        if (qs < 0) { return ""; }
+        Integer qe = toml.indexOf("\"", qs + 1);
+        if (qe < 0) { return ""; }
+        return toml.substring(qs + 1, qe);
+    }
+
+    private static indexOf(s: String, sub: String, from: Integer) : Integer {
+        Integer slen   = s.length();
+        Integer sublen = sub.length();
+        Integer i = from;
+        while (i <= slen - sublen) {
+            String slice = s.substring(i, i + sublen);
+            if (slice == sub) { return i; }
+            i++;
+        }
+        return -1;
+    }
+
     private static parseFileAt(path: String) : ArimoModule {
         String src = File.read(path);
         if (src == null || src.length() == 0) { return ArimoModule(""); }
@@ -139,46 +161,34 @@ public class Main {
         return px.parse();
     }
 
-    public static main() : Void {
-        IO.println("arc v1.1.0 — Arimo Stage 1 Compiler");
-
-        String inputPath  = "";
-        String stdlibPath = "";
-        Boolean emitIR    = false;
-        Boolean checkOnly = false;
-        Boolean useNative = false;
-
-        String line0 = IO.read();
-        if (line0 != null && line0.length() > 0) {
-            inputPath = line0.trim();
-        }
-
-        if (inputPath.length() == 0) {
-            IO.println("Usage:");
-            IO.println("  arc build              compile project (arc.toml)");
-            IO.println("  arc run                compile + run project");
-            IO.println("  arc check              type-check only");
-            IO.println("  arc init <name>        create new project");
-            IO.println("  arc <file.arm>         compile a single file");
-            IO.println("");
-            IO.println("Note: pipe file path to stdin when using Stage 1 directly:");
-            IO.println("  echo path/to/Main.arm | arc");
-            return;
-        }
-
-        String next = IO.read();
-        while (next != null && next.length() > 0) {
-            String flag = next.trim();
-            if (flag == "--emit-ir")  { emitIR    = true; }
-            if (flag == "--check")    { checkOnly  = true; }
-            if (flag == "--native")   { useNative  = true; }
-            if (flag == "--stdlib-path") {
-                String sp = IO.read();
-                if (sp != null && sp.length() > 0) { stdlibPath = sp.trim(); }
+    private static findStdlib(exePath: String) : String {
+        String exeDir = Main.dirOf(exePath);
+        if (exeDir.length() > 0) {
+            String candidate = exeDir.concat("stdlib");
+            if (File.exists(candidate.concat("/arimo/fs/File.arm"))) {
+                return candidate;
             }
-            next = IO.read();
         }
+        if (File.exists("/usr/local/lib/arimo/stdlib/arimo/fs/File.arm")) {
+            return "/usr/local/lib/arimo/stdlib";
+        }
+        return "";
+    }
 
+    private static printUsage() : Void {
+        IO.println("arc v1.1.0 — Arimo Stage 1 Compiler");
+        IO.println("");
+        IO.println("Usage:");
+        IO.println("  arc build              compile project (arc.toml)");
+        IO.println("  arc run                compile + run project");
+        IO.println("  arc check              type-check only");
+        IO.println("  arc <file.arm>         compile a single file");
+        IO.println("  arc <file.arm> --emit-ir   print LLVM IR");
+        IO.println("  arc <file.arm> --native    use native backend");
+        IO.println("  arc --stdlib-path <p> <file.arm>  set stdlib root");
+    }
+
+    private static compile(inputPath: String, stdlibPath: String, emitIR: Boolean, checkOnly: Boolean, useNative: Boolean, outName: String) : Void {
         if (!File.exists(inputPath)) {
             IO.error("arc: file not found: ${inputPath}");
             return;
@@ -290,7 +300,8 @@ public class Main {
             return;
         }
 
-        String stem    = Main.resolveOutStem(inputPath);
+        String stem    = outName;
+        if (stem.length() == 0) { stem = Main.resolveOutStem(inputPath); }
         String exeFile = stem.concat(".exe");
 
         if (useNative) {
@@ -333,5 +344,70 @@ public class Main {
         }
 
         IO.println("arc: done -> ${exeFile}");
+    }
+
+    public static main() : Void {
+        List<String> argv = Env.args();
+        Integer argc     = argv.length();
+
+        if (argc <= 1) {
+            Main.printUsage();
+            return;
+        }
+
+        String exePath   = Env.exePath();
+        String stdlibPath = Main.findStdlib(exePath);
+
+        String cmd       = argv.get(1);
+        Boolean emitIR   = false;
+        Boolean checkOnly = false;
+        Boolean useNative = false;
+        Boolean doRun     = false;
+
+        Integer fi = 2;
+        while (fi < argc) {
+            String flag = argv.get(fi);
+            if (flag == "--emit-ir")  { emitIR    = true; }
+            if (flag == "--check")    { checkOnly  = true; }
+            if (flag == "--native")   { useNative  = true; }
+            if (flag == "--stdlib-path") {
+                fi++;
+                if (fi < argc) { stdlibPath = argv.get(fi); }
+            }
+            fi++;
+        }
+
+        if (cmd == "build" || cmd == "run" || cmd == "check") {
+            if (cmd == "run")   { doRun     = true; }
+            if (cmd == "check") { checkOnly = true; }
+
+            if (!File.exists("arc.toml")) {
+                IO.error("arc: arc.toml not found — run from project root");
+                return;
+            }
+            String toml    = File.read("arc.toml");
+            String entry   = Main.parseTomlValue(toml, "entry");
+            String projName = Main.parseTomlValue(toml, "name");
+            if (entry.length() == 0) { entry = "Main.arm"; }
+            if (projName.length() == 0) { projName = "app"; }
+
+            IO.println("arc v1.1.0 — building '${projName}'");
+            Main.compile(entry, stdlibPath, emitIR, checkOnly, useNative, projName);
+
+            if (doRun && !checkOnly && !emitIR) {
+                IO.println("arc: running '${projName}.exe'...");
+                Process.exec(projName.concat(".exe"));
+            }
+            return;
+        }
+
+        if (cmd.endsWith(".arm")) {
+            IO.println("arc v1.1.0 — compiling '${cmd}'");
+            Main.compile(cmd, stdlibPath, emitIR, checkOnly, useNative, "");
+            return;
+        }
+
+        IO.error("arc: unknown command '${cmd}'");
+        Main.printUsage();
     }
 }
