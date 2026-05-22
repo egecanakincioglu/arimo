@@ -121,6 +121,6 @@ MathUtils.square(4.0);   // static call
 
 ## Related
 
-- [[classes]] — class structure
-- [[lambdas-and-closures]] — function types and lambda expressions
-- [[extension-methods]] — add methods to existing types
+- [classes](../language/classes.md) — class structure
+- [lambdas-and-closures](../language/lambdas-and-closures.md) — function types and lambda expressions
+- [extension-methods](../language/extension-methods.md) — add methods to existing types

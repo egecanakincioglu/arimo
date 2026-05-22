@@ -13,83 +13,83 @@ Arimo is a statically-typed, object-oriented systems programming language with a
 
 ## Getting Started
 
-- [[introduction]] — What Arimo is and why it exists
-- [[installation]] — Install `arc` and set up your environment
-- [[hello-world]] — Your first Arimo program
-- [[arc-toml]] — Project configuration file
+- [introduction](./getting-started/introduction.md) — What Arimo is and why it exists
+- [installation](./getting-started/installation.md) — Install `arc` and set up your environment
+- [hello-world](./getting-started/hello-world.md) — Your first Arimo program
+- [arc-toml](./getting-started/arc-toml.md) — Project configuration file
 
 ## Language
 
-- [[variables-and-types]] — Variables, primitive types, nullable types
-- [[operators]] — Arithmetic, logical, bitwise, null-safe operators
-- [[control-flow]] — `if`, `while`, `for`, `switch`, `match`
-- [[functions-and-methods]] — Methods, static methods, default parameters
-- [[classes]] — Class declaration, constructors, inheritance
-- [[interfaces]] — Interfaces and default method implementations
-- [[abstract-classes]] — Abstract classes
-- [[enums]] — Enumerations with and without associated data
-- [[structs]] — Stack-allocated value types
-- [[generics]] — Generic classes and bounded type parameters
-- [[lambdas-and-closures]] — Lambda expressions, closures, function types
-- [[exceptions]] — `try` / `catch` / `finally` / `throw`
-- [[null-safety]] — Nullable types, null-safe access, null coalescing
-- [[pattern-matching]] — `match` statement and pattern syntax
-- [[defer]] — Deferred execution
-- [[extension-methods]] — Extending types with `extend`
-- [[annotations]] — Built-in annotations
-- [[string-interpolation]] — String formatting and interpolation
-- [[type-casting]] — Explicit casts and type compatibility rules
-- [[async]] — `async` / `await` (parser support, v1.2.0 runtime)
+- [variables-and-types](./language/variables-and-types.md) — Variables, primitive types, nullable types
+- [operators](./language/operators.md) — Arithmetic, logical, bitwise, null-safe operators
+- [control-flow](./language/control-flow.md) — `if`, `while`, `for`, `switch`, `match`
+- [functions-and-methods](./language/functions-and-methods.md) — Methods, static methods, default parameters
+- [classes](./language/classes.md) — Class declaration, constructors, inheritance
+- [interfaces](./language/interfaces.md) — Interfaces and default method implementations
+- [abstract-classes](./language/abstract-classes.md) — Abstract classes
+- [enums](./language/enums.md) — Enumerations with and without associated data
+- [structs](./language/structs.md) — Stack-allocated value types
+- [generics](./language/generics.md) — Generic classes and bounded type parameters
+- [lambdas-and-closures](./language/lambdas-and-closures.md) — Lambda expressions, closures, function types
+- [exceptions](./language/exceptions.md) — `try` / `catch` / `finally` / `throw`
+- [null-safety](./language/null-safety.md) — Nullable types, null-safe access, null coalescing
+- [pattern-matching](./language/pattern-matching.md) — `match` statement and pattern syntax
+- [defer](./language/defer.md) — Deferred execution
+- [extension-methods](./language/extension-methods.md) — Extending types with `extend`
+- [annotations](./language/annotations.md) — Built-in annotations
+- [string-interpolation](./language/string-interpolation.md) — String formatting and interpolation
+- [type-casting](./language/type-casting.md) — Explicit casts and type compatibility rules
+- [async](./language/async.md) — `async` / `await` (parser support, v1.2.0 runtime)
 
 ## Memory
 
-- [[memory-model]] — Three-layer memory: BorrowChecker, ARC, GC
-- [[low-level]] — `RawPtr`, `Memory`, `extern "C"`, inline assembly
+- [memory-model](./memory/memory-model.md) — Three-layer memory: BorrowChecker, ARC, GC
+- [low-level](./memory/low-level.md) — `RawPtr`, `Memory`, `extern "C"`, inline assembly
 
 ## Collections
 
-- [[collections-overview]] — All collection types at a glance
-- [[list]] — `List<T>` — dynamic array
-- [[hashmap]] — `HashMap<K, V>` and `TreeMap<K, V>`
-- [[array]] — `Array<T, N>` — compile-time fixed-size, stack-allocated
-- [[slice]] — `Slice<T>` — non-owning view into memory
-- [[pair]] — `Pair<A, B>` — two-element tuple
-- [[result]] — `Result<T, E>` — success or error value
+- [collections-overview](./collections/collections-overview.md) — All collection types at a glance
+- [list](./collections/list.md) — `List<T>` — dynamic array
+- [hashmap](./collections/hashmap.md) — `HashMap<K, V>` and `TreeMap<K, V>`
+- [array](./collections/array.md) — `Array<T, N>` — compile-time fixed-size, stack-allocated
+- [slice](./collections/slice.md) — `Slice<T>` — non-owning view into memory
+- [pair](./collections/pair.md) — `Pair<A, B>` — two-element tuple
+- [result](./collections/result.md) — `Result<T, E>` — success or error value
 
 ## Standard Library
 
-- [[stdlib-overview]] — Package system and import rules
-- [[arimo-lang]] — `IO`, `Math`, `String`, `Integer`, `Float`, `Boolean`, `Char`, `StringBuilder`
-- [[arimo-fs]] — `File`, `Path`, `Directory`, `FileMode`
-- [[arimo-io]] — `InputStream`, `BufferedReader`, stream hierarchy
-- [[arimo-util]] — `ArrayList`, `Optional`, `Scanner`, `Random`
-- [[arimo-env]] — `Env`, `Process`
+- [stdlib-overview](./stdlib/stdlib-overview.md) — Package system and import rules
+- [arimo-lang](./stdlib/arimo-lang.md) — `IO`, `Math`, `String`, `Integer`, `Float`, `Boolean`, `Char`, `StringBuilder`
+- [arimo-fs](./stdlib/arimo-fs.md) — `File`, `Path`, `Directory`, `FileMode`
+- [arimo-io](./stdlib/arimo-io.md) — `InputStream`, `BufferedReader`, stream hierarchy
+- [arimo-util](./stdlib/arimo-util.md) — `ArrayList`, `Optional`, `Scanner`, `Random`
+- [arimo-env](./stdlib/arimo-env.md) — `Env`, `Process`
 
 ## CLI
 
-- [[arc-cli]] — `arc build`, `arc run`, `arc check`, `arc clean`, `arc init`
+- [arc-cli](./cli/arc-cli.md) — `arc build`, `arc run`, `arc check`, `arc clean`, `arc init`
 
 ## Reference
 
-- [[syntax-cheatsheet]] — One-page syntax quick reference
-- [[vs-java-typescript]] — Arimo vs Java vs TypeScript comparison
-- [[versioning]] — Semantic versioning and release history
+- [syntax-cheatsheet](./reference/syntax-cheatsheet.md) — One-page syntax quick reference
+- [vs-java-typescript](./reference/vs-java-typescript.md) — Arimo vs Java vs TypeScript comparison
+- [versioning](./reference/versioning.md) — Semantic versioning and release history
 
 ## Missing Features
 
 Features from TypeScript, C, C++, and Java not present in Arimo v1.0.0:
 
-- [[missing-features-overview]] — overview and navigation
-- [[type-system-advanced]] — Union types, intersection types, conditional/mapped types (TypeScript)
-- [[generics-advanced]] — Template specialization, SFINAE, concepts (C++)
-- [[type-narrowing]] — `instanceof` pattern matching, type predicates (TypeScript / Java)
-- [[compile-time]] — `constexpr`, `static_assert`, `if constexpr` (C++)
-- [[oop-advanced]] — Multiple inheritance, friend classes, nested classes, anonymous classes
-- [[memory-advanced]] — References, move semantics, bitfields, VLA (C/C++)
-- [[preprocessor]] — C macros, `#define`, `#ifdef`, conditional compilation
-- [[reflection]] — Reflection API, `Class<T>`, dynamic invocation (Java / TypeScript)
-- [[concurrency]] — Threads, `synchronized`, atomics, mutex (Java / C++)
-- [[checked-exceptions]] — Enforced checked exception declarations (Java)
-- [[syntax-sugar]] — Destructuring, spread, named params, labeled break, getters/setters
-- [[string-formatting]] — `String.format`, `printf`, regular expressions
-- [[modules-and-iteration]] — Import aliasing, custom iterable protocol, dependency management
+- [missing-features-overview](#) — overview and navigation
+- [type-system-advanced](#) — Union types, intersection types, conditional/mapped types (TypeScript)
+- [generics-advanced](#) — Template specialization, SFINAE, concepts (C++)
+- [type-narrowing](#) — `instanceof` pattern matching, type predicates (TypeScript / Java)
+- [compile-time](#) — `constexpr`, `static_assert`, `if constexpr` (C++)
+- [oop-advanced](#) — Multiple inheritance, friend classes, nested classes, anonymous classes
+- [memory-advanced](#) — References, move semantics, bitfields, VLA (C/C++)
+- [preprocessor](#) — C macros, `#define`, `#ifdef`, conditional compilation
+- [reflection](#) — Reflection API, `Class<T>`, dynamic invocation (Java / TypeScript)
+- [concurrency](#) — Threads, `synchronized`, atomics, mutex (Java / C++)
+- [checked-exceptions](#) — Enforced checked exception declarations (Java)
+- [syntax-sugar](#) — Destructuring, spread, named params, labeled break, getters/setters
+- [string-formatting](#) — `String.format`, `printf`, regular expressions
+- [modules-and-iteration](#) — Import aliasing, custom iterable protocol, dependency management

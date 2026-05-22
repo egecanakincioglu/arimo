@@ -72,6 +72,6 @@ v.data[0] = 1.0;
 
 ## Related
 
-- [[slice]] — non-owning view into an array
-- [[collections-overview]] — all collection types
-- [[low-level]] — `RawPtr` for manual arrays
+- [slice](../collections/slice.md) — non-owning view into an array
+- [collections-overview](../collections/collections-overview.md) — all collection types
+- [low-level](../memory/low-level.md) — `RawPtr` for manual arrays

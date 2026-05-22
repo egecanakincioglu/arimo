@@ -120,6 +120,6 @@ The `_` wildcard arm catches all unmatched cases. Without it, all enum variants 
 
 ## Related
 
-- [[enums]] — data-carrying enum variants
-- [[control-flow]] — `switch` statement
-- [[result]] — `Result<T, E>` matching
+- [enums](../language/enums.md) — data-carrying enum variants
+- [control-flow](../language/control-flow.md) — `switch` statement
+- [result](../collections/result.md) — `Result<T, E>` matching

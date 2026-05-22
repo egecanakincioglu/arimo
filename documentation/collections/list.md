@@ -105,5 +105,5 @@ IO.println("kind: ${t0.getKind()}  value: ${t0.getValue()}");
 
 ## Related
 
-- [[collections-overview]] — all collection types
-- [[lambdas-and-closures]] — lambda syntax for functional methods
+- [collections-overview](../collections/collections-overview.md) — all collection types
+- [lambdas-and-closures](../language/lambdas-and-closures.md) — lambda syntax for functional methods

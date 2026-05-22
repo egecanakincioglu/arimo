@@ -85,7 +85,7 @@ switch (priority) {
 
 ## match
 
-`match` is a pattern-matching expression that can return a value. See [[pattern-matching]] for full syntax.
+`match` is a pattern-matching expression that can return a value. See [pattern-matching](../language/pattern-matching.md) for full syntax.
 
 ```arm
 String desc = match shape {
@@ -105,6 +105,6 @@ String desc = match shape {
 
 ## Related
 
-- [[pattern-matching]] — full `match` reference
-- [[enums]] — enum pattern matching
-- [[operators]] — comparison operators used in conditions
+- [pattern-matching](../language/pattern-matching.md) — full `match` reference
+- [enums](../language/enums.md) — enum pattern matching
+- [operators](../language/operators.md) — comparison operators used in conditions

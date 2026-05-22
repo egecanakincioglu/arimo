@@ -87,6 +87,6 @@ Closures are implemented as fat pointers: a function pointer plus a heap-allocat
 
 ## Related
 
-- [[list]] — `filter`, `map`, `forEach`, `sortedBy`
-- [[functions-and-methods]] — regular method syntax
-- [[memory-model]] — closure capture lifetime
+- [list](../collections/list.md) — `filter`, `map`, `forEach`, `sortedBy`
+- [functions-and-methods](../language/functions-and-methods.md) — regular method syntax
+- [memory-model](../memory/memory-model.md) — closure capture lifetime

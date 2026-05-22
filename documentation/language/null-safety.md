@@ -76,6 +76,6 @@ public class User {
 
 ## Related
 
-- [[variables-and-types]] — nullable type syntax
-- [[operators]] — `?.` and `??` operator precedence
-- [[type-casting]] — casting nullable types
+- [variables-and-types](../language/variables-and-types.md) — nullable type syntax
+- [operators](../language/operators.md) — `?.` and `??` operator precedence
+- [type-casting](../language/type-casting.md) — casting nullable types

@@ -89,6 +89,6 @@ public static readConfig(path: String) : Result<String, String> {
 
 ## Related
 
-- [[exceptions]] — try/catch/throw
-- [[pattern-matching]] — `match` on Result
-- [[enums]] — Result is a generic enum
+- [exceptions](../language/exceptions.md) — try/catch/throw
+- [pattern-matching](../language/pattern-matching.md) — `match` on Result
+- [enums](../language/enums.md) — Result is a generic enum

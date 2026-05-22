@@ -118,7 +118,7 @@ Result<String, String> ok  = Result.Ok("success");
 Result<String, String> err = Result.Err("not found");
 ```
 
-See [[result]] for full API.
+See [result](../collections/result.md) for full API.
 
 ## LLVM Representation
 
@@ -126,6 +126,6 @@ Enum variants are stored as `i32` values internally. Data-carrying variants use 
 
 ## Related
 
-- [[pattern-matching]] — `match` with guards and binding
-- [[control-flow]] — `switch` on enums
-- [[result]] — `Result<T, E>`
+- [pattern-matching](../language/pattern-matching.md) — `match` with guards and binding
+- [control-flow](../language/control-flow.md) — `switch` on enums
+- [result](../collections/result.md) — `Result<T, E>`

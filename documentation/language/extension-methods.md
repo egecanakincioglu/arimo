@@ -90,5 +90,5 @@ Integer positive = n.abs();   // extension method
 
 ## Related
 
-- [[classes]] — regular method declaration
-- [[interfaces]] — `@FunctionalInterface` single-method contract
+- [classes](../language/classes.md) — regular method declaration
+- [interfaces](../language/interfaces.md) — `@FunctionalInterface` single-method contract

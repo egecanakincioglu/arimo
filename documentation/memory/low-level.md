@@ -145,6 +145,6 @@ No stdlib linked — not even `malloc`. For OS kernels and embedded targets with
 
 ## Related
 
-- [[memory-model]] — ARC vs manual memory
-- [[annotations]] — `@ManualMemory`, `@Section`, `@CallingConvention`
-- [[structs]] — `@Packed`, `@Align`, `union`
+- [memory-model](../memory/memory-model.md) — ARC vs manual memory
+- [annotations](../language/annotations.md) — `@ManualMemory`, `@Section`, `@CallingConvention`
+- [structs](../language/structs.md) — `@Packed`, `@Align`, `union`

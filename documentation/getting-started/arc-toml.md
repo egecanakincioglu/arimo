@@ -87,5 +87,5 @@ include = ["arimo.fs", "arimo.io", "arimo.util"]
 
 ## Related
 
-- [[arc-cli]] — `arc build`, `arc run`, `arc init`
-- [[stdlib-overview]] — available stdlib packages
+- [arc-cli](../cli/arc-cli.md) — `arc build`, `arc run`, `arc init`
+- [stdlib-overview](../stdlib/stdlib-overview.md) — available stdlib packages

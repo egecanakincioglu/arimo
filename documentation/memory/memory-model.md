@@ -63,7 +63,7 @@ public class Renderer {
 }
 ```
 
-See [[low-level]] for `Memory` and `RawPtr` API.
+See [low-level](../memory/low-level.md) for `Memory` and `RawPtr` API.
 
 ## Value Types (Structs)
 
@@ -84,6 +84,6 @@ volatile u32 status = 0;   // read always happens
 
 ## Related
 
-- [[low-level]] — `RawPtr`, `Memory`, inline assembly
-- [[structs]] — value types vs reference types
-- [[annotations]] — `@ManualMemory`, `@Immutable`
+- [low-level](../memory/low-level.md) — `RawPtr`, `Memory`, inline assembly
+- [structs](../language/structs.md) — value types vs reference types
+- [annotations](../language/annotations.md) — `@ManualMemory`, `@Immutable`

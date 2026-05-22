@@ -62,6 +62,6 @@ Circle c = s as Circle;
 
 ## Related
 
-- [[variables-and-types]] — primitive types and sized integers
-- [[null-safety]] — nullable type narrowing via smart cast
-- [[operators]] — `as` operator precedence
+- [variables-and-types](../language/variables-and-types.md) — primitive types and sized integers
+- [null-safety](../language/null-safety.md) — nullable type narrowing via smart cast
+- [operators](../language/operators.md) — `as` operator precedence

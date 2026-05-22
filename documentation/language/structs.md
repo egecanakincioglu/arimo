@@ -117,7 +117,7 @@ type Vec2 = Vec3;
 
 ## Related
 
-- [[annotations]] — `@Packed`, `@Align`, `@ForceInline`
-- [[classes]] — heap-allocated reference types
-- [[memory-model]] — ARC vs value types
-- [[low-level]] — union, raw memory
+- [annotations](../language/annotations.md) — `@Packed`, `@Align`, `@ForceInline`
+- [classes](../language/classes.md) — heap-allocated reference types
+- [memory-model](../memory/memory-model.md) — ARC vs value types
+- [low-level](../memory/low-level.md) — union, raw memory
