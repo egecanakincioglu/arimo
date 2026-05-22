@@ -1,0 +1,94 @@
+name: Release Linux
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to upload to (e.g. v1.0.0)"
+        required: true
+        default: "v1.0.0"
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout arimo (Stage 1 source)
+        uses: actions/checkout@v4
+        with:
+          path: arimo
+
+      - name: Checkout arimo-compiler (Stage 0)
+        uses: actions/checkout@v4
+        with:
+          repository: egecanakincioglu/arimo-compiler
+          path: arimo-compiler
+
+      - name: Install LLVM 21
+        run: |
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s 21
+          sudo apt-get install -y llvm-21-dev libclang-21-dev clang-21
+          echo "LLVM_SYS_210_PREFIX=/usr/lib/llvm-21" >> $GITHUB_ENV
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            arimo-compiler/target
+          key: linux-rust-${{ hashFiles('arimo-compiler/Cargo.lock') }}
+
+      - name: Build Stage 0 (arc compiler — Linux)
+        working-directory: arimo-compiler
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+      - name: Compile Stage 1 with Stage 0
+        working-directory: arimo
+        run: |
+          ARC0="../arimo-compiler/target/x86_64-unknown-linux-gnu/release/arc"
+          chmod +x "$ARC0"
+          "$ARC0" build
+          chmod +x arc
+
+      - name: Package Linux release
+        working-directory: arimo
+        run: |
+          mkdir -p dist/arimo-linux-x64/stdlib
+          cp arc dist/arimo-linux-x64/
+          cp -r ../arimo-compiler/stdlib/. dist/arimo-linux-x64/stdlib/
+          cat > dist/arimo-linux-x64/install.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          INSTALL_BIN="/usr/local/bin"
+          INSTALL_LIB="/usr/local/lib/arimo"
+
+          if [ "$(id -u)" -ne 0 ]; then
+            echo "Run with sudo: sudo ./install.sh"
+            exit 1
+          fi
+
+          cp arc "$INSTALL_BIN/arc"
+          chmod +x "$INSTALL_BIN/arc"
+          mkdir -p "$INSTALL_LIB"
+          cp -r stdlib "$INSTALL_LIB/"
+
+          echo "Arimo installed. Run: arc --version"
+          EOF
+          chmod +x dist/arimo-linux-x64/install.sh
+          cd dist
+          tar -czf arimo-${{ github.event.inputs.tag }}-linux-x64.tar.gz arimo-linux-x64/
+
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.event.inputs.tag }} \
+            arimo/dist/arimo-${{ github.event.inputs.tag }}-linux-x64.tar.gz \
+            --repo egecanakincioglu/arimo \
+            --clobber
