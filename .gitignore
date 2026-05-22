@@ -25,6 +25,9 @@ Thumbs.db
 # Installer — local only (hardcoded local paths, output/ binary)
 installer/
 
+# Missing features analysis — local only
+missing-features/
+
 # Tüm dökümanlar sadece local
 documents/
 .env
