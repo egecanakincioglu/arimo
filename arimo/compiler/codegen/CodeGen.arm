@@ -1362,13 +1362,6 @@ public class CodeGen {
             this.emit("${r} = call i8* @__arimo_str_to_lower(i8* ${strVal})");
             return r;
         }
-        if (method == "toUpper" && objTy != null && objTy.kind == TypeKind.CHAR) {
-            String r = this.nextReg();
-            String tmp = this.nextReg();
-            this.emit("${tmp} = call i64 @__arimo_char_to_upper(i64 ${strVal})");
-            this.emit("${r} = call i8* @__arimo_i64_to_str(i64 ${tmp})");
-            return r;
-        }
         if (method == "toUpper") {
             String r = this.nextReg();
             this.emit("${r} = call i8* @__arimo_str_to_upper(i8* ${strVal})");

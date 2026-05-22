@@ -29,7 +29,7 @@ optimize = false
 # -- Stdlib -------------------------------------------------------------------
 
 [stdlib]
-include = ["arimo.fs", "arimo.process", "arimo.io", "arimo.lang", "arimo.env", "arimo.util", "arimo.math"]
+include = ["arimo.fs", "arimo.process", "arimo.env"]
 
 # -- Dependencies -------------------------------------------------------------
 
