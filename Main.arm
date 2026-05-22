@@ -91,8 +91,8 @@ public class Main {
         Integer i = 0;
         while (i < imp.length()) {
             String ch = imp.substring(i, i + 1);
-            if (ch == ".") { result = result.concat("/"); }
-            else           { result = result.concat(ch); }
+            if (ch.compareTo(".") == 0) { result = result.concat("/"); }
+            else                        { result = result.concat(ch); }
             i++;
         }
         return result.concat(".arm");
@@ -115,7 +115,7 @@ public class Main {
         Integer i = 0;
         while (i < path.length()) {
             String ch = path.substring(i, i + 1);
-            if (ch == "/" || ch == "\\") { sep = i; }
+            if (ch.compareTo("/") == 0 || ch.compareTo("\\") == 0) { sep = i; }
             i++;
         }
         if (sep >= 0) { return path.substring(0, sep + 1); }
@@ -125,7 +125,7 @@ public class Main {
     private static strListContains(lst: List<String>, s: String) : Boolean {
         Integer i = 0;
         while (i < lst.length()) {
-            if (lst.get(i) == s) { return true; }
+            if (lst.get(i).compareTo(s) == 0) { return true; }
             i++;
         }
         return false;
@@ -134,11 +134,11 @@ public class Main {
     private static parseTomlValue(toml: String, key: String) : String {
         Integer ki = toml.indexOf(key);
         if (ki < 0) { return ""; }
-        Integer eq = toml.indexOf("=", ki);
+        Integer eq = Main.indexOf(toml, "=", ki);
         if (eq < 0) { return ""; }
-        Integer qs = toml.indexOf("\"", eq);
+        Integer qs = Main.indexOf(toml, "\"", eq);
         if (qs < 0) { return ""; }
-        Integer qe = toml.indexOf("\"", qs + 1);
+        Integer qe = Main.indexOf(toml, "\"", qs + 1);
         if (qe < 0) { return ""; }
         return toml.substring(qs + 1, qe);
     }
@@ -149,7 +149,7 @@ public class Main {
         Integer i = from;
         while (i <= slen - sublen) {
             String slice = s.substring(i, i + sublen);
-            if (slice == sub) { return i; }
+            if (slice.compareTo(sub) == 0) { return i; }
             i++;
         }
         return -1;
@@ -172,6 +172,9 @@ public class Main {
                 return candidate;
             }
         }
+        if (File.exists("C:\\Program Files\\arimo\\stdlib\\arimo\\fs\\File.arm")) {
+            return "C:\\Program Files\\arimo\\stdlib";
+        }
         if (File.exists("/usr/local/lib/arimo/stdlib/arimo/fs/File.arm")) {
             return "/usr/local/lib/arimo/stdlib";
         }
@@ -185,22 +188,45 @@ public class Main {
         IO.println("  arc build              compile project (arc.toml)");
         IO.println("  arc run                compile + run project");
         IO.println("  arc check              type-check only");
+        IO.println("  arc init <name>        create new project");
         IO.println("  arc <file.arm>         compile a single file");
         IO.println("  arc <file.arm> --emit-ir   print LLVM IR");
         IO.println("  arc <file.arm> --native    use native backend");
         IO.println("  arc --stdlib-path <p> <file.arm>  set stdlib root");
     }
 
+    private static initProject(name: String) : Void {
+        String mkdirCmd = "mkdir ".concat(name);
+        Process.exec(mkdirCmd);
+
+        String tomlContent = "[project]\nname        = \"";
+        tomlContent = tomlContent.concat(name);
+        tomlContent = tomlContent.concat("\"\nversion     = \"0.1.0\"\nentry       = \"Main.arm\"\n\n[build]\ntarget = \"x86_64-pc-windows-gnu\"\n");
+        String tomlPath = name.concat("\\arc.toml");
+        File.write(tomlPath, tomlContent);
+
+        String mainContent = "package ";
+        mainContent = mainContent.concat(name);
+        mainContent = mainContent.concat(";\n\npublic class Main {\n    public static main() : Void {\n        IO.println(\"Hello from ");
+        mainContent = mainContent.concat(name);
+        mainContent = mainContent.concat("!\");\n    }\n}\n");
+        String mainPath = name.concat("\\Main.arm");
+        File.write(mainPath, mainContent);
+
+        IO.println("arc: created project '".concat(name).concat("'"));
+        IO.println("arc: run: cd ".concat(name).concat(" && arc build"));
+    }
+
     private static compile(inputPath: String, stdlibPath: String, emitIR: Boolean, checkOnly: Boolean, useNative: Boolean, outName: String) : Void {
         if (!File.exists(inputPath)) {
-            IO.error("arc: file not found: ${inputPath}");
+            IO.println("arc: file not found: ${inputPath}");
             return;
         }
 
         IO.println("arc: reading ${inputPath}");
         String src = File.read(inputPath);
         if (src == null || src.length() == 0) {
-            IO.error("arc: file is empty or unreadable: ${inputPath}");
+            IO.println("arc: file is empty or unreadable: ${inputPath}");
             return;
         }
 
@@ -213,7 +239,7 @@ public class Main {
         Parser parser = Parser(tokens);
         ArimoModule mod = parser.parse();
         if (parser.hasError) {
-            IO.error("arc: parse failed");
+            IO.println("arc: parse failed");
             return;
         }
         IO.println("arc: parse ok — ${mod.items.length()} items, package ${mod.path}");
@@ -282,10 +308,10 @@ public class Main {
         if (errCount > 0) {
             Integer ei = 0;
             while (ei < errCount) {
-                IO.error(tc.errors.get(ei));
+                IO.println(tc.errors.get(ei));
                 ei++;
             }
-            IO.error("arc: type check failed — ${errCount} error(s)");
+            IO.println("arc: type check failed — ${errCount} error(s)");
             return;
         }
         Integer warnCount = tc.warnings.length();
@@ -334,7 +360,7 @@ public class Main {
         String llcCmd = "llc -filetype=obj -o ${objFile} ${llFile}";
         Boolean llcOk = Process.success(llcCmd);
         if (!llcOk) {
-            IO.error("arc: llc failed");
+            IO.println("arc: llc failed");
             return;
         }
 
@@ -342,7 +368,7 @@ public class Main {
         String gccCmd = "gcc ${objFile} -o ${exeFile} -lm";
         Boolean gccOk = Process.success(gccCmd);
         if (!gccOk) {
-            IO.error("arc: gcc failed");
+            IO.println("arc: gcc failed");
             return;
         }
 
@@ -358,7 +384,7 @@ public class Main {
             return;
         }
 
-        String exePath   = Env.exePath();
+        String exePath    = argv.get(0);
         String stdlibPath = Main.findStdlib(exePath);
 
         String cmd       = argv.get(1);
@@ -370,28 +396,39 @@ public class Main {
         Integer fi = 2;
         while (fi < argc) {
             String flag = argv.get(fi);
-            if (flag == "--emit-ir")  { emitIR    = true; }
-            if (flag == "--check")    { checkOnly  = true; }
-            if (flag == "--native")   { useNative  = true; }
-            if (flag == "--stdlib-path") {
+            if (flag.compareTo("--emit-ir") == 0)     { emitIR     = true; }
+            if (flag.compareTo("--check") == 0)       { checkOnly  = true; }
+            if (flag.compareTo("--native") == 0)      { useNative  = true; }
+            if (flag.compareTo("--stdlib-path") == 0) {
                 fi++;
                 if (fi < argc) { stdlibPath = argv.get(fi); }
             }
             fi++;
         }
 
-        if (cmd == "build" || cmd == "run" || cmd == "check") {
-            if (cmd == "run")   { doRun     = true; }
-            if (cmd == "check") { checkOnly = true; }
-
-            if (!File.exists("arc.toml")) {
-                IO.error("arc: arc.toml not found — run from project root");
+        if (cmd.compareTo("init") == 0) {
+            if (argc < 3) {
+                IO.println("arc: init requires a project name");
+                IO.println("Usage: arc init <name>");
                 return;
             }
-            String toml    = File.read("arc.toml");
-            String entry   = Main.parseTomlValue(toml, "entry");
+            String initName = argv.get(2);
+            Main.initProject(initName);
+            return;
+        }
+
+        if (cmd.compareTo("build") == 0 || cmd.compareTo("run") == 0 || cmd.compareTo("check") == 0) {
+            if (cmd.compareTo("run") == 0)   { doRun     = true; }
+            if (cmd.compareTo("check") == 0) { checkOnly = true; }
+
+            if (!File.exists("arc.toml")) {
+                IO.println("arc: arc.toml not found — run from project root");
+                return;
+            }
+            String toml     = File.read("arc.toml");
+            String entry    = Main.parseTomlValue(toml, "entry");
             String projName = Main.parseTomlValue(toml, "name");
-            if (entry.length() == 0) { entry = "Main.arm"; }
+            if (entry.length() == 0)    { entry    = "Main.arm"; }
             if (projName.length() == 0) { projName = "app"; }
 
             IO.println("arc v1.0.0 — building '${projName}'");
@@ -399,18 +436,18 @@ public class Main {
 
             if (doRun && !checkOnly && !emitIR) {
                 IO.println("arc: running '${projName}.exe'...");
-                Process.exec(projName.concat(".exe"));
+                Process.exec(".\\".concat(projName).concat(".exe"));
             }
             return;
         }
 
         if (cmd.endsWith(".arm")) {
-            IO.println("arc v1.1.0 — compiling '${cmd}'");
+            IO.println("arc v1.0.0 — compiling '${cmd}'");
             Main.compile(cmd, stdlibPath, emitIR, checkOnly, useNative, "");
             return;
         }
 
-        IO.error("arc: unknown command '${cmd}'");
+        IO.println("arc: unknown command '${cmd}'");
         Main.printUsage();
     }
 }
