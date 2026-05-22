@@ -53,6 +53,8 @@ jobs:
         run: |
           ARC0="../arimo-compiler/target/x86_64-unknown-linux-gnu/release/arc"
           chmod +x "$ARC0"
+          # arc finds stdlib/ adjacent to the binary via find_stdlib_dir()
+          cp -r ../arimo-compiler/stdlib ../arimo-compiler/target/x86_64-unknown-linux-gnu/release/stdlib
           "$ARC0" build
           chmod +x arc
 
