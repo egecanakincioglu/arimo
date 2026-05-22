@@ -176,7 +176,7 @@ public class Main {
     }
 
     private static printUsage() : Void {
-        IO.println("arc v1.1.0 — Arimo Stage 1 Compiler");
+        IO.println("arc v1.0.0 — Arimo Stage 1 Compiler");
         IO.println("");
         IO.println("Usage:");
         IO.println("  arc build              compile project (arc.toml)");
@@ -391,7 +391,7 @@ public class Main {
             if (entry.length() == 0) { entry = "Main.arm"; }
             if (projName.length() == 0) { projName = "app"; }
 
-            IO.println("arc v1.1.0 — building '${projName}'");
+            IO.println("arc v1.0.0 — building '${projName}'");
             Main.compile(entry, stdlibPath, emitIR, checkOnly, useNative, projName);
 
             if (doRun && !checkOnly && !emitIR) {
