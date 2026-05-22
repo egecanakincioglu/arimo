@@ -108,7 +108,7 @@ jobs:
             --architecture amd64 \
             --description "Arimo programming language compiler — arc" \
             --url "https://github.com/egecanakincioglu/arimo" \
-            --maintainer "Egecan Akıncıoğlu <batrukaa@gmail.com>" \
+            --maintainer "Egecan Akıncıoğlu <egecanakincioglu@icloud.com>" \
             --license "AGPL-3.0" \
             --prefix / \
             -C pkg-root \
@@ -122,7 +122,7 @@ jobs:
             --architecture x86_64 \
             --description "Arimo programming language compiler — arc" \
             --url "https://github.com/egecanakincioglu/arimo" \
-            --maintainer "Egecan Akıncıoğlu <batrukaa@gmail.com>" \
+            --maintainer "Egecan Akıncıoğlu <egecanakincioglu@icloud.com>" \
             --license "AGPL-3.0" \
             --prefix / \
             -C pkg-root \
