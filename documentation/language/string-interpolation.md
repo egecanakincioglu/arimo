@@ -78,10 +78,10 @@ sb.append("line two\n");
 String result = sb.toString();
 ```
 
-See [[arimo-lang]] for the full `StringBuilder` API.
+See [arimo-lang](../stdlib/arimo-lang.md) for the full `StringBuilder` API.
 
 ## Related
 
-- [[variables-and-types]] — `String` type
-- [[arimo-lang]] — `StringBuilder`, `String` class details
-- [[classes]] — `toString()` override
+- [variables-and-types](../language/variables-and-types.md) — `String` type
+- [arimo-lang](../stdlib/arimo-lang.md) — `StringBuilder`, `String` class details
+- [classes](../language/classes.md) — `toString()` override

@@ -122,6 +122,6 @@ arc 1.0.0 (arimo-language)
 
 ## Related
 
-- [[arc-toml]] — project configuration
-- [[installation]] — installing arc
-- [[hello-world]] — first program
+- [arc-toml](../getting-started/arc-toml.md) — project configuration
+- [installation](../getting-started/installation.md) — installing arc
+- [hello-world](../getting-started/hello-world.md) — first program

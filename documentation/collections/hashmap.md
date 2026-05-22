@@ -86,6 +86,6 @@ Map<String, Integer> m = HashMap();   // polymorphic reference
 
 ## Related
 
-- [[collections-overview]] — all collection types
-- [[pair]] — `entries()` returns `List<Pair<K,V>>`
-- [[null-safety]] — handling nullable `get()` result
+- [collections-overview](../collections/collections-overview.md) — all collection types
+- [pair](../collections/pair.md) — `entries()` returns `List<Pair<K,V>>`
+- [null-safety](../language/null-safety.md) — handling nullable `get()` result

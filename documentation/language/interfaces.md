@@ -108,7 +108,7 @@ From `arimo.lang`:
 
 ## Related
 
-- [[classes]] — implementing interfaces
-- [[abstract-classes]] — abstract base classes
-- [[generics]] — generic interface bounds
-- [[annotations]] — `@FunctionalInterface`
+- [classes](../language/classes.md) — implementing interfaces
+- [abstract-classes](../language/abstract-classes.md) — abstract base classes
+- [generics](../language/generics.md) — generic interface bounds
+- [annotations](../language/annotations.md) — `@FunctionalInterface`

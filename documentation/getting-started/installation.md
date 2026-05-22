@@ -62,6 +62,6 @@ arc run Main.arm
 
 ## Related
 
-- [[hello-world]] — first program
-- [[arc-cli]] — all compiler commands
-- [[arc-toml]] — project configuration
+- [hello-world](../getting-started/hello-world.md) — first program
+- [arc-cli](../cli/arc-cli.md) — all compiler commands
+- [arc-toml](../getting-started/arc-toml.md) — project configuration

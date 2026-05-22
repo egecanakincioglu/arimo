@@ -83,7 +83,7 @@ match ok {
 
 ## Generic Collections
 
-`List<T>`, `HashMap<K, V>`, `Array<T, N>`, `Slice<T>`, `Pair<A, B>` are all generic. See [[collections-overview]].
+`List<T>`, `HashMap<K, V>`, `Array<T, N>`, `Slice<T>`, `Pair<A, B>` are all generic. See [collections-overview](../collections/collections-overview.md).
 
 ```arm
 List<Integer>        nums   = List();
@@ -96,6 +96,6 @@ Generic type instantiation is shallow in v1.0.0. The type checker validates boun
 
 ## Related
 
-- [[collections-overview]] — generic collection types
-- [[result]] — `Result<T, E>`
-- [[interfaces]] — interface bounds
+- [collections-overview](../collections/collections-overview.md) — generic collection types
+- [result](../collections/result.md) — `Result<T, E>`
+- [interfaces](../language/interfaces.md) — interface bounds

@@ -94,7 +94,7 @@ Integer? len = name?.length();
 String?  addr = user?.address;
 ```
 
-See [[null-safety]] for full details.
+See [null-safety](../language/null-safety.md) for full details.
 
 ## Null Coalescing (`??`)
 
@@ -145,6 +145,6 @@ Supported operator symbols: `+`, `-`, `*`, `/`, `==`
 
 ## Related
 
-- [[null-safety]] — `?.` and `??` in detail
-- [[structs]] — operator overloading on structs
-- [[variables-and-types]] — types used with operators
+- [null-safety](../language/null-safety.md) — `?.` and `??` in detail
+- [structs](../language/structs.md) — operator overloading on structs
+- [variables-and-types](../language/variables-and-types.md) — types used with operators

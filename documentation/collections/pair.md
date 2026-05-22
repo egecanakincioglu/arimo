@@ -41,5 +41,5 @@ for (Pair<String, Integer> entry : entries) {
 
 ## Related
 
-- [[collections-overview]] — all collection types
-- [[hashmap]] — `entries()` returns pairs
+- [collections-overview](../collections/collections-overview.md) — all collection types
+- [hashmap](../collections/hashmap.md) — `entries()` returns pairs

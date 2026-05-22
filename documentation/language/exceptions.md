@@ -109,6 +109,6 @@ This is documentation-only — Arimo does not enforce checked exceptions at the 
 
 ## Related
 
-- [[arimo-lang]] — built-in exception classes
-- [[annotations]] — `@Throws`
-- [[pattern-matching]] — using `match` to handle `Result` instead of exceptions
+- [arimo-lang](../stdlib/arimo-lang.md) — built-in exception classes
+- [annotations](../language/annotations.md) — `@Throws`
+- [pattern-matching](../language/pattern-matching.md) — using `match` to handle `Result` instead of exceptions

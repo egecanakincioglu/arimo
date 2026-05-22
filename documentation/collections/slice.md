@@ -63,6 +63,6 @@ public class Renderer {
 
 ## Related
 
-- [[array]] — `Array<T,N>` — source of slices
-- [[low-level]] — `RawPtr` — raw pointer source
-- [[collections-overview]] — all collection types
+- [array](../collections/array.md) — `Array<T,N>` — source of slices
+- [low-level](../memory/low-level.md) — `RawPtr` — raw pointer source
+- [collections-overview](../collections/collections-overview.md) — all collection types

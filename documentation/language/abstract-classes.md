@@ -76,6 +76,6 @@ public abstract class Shape {
 
 ## Related
 
-- [[classes]] — concrete class declaration
+- [classes](../language/classes.md) — concrete class declaration
 - [[interfaces]] — interface contracts
 - [[annotations]] — `@Sealed`

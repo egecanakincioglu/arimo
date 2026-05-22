@@ -50,7 +50,7 @@ This documentation covers **Arimo v1.0.0** — the first public release. The com
 
 ## Related
 
-- [[installation]] — install `arc`
-- [[hello-world]] — first program step by step
-- [[arc-toml]] — project configuration
-- [[versioning]] — version history and SemVer policy
+- [installation](../getting-started/installation.md) — install `arc`
+- [hello-world](../getting-started/hello-world.md) — first program step by step
+- [arc-toml](../getting-started/arc-toml.md) — project configuration
+- [versioning](../reference/versioning.md) — version history and SemVer policy

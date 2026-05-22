@@ -42,5 +42,5 @@ Full `async`/`await` support is planned for **v1.2.0**.
 
 ## Related
 
-- [[versioning]] — v1.2.0 async milestone
-- [[functions-and-methods]] — regular (synchronous) methods
+- [versioning](../reference/versioning.md) — v1.2.0 async milestone
+- [functions-and-methods](../language/functions-and-methods.md) — regular (synchronous) methods

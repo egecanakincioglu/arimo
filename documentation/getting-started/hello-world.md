@@ -51,7 +51,7 @@ Hello, World!
 
 ## Next Steps
 
-- [[variables-and-types]] — declare variables and use types
-- [[control-flow]] — `if`, `while`, `for`
-- [[classes]] — build your own classes
-- [[arc-toml]] — set up a full project
+- [variables-and-types](../language/variables-and-types.md) — declare variables and use types
+- [control-flow](../language/control-flow.md) — `if`, `while`, `for`
+- [classes](../language/classes.md) — build your own classes
+- [arc-toml](../getting-started/arc-toml.md) — set up a full project

@@ -135,8 +135,8 @@ Applied to the `package` declaration. No stdlib code is linked — not even `mal
 
 ## Related
 
-- [[structs]] — `@Packed`, `@Align`
-- [[memory-model]] — `@ManualMemory`
-- [[low-level]] — `@Section`, `@CallingConvention`
-- [[interfaces]] — `@FunctionalInterface`
-- [[abstract-classes]] — `@Sealed`
+- [structs](../language/structs.md) — `@Packed`, `@Align`
+- [memory-model](../memory/memory-model.md) — `@ManualMemory`
+- [low-level](../memory/low-level.md) — `@Section`, `@CallingConvention`
+- [interfaces](../language/interfaces.md) — `@FunctionalInterface`
+- [abstract-classes](../language/abstract-classes.md) — `@Sealed`

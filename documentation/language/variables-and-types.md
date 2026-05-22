@@ -136,6 +136,6 @@ Float d    = v4.dot(other);     // dot product
 
 ## Related
 
-- [[type-casting]] — explicit casts with `as`
-- [[null-safety]] — nullable types, `?.`, `??`
-- [[operators]] — arithmetic and comparison operators
+- [type-casting](../language/type-casting.md) — explicit casts with `as`
+- [null-safety](../language/null-safety.md) — nullable types, `?.`, `??`
+- [operators](../language/operators.md) — arithmetic and comparison operators

@@ -70,5 +70,5 @@ for (Integer i = 0; i < 3; i++) {
 
 ## Related
 
-- [[exceptions]] — exception handling
-- [[functions-and-methods]] — scope and lifetime
+- [exceptions](../language/exceptions.md) — exception handling
+- [functions-and-methods](../language/functions-and-methods.md) — scope and lifetime

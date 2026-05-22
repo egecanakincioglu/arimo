@@ -135,11 +135,11 @@ c.increment();
 // when 'c' goes out of scope — ARC releases
 ```
 
-See [[memory-model]] for ARC details.
+See [memory-model](../memory/memory-model.md) for ARC details.
 
 ## Related
 
-- [[interfaces]] — `implements` targets
-- [[abstract-classes]] — `extends` abstract base
-- [[functions-and-methods]] — method syntax
-- [[memory-model]] — ARC lifecycle
+- [interfaces](../language/interfaces.md) — `implements` targets
+- [abstract-classes](../language/abstract-classes.md) — `extends` abstract base
+- [functions-and-methods](../language/functions-and-methods.md) — method syntax
+- [memory-model](../memory/memory-model.md) — ARC lifecycle

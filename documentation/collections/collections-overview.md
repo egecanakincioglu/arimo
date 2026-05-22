@@ -55,9 +55,9 @@ List<Task> urgent5 = this.tasks
 
 ## Detailed References
 
-- [[list]] — `List<T>` full API
-- [[hashmap]] — `HashMap<K,V>` and `TreeMap<K,V>`
-- [[array]] — `Array<T,N>`
-- [[slice]] — `Slice<T>`
-- [[pair]] — `Pair<A,B>`
-- [[result]] — `Result<T,E>`
+- [list](../collections/list.md) — `List<T>` full API
+- [hashmap](../collections/hashmap.md) — `HashMap<K,V>` and `TreeMap<K,V>`
+- [array](../collections/array.md) — `Array<T,N>`
+- [slice](../collections/slice.md) — `Slice<T>`
+- [pair](../collections/pair.md) — `Pair<A,B>`
+- [result](../collections/result.md) — `Result<T,E>`
