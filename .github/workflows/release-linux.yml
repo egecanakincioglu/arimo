@@ -57,7 +57,8 @@ jobs:
           ARC0="../arimo-compiler/target/x86_64-unknown-linux-gnu/release/arc"
           chmod +x "$ARC0"
           # arc finds stdlib/ adjacent to the binary via find_stdlib_dir()
-          cp -r ../arimo-compiler/stdlib ../arimo-compiler/target/x86_64-unknown-linux-gnu/release/stdlib
+          # Use arimo repo stdlib (superset of arimo-compiler stdlib, includes v1.1.0 additions)
+          cp -r stdlib ../arimo-compiler/target/x86_64-unknown-linux-gnu/release/stdlib
           "$ARC0" build
           chmod +x arc
 
@@ -74,7 +75,7 @@ jobs:
 
           mkdir -p dist/arimo-linux-x64/stdlib
           cp arc dist/arimo-linux-x64/
-          cp -r ../arimo-compiler/stdlib/. dist/arimo-linux-x64/stdlib/
+          cp -r stdlib/. dist/arimo-linux-x64/stdlib/
 
           cat > dist/arimo-linux-x64/install.sh << 'EOF'
           #!/bin/bash
@@ -100,7 +101,7 @@ jobs:
           mkdir -p pkg-root/usr/local/bin
           mkdir -p pkg-root/usr/local/lib/arimo/stdlib
           cp arc pkg-root/usr/local/bin/arc
-          cp -r ../arimo-compiler/stdlib/. pkg-root/usr/local/lib/arimo/stdlib/
+          cp -r stdlib/. pkg-root/usr/local/lib/arimo/stdlib/
 
           fpm -s dir -t deb \
             -n arimo \

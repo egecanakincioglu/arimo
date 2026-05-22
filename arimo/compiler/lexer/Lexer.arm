@@ -225,10 +225,13 @@ public class Lexer {
         if (word == "super")       { return Token.ofSimple(TokenKind.SUPER,        sl, sc); }
         if (word == "this")        { return Token.ofSimple(TokenKind.THIS,         sl, sc); }
 
+        if (word == "const")   { return Token.ofSimple(TokenKind.CONST,          sl, sc); }
+
         if (word == "Integer")   { return Token.ofSimple(TokenKind.TYPE_INTEGER,   sl, sc); }
         if (word == "Float")     { return Token.ofSimple(TokenKind.TYPE_FLOAT,     sl, sc); }
         if (word == "Boolean")   { return Token.ofSimple(TokenKind.TYPE_BOOLEAN,   sl, sc); }
         if (word == "String")    { return Token.ofSimple(TokenKind.TYPE_STRING,    sl, sc); }
+        if (word == "Char")      { return Token.ofSimple(TokenKind.TYPE_CHAR,      sl, sc); }
         if (word == "Void")      { return Token.ofSimple(TokenKind.TYPE_VOID,      sl, sc); }
         if (word == "List")      { return Token.ofSimple(TokenKind.TYPE_LIST,      sl, sc); }
         if (word == "Map")       { return Token.ofSimple(TokenKind.TYPE_MAP,       sl, sc); }
@@ -319,6 +322,37 @@ public class Lexer {
                 buf = buf.concat(ch);
             }
         }
+    }
+
+    private readMultilineString(tokens: List<Token>, sl: Integer, sc: Integer) : Void {
+        String buf  = "";
+        Boolean done = false;
+        while (!done) {
+            String ch = this.advance();
+            if (ch == "") {
+                done = true;
+            } else if (ch == "\"" && this.peek() == "\"" && this.peekAt(1) == "\"") {
+                this.advance(); this.advance();
+                done = true;
+            } else {
+                buf = buf.concat(ch);
+            }
+        }
+        tokens.append(Token.ofStr(buf, sl, sc));
+    }
+
+    private readRawString(tokens: List<Token>, sl: Integer, sc: Integer) : Void {
+        String buf  = "";
+        Boolean done = false;
+        while (!done) {
+            String ch = this.advance();
+            if (ch == "" || ch == "\"") {
+                done = true;
+            } else {
+                buf = buf.concat(ch);
+            }
+        }
+        tokens.append(Token.ofStr(buf, sl, sc));
     }
 
     private tokenizeInterpolation(tokens: List<Token>) : Void {
@@ -440,6 +474,25 @@ public class Lexer {
         if (ch == ";") { return Token.ofSimple(TokenKind.SEMICOLON, sl, sc); }
         if (ch == "@") { return Token.ofSimple(TokenKind.AT,        sl, sc); }
 
+        if (ch == "'") {
+            String c = this.advance();
+            Integer codepoint = 0;
+            if (c == "\\") {
+                String esc = this.advance();
+                if      (esc == "n")  { codepoint = 10;  }
+                else if (esc == "t")  { codepoint = 9;   }
+                else if (esc == "r")  { codepoint = 13;  }
+                else if (esc == "0")  { codepoint = 0;   }
+                else if (esc == "'")  { codepoint = 39;  }
+                else if (esc == "\\") { codepoint = 92;  }
+                else                  { codepoint = esc.charCodeAt(0); }
+            } else {
+                codepoint = c.charCodeAt(0);
+            }
+            this.advance();
+            return Token.ofChar(codepoint, sl, sc);
+        }
+
         return Token.ofUnknown(ch, sl, sc);
     }
 
@@ -456,9 +509,15 @@ public class Lexer {
             if (ch == "") {
                 tokens.append(Token.ofSimple(TokenKind.EOF, sl, sc));
                 done = true;
+            } else if (ch == "\"" && this.peekAt(1) == "\"" && this.peekAt(2) == "\"") {
+                this.advance(); this.advance(); this.advance();
+                this.readMultilineString(tokens, sl, sc);
             } else if (ch == "\"") {
                 this.advance();
                 this.readString(tokens);
+            } else if (ch == "r" && this.peekAt(1) == "\"") {
+                this.advance(); this.advance();
+                this.readRawString(tokens, sl, sc);
             } else {
                 Token tok = this.lexOne(sl, sc);
                 Boolean isEof = tok.kind == TokenKind.EOF;

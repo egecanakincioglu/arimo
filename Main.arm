@@ -140,7 +140,7 @@ public class Main {
     }
 
     public static main() : Void {
-        IO.println("arc stage 1");
+        IO.println("arc v1.1.0 — Arimo Stage 1 Compiler");
 
         String inputPath  = "";
         String stdlibPath = "";
@@ -154,8 +154,15 @@ public class Main {
         }
 
         if (inputPath.length() == 0) {
-            IO.error("arc: no input file — pass .arm path via stdin");
-            IO.error("  echo path/to/file.arm | arc");
+            IO.println("Usage:");
+            IO.println("  arc build              compile project (arc.toml)");
+            IO.println("  arc run                compile + run project");
+            IO.println("  arc check              type-check only");
+            IO.println("  arc init <name>        create new project");
+            IO.println("  arc <file.arm>         compile a single file");
+            IO.println("");
+            IO.println("Note: pipe file path to stdin when using Stage 1 directly:");
+            IO.println("  echo path/to/Main.arm | arc");
             return;
         }
 

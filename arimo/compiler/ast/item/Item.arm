@@ -19,6 +19,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 package arimo.compiler.ast.item;
 
 import arimo.compiler.ast.item.ItemKind;
+import arimo.compiler.ast.expr.Expr;
+import arimo.compiler.ast.types.AstType;
 import arimo.compiler.ast.item.ClassDecl;
 import arimo.compiler.ast.item.InterfaceDecl;
 import arimo.compiler.ast.item.EnumDecl;
@@ -31,6 +33,9 @@ import arimo.compiler.ast.item.UnionDecl;
 
 public class Item {
     public kind       : Integer;
+    public constName  : String;
+    public constType  : AstType;
+    public constExpr  : Expr;
     public classDecl  : ClassDecl;
     public ifaceDecl  : InterfaceDecl;
     public enumDecl   : EnumDecl;
@@ -96,6 +101,14 @@ public class Item {
     public static fromUnion(u: UnionDecl) : Item {
         Item i = Item(ItemKind.UNION);
         i.unionDecl = u;
+        return i;
+    }
+
+    public static fromConst(name: String, ty: AstType, expr: Expr) : Item {
+        Item i = Item(ItemKind.CONST);
+        i.constName = name;
+        i.constType = ty;
+        i.constExpr = expr;
         return i;
     }
 }

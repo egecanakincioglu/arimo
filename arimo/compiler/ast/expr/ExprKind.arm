@@ -42,4 +42,5 @@ public class ExprKind {
     public static readonly AWAIT         : Integer = 21;
     public static readonly MATCH         : Integer = 22;
     public static readonly NULL_COALESCE : Integer = 23;
+    public static readonly CHAR_LIT      : Integer = 24;
 }

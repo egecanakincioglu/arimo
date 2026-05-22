@@ -33,14 +33,18 @@ public class ElseIfBranch {
 }
 
 public class CatchClause {
-    public exType : AstType;
-    public name   : String;
-    public body   : List<Stmt>;
+    public exType  : AstType;
+    public exTypes : List<AstType>;
+    public name    : String;
+    public body    : List<Stmt>;
 
-    public constructor(exType: AstType, name: String, body: List<Stmt>) {
-        this.exType = exType;
-        this.name   = name;
-        this.body   = body;
+    public constructor(exTypes: List<AstType>, name: String, body: List<Stmt>) {
+        this.exTypes = exTypes;
+        if (exTypes.length() > 0) {
+            this.exType = exTypes.get(0);
+        }
+        this.name = name;
+        this.body = body;
     }
 }
 

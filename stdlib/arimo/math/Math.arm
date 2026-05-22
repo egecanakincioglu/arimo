@@ -1,0 +1,72 @@
+package arimo.math;
+
+extern "C" {
+    floor(x: Float)         : Float;
+    ceil(x: Float)          : Float;
+    round(x: Float)         : Float;
+    fabs(x: Float)          : Float;
+    sqrt(x: Float)          : Float;
+    sin(x: Float)           : Float;
+    cos(x: Float)           : Float;
+    tan(x: Float)           : Float;
+    log(x: Float)           : Float;
+    log10(x: Float)         : Float;
+    pow(base: Float, exp: Float) : Float;
+    fmin(a: Float, b: Float) : Float;
+    fmax(a: Float, b: Float) : Float;
+    abs(x: Integer)         : Integer;
+}
+
+public class Math {
+    public static readonly PI  : Float = 3.14159265358979;
+    public static readonly E   : Float = 2.71828182845905;
+    public static readonly INF : Float = 1.0e308;
+
+    public static floor(x: Float) : Float  { return floor(x); }
+    public static ceil(x: Float)  : Float  { return ceil(x);  }
+    public static round(x: Float) : Float  { return round(x); }
+
+    public static abs(x: Float)    : Float   { return fabs(x); }
+    public static absInt(x: Integer) : Integer { return abs(x); }
+
+    public static sqrt(x: Float)  : Float  { return sqrt(x);  }
+    public static sin(x: Float)   : Float  { return sin(x);   }
+    public static cos(x: Float)   : Float  { return cos(x);   }
+    public static tan(x: Float)   : Float  { return tan(x);   }
+    public static log(x: Float)   : Float  { return log(x);   }
+    public static log10(x: Float) : Float  { return log10(x); }
+
+    public static pow(base: Float, exp: Float) : Float { return pow(base, exp); }
+
+    public static min(a: Float, b: Float) : Float {
+        return fmin(a, b);
+    }
+
+    public static max(a: Float, b: Float) : Float {
+        return fmax(a, b);
+    }
+
+    public static minInt(a: Integer, b: Integer) : Integer {
+        if (a < b) { return a; }
+        return b;
+    }
+
+    public static maxInt(a: Integer, b: Integer) : Integer {
+        if (a > b) { return a; }
+        return b;
+    }
+
+    public static clamp(x: Float, lo: Float, hi: Float) : Float {
+        if (x < lo) { return lo; }
+        if (x > hi) { return hi; }
+        return x;
+    }
+
+    public static toRadians(deg: Float) : Float {
+        return deg * Math.PI / 180.0;
+    }
+
+    public static toDegrees(rad: Float) : Float {
+        return rad * 180.0 / Math.PI;
+    }
+}
