@@ -22,6 +22,9 @@ Thumbs.db
 *.swo
 .claudeignore
 
+# Installer — local only (hardcoded local paths, output/ binary)
+installer/
+
 # Tüm dökümanlar sadece local
 documents/
 .env
