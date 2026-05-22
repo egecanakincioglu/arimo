@@ -61,39 +61,82 @@ jobs:
           "$ARC0" build
           chmod +x arc
 
+      - name: Install fpm
+        run: |
+          sudo apt-get install -y ruby ruby-dev build-essential rpm
+          sudo gem install fpm --no-document
+
       - name: Package Linux release
         working-directory: arimo
         run: |
+          TAG=${{ github.event.inputs.tag }}
+          VERSION=${TAG#v}
+
           mkdir -p dist/arimo-linux-x64/stdlib
           cp arc dist/arimo-linux-x64/
           cp -r ../arimo-compiler/stdlib/. dist/arimo-linux-x64/stdlib/
+
           cat > dist/arimo-linux-x64/install.sh << 'EOF'
           #!/bin/bash
           set -e
-          INSTALL_BIN="/usr/local/bin"
-          INSTALL_LIB="/usr/local/lib/arimo"
-
           if [ "$(id -u)" -ne 0 ]; then
             echo "Run with sudo: sudo ./install.sh"
             exit 1
           fi
-
-          cp arc "$INSTALL_BIN/arc"
-          chmod +x "$INSTALL_BIN/arc"
-          mkdir -p "$INSTALL_LIB"
-          cp -r stdlib "$INSTALL_LIB/"
-
+          cp arc /usr/local/bin/arc
+          chmod +x /usr/local/bin/arc
+          mkdir -p /usr/local/lib/arimo
+          cp -r stdlib /usr/local/lib/arimo/
           echo "Arimo installed. Run: arc --version"
           EOF
           chmod +x dist/arimo-linux-x64/install.sh
+
+          # tar.gz
           cd dist
-          tar -czf arimo-${{ github.event.inputs.tag }}-linux-x64.tar.gz arimo-linux-x64/
+          tar -czf arimo-${TAG}-linux-x64.tar.gz arimo-linux-x64/
+          cd ..
+
+          # .deb
+          mkdir -p pkg-root/usr/local/bin
+          mkdir -p pkg-root/usr/local/lib/arimo/stdlib
+          cp arc pkg-root/usr/local/bin/arc
+          cp -r ../arimo-compiler/stdlib/. pkg-root/usr/local/lib/arimo/stdlib/
+
+          fpm -s dir -t deb \
+            -n arimo \
+            -v ${VERSION} \
+            --architecture amd64 \
+            --description "Arimo programming language compiler — arc" \
+            --url "https://github.com/egecanakincioglu/arimo" \
+            --maintainer "Egecan Akıncıoğlu <batrukaa@gmail.com>" \
+            --license "AGPL-3.0" \
+            --prefix / \
+            -C pkg-root \
+            -p dist/arimo-${TAG}-linux-x64.deb \
+            .
+
+          # .rpm
+          fpm -s dir -t rpm \
+            -n arimo \
+            -v ${VERSION} \
+            --architecture x86_64 \
+            --description "Arimo programming language compiler — arc" \
+            --url "https://github.com/egecanakincioglu/arimo" \
+            --maintainer "Egecan Akıncıoğlu <batrukaa@gmail.com>" \
+            --license "AGPL-3.0" \
+            --prefix / \
+            -C pkg-root \
+            -p dist/arimo-${TAG}-linux-x64.rpm \
+            .
 
       - name: Upload to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.event.inputs.tag }} \
-            arimo/dist/arimo-${{ github.event.inputs.tag }}-linux-x64.tar.gz \
+          TAG=${{ github.event.inputs.tag }}
+          gh release upload ${TAG} \
+            arimo/dist/arimo-${TAG}-linux-x64.tar.gz \
+            arimo/dist/arimo-${TAG}-linux-x64.deb \
+            arimo/dist/arimo-${TAG}-linux-x64.rpm \
             --repo egecanakincioglu/arimo \
             --clobber
