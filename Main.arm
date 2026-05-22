@@ -111,10 +111,13 @@ public class Main {
     }
 
     private static dirOf(path: String) : String {
-        Integer lastSlash = path.indexOf("/");
-        Integer lastBs    = path.indexOf("\\");
-        Integer sep       = lastSlash;
-        if (lastBs > sep) { sep = lastBs; }
+        Integer sep = -1;
+        Integer i = 0;
+        while (i < path.length()) {
+            String ch = path.substring(i, i + 1);
+            if (ch == "/" || ch == "\\") { sep = i; }
+            i++;
+        }
         if (sep >= 0) { return path.substring(0, sep + 1); }
         return "";
     }

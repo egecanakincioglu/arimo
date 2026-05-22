@@ -39,9 +39,9 @@ jobs:
       - name: Compile Stage 1 with bootstrap arc
         working-directory: arimo
         run: |
-          ARC0="../arc-bootstrap/arc"
-          STDLIB="../arc-bootstrap/stdlib"
-          "$ARC0" build --stdlib-path "$STDLIB"
+          ARC0="$(realpath ../arc-bootstrap/arc)"
+          cp -r ../arc-bootstrap/stdlib "$(dirname "$ARC0")/stdlib" 2>/dev/null || true
+          "$ARC0" build
           chmod +x arc
 
       - name: Install fpm
