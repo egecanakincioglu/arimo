@@ -73,6 +73,12 @@ public class Token {
         return t;
     }
 
+    public static ofChar(n: Integer, line: Integer, col: Integer) : Token {
+        Token t = Token(TokenKind.CHAR_LIT, line, col);
+        t.intVal = n;
+        return t;
+    }
+
     public static ofUnknown(s: String, line: Integer, col: Integer) : Token {
         Token t = Token(TokenKind.UNKNOWN, line, col);
         t.strVal = s;

@@ -155,6 +155,7 @@ public class CodeGen {
         if (k == TypeKind.I16)      { return "i16"; }
         if (k == TypeKind.I32)      { return "i32"; }
         if (k == TypeKind.I64)      { return "i64"; }
+        if (k == TypeKind.CHAR)     { return "i64"; }
         if (k == TypeKind.NAMED)    { return "%${ty.name}*"; }
         if (k == TypeKind.NULLABLE) { return this.llvmTy(ty.inner); }
         if (k == TypeKind.LIST)     { return "%__List*"; }
@@ -336,6 +337,7 @@ public class CodeGen {
 
         if (k == ExprKind.NULL_LIT)   { return "null"; }
         if (k == ExprKind.INT_LIT)    { return "${e.intVal}"; }
+        if (k == ExprKind.CHAR_LIT)   { return "${e.intVal}"; }
         if (k == ExprKind.FLOAT_LIT)  {
             String fstr = "${e.floatVal}";
             if (!fstr.contains(".") && !fstr.contains("e")) { fstr = fstr.concat(".0"); }
@@ -417,7 +419,27 @@ public class CodeGen {
 
     private emitLoad(name: String) : String {
         String reg = this.lookupReg(name);
-        if (reg == "") { return "0"; }
+        if (reg == "") {
+            Integer ci = 0;
+            Boolean found = false;
+            while (ci < this.tc.constNames.length()) {
+                if (this.tc.constNames.get(ci) == name) { found = true; }
+                if (!found) { ci++; }
+                if (found) { ci = this.tc.constNames.length(); }
+            }
+            if (found) {
+                AstType cty = this.tc.constTypes.get(ci);
+                String llt2 = this.llvmTy(cty);
+                String r2   = this.nextReg();
+                if (llt2 == "i8*") {
+                    this.emit("${r2} = load i8*, i8** @${name}.ptr");
+                } else {
+                    this.emit("${r2} = load ${llt2}, ${llt2}* @${name}");
+                }
+                return r2;
+            }
+            return "0";
+        }
         String llt = this.lookupLLTy(name);
         if (llt == "void") { return "0"; }
         String r = this.nextReg();
@@ -566,11 +588,64 @@ public class CodeGen {
         return resVal;
     }
 
+    private emitCharMethod(charVal: String, method: String) : String {
+        if (method == "code") { return charVal; }
+        if (method == "isDigit") {
+            String r = this.nextReg();
+            this.emit("${r} = call i64 @__arimo_char_is_digit(i64 ${charVal})");
+            return r;
+        }
+        if (method == "isAlpha") {
+            String r = this.nextReg();
+            this.emit("${r} = call i64 @__arimo_char_is_alpha(i64 ${charVal})");
+            return r;
+        }
+        if (method == "isAlphaNum") {
+            String r = this.nextReg();
+            this.emit("${r} = call i64 @__arimo_char_is_alphanum(i64 ${charVal})");
+            return r;
+        }
+        if (method == "isUpper") {
+            String r = this.nextReg();
+            this.emit("${r} = call i64 @__arimo_char_is_upper(i64 ${charVal})");
+            return r;
+        }
+        if (method == "isLower") {
+            String r = this.nextReg();
+            this.emit("${r} = call i64 @__arimo_char_is_lower(i64 ${charVal})");
+            return r;
+        }
+        if (method == "isWhitespace") {
+            String r = this.nextReg();
+            this.emit("${r} = call i64 @__arimo_char_is_space(i64 ${charVal})");
+            return r;
+        }
+        if (method == "toUpper") {
+            String r = this.nextReg();
+            this.emit("${r} = call i64 @__arimo_char_to_upper(i64 ${charVal})");
+            return r;
+        }
+        if (method == "toLower") {
+            String r = this.nextReg();
+            this.emit("${r} = call i64 @__arimo_char_to_lower(i64 ${charVal})");
+            return r;
+        }
+        if (method == "toString") {
+            String r = this.nextReg();
+            this.emit("${r} = call i8* @__arimo_char_to_string(i64 ${charVal})");
+            return r;
+        }
+        return charVal;
+    }
+
     private emitMethodCall(e: Expr) : String {
         String objVal = this.emitExpr(e.object);
         String cls    = this.resolveObjClassName(e.object);
         if (cls == "String") {
             return this.emitStringMethod(objVal, e.method, e.args);
+        }
+        if (e.object != null && e.object.kind == ExprKind.CHAR_LIT) {
+            return this.emitCharMethod(objVal, e.method);
         }
         if (cls != "") {
             return this.dispatchMethod(cls, objVal, e.method, e.args);
@@ -735,6 +810,7 @@ public class CodeGen {
         if (e == null) { return "i8*"; }
         Integer k = e.kind;
         if (k == ExprKind.INT_LIT)   { return "i64"; }
+        if (k == ExprKind.CHAR_LIT)  { return "i64"; }
         if (k == ExprKind.FLOAT_LIT) { return "double"; }
         if (k == ExprKind.BOOL_LIT)  { return "i64"; }
         if (k == ExprKind.STR_LIT)   { return "i8*"; }
@@ -1284,6 +1360,13 @@ public class CodeGen {
         if (method == "toLower") {
             String r = this.nextReg();
             this.emit("${r} = call i8* @__arimo_str_to_lower(i8* ${strVal})");
+            return r;
+        }
+        if (method == "toUpper" && objTy != null && objTy.kind == TypeKind.CHAR) {
+            String r = this.nextReg();
+            String tmp = this.nextReg();
+            this.emit("${tmp} = call i64 @__arimo_char_to_upper(i64 ${strVal})");
+            this.emit("${r} = call i8* @__arimo_i64_to_str(i64 ${tmp})");
             return r;
         }
         if (method == "toUpper") {
@@ -1953,6 +2036,15 @@ public class CodeGen {
         this.addRuntime("define %__HashMap* @__HashMap__new() {\nentry:\n  %raw = call i8* @malloc(i64 64)\n  %p = bitcast i8* %raw to %__HashMap*\n  %z = bitcast %__HashMap* %p to i8*\n  call void @llvm.memset.p0i8.i64(i8* %z, i8 0, i64 64, i1 false)\n  ret %__HashMap* %p\n}\n");
         this.addRuntime("define void @__HashMap__set(%__HashMap* %m, i8* %k, i8* %v) {\nentry:\n  ret void\n}\ndefine i8* @__HashMap__get(%__HashMap* %m, i8* %k) {\nentry:\n  ret i8* null\n}\ndefine i8* @__HashMap__getOrDefault(%__HashMap* %m, i8* %k, i8* %d) {\nentry:\n  ret i8* %d\n}\n");
         this.addRuntime("define %__Pair* @__Pair__new() {\nentry:\n  %raw = call i8* @malloc(i64 16)\n  %p = bitcast i8* %raw to %__Pair*\n  %z = bitcast %__Pair* %p to i8*\n  call void @llvm.memset.p0i8.i64(i8* %z, i8 0, i64 16, i1 false)\n  ret %__Pair* %p\n}\ndefine void @__Pair__setFirst(%__Pair* %p, i8* %v) {\nentry:\n  %fp = getelementptr inbounds %__Pair, %__Pair* %p, i32 0, i32 0\n  store i8* %v, i8** %fp\n  ret void\n}\ndefine void @__Pair__setSecond(%__Pair* %p, i8* %v) {\nentry:\n  %sp = getelementptr inbounds %__Pair, %__Pair* %p, i32 0, i32 1\n  store i8* %v, i8** %sp\n  ret void\n}\n");
+        this.addRuntime("define i64 @__arimo_char_is_digit(i64 %c) {\nentry:\n  %ge = icmp sge i64 %c, 48\n  %le = icmp sle i64 %c, 57\n  %r = and i1 %ge, %le\n  %res = select i1 %r, i64 1, i64 0\n  ret i64 %res\n}\n");
+        this.addRuntime("define i64 @__arimo_char_is_upper(i64 %c) {\nentry:\n  %ge = icmp sge i64 %c, 65\n  %le = icmp sle i64 %c, 90\n  %r = and i1 %ge, %le\n  %res = select i1 %r, i64 1, i64 0\n  ret i64 %res\n}\n");
+        this.addRuntime("define i64 @__arimo_char_is_lower(i64 %c) {\nentry:\n  %ge = icmp sge i64 %c, 97\n  %le = icmp sle i64 %c, 122\n  %r = and i1 %ge, %le\n  %res = select i1 %r, i64 1, i64 0\n  ret i64 %res\n}\n");
+        this.addRuntime("define i64 @__arimo_char_is_alpha(i64 %c) {\nentry:\n  %u = call i64 @__arimo_char_is_upper(i64 %c)\n  %l = call i64 @__arimo_char_is_lower(i64 %c)\n  %ur = icmp ne i64 %u, 0\n  %lr = icmp ne i64 %l, 0\n  %r = or i1 %ur, %lr\n  %res = select i1 %r, i64 1, i64 0\n  ret i64 %res\n}\n");
+        this.addRuntime("define i64 @__arimo_char_is_alphanum(i64 %c) {\nentry:\n  %a = call i64 @__arimo_char_is_alpha(i64 %c)\n  %d = call i64 @__arimo_char_is_digit(i64 %c)\n  %ar = icmp ne i64 %a, 0\n  %dr = icmp ne i64 %d, 0\n  %r = or i1 %ar, %dr\n  %res = select i1 %r, i64 1, i64 0\n  ret i64 %res\n}\n");
+        this.addRuntime("define i64 @__arimo_char_is_space(i64 %c) {\nentry:\n  %s = icmp eq i64 %c, 32\n  %t = icmp eq i64 %c, 9\n  %n = icmp eq i64 %c, 10\n  %cr = icmp eq i64 %c, 13\n  %st = or i1 %s, %t\n  %nc = or i1 %n, %cr\n  %rb = or i1 %st, %nc\n  %res = select i1 %rb, i64 1, i64 0\n  ret i64 %res\n}\n");
+        this.addRuntime("define i64 @__arimo_char_to_upper(i64 %c) {\nentry:\n  %ge = icmp sge i64 %c, 97\n  %le = icmp sle i64 %c, 122\n  %is_lo = and i1 %ge, %le\n  %up = sub i64 %c, 32\n  %res = select i1 %is_lo, i64 %up, i64 %c\n  ret i64 %res\n}\n");
+        this.addRuntime("define i64 @__arimo_char_to_lower(i64 %c) {\nentry:\n  %ge = icmp sge i64 %c, 65\n  %le = icmp sle i64 %c, 90\n  %is_up = and i1 %ge, %le\n  %lo = add i64 %c, 32\n  %res = select i1 %is_up, i64 %lo, i64 %c\n  ret i64 %res\n}\n");
+        this.addRuntime("define i8* @__arimo_char_to_string(i64 %c) {\nentry:\n  %buf = call i8* @malloc(i64 2)\n  %c8 = trunc i64 %c to i8\n  store i8 %c8, i8* %buf\n  %end = getelementptr i8, i8* %buf, i64 1\n  store i8 0, i8* %end\n  ret i8* %buf\n}\n");
     }
 
     private emitExternDecl(ext: ExternDecl?) : Void {
@@ -2016,6 +2108,26 @@ public class CodeGen {
                 }
             }
             else if (item.kind == ItemKind.EXTERN) { this.emitExternDecl(item.externDecl); }
+            else if (item.kind == ItemKind.CONST) {
+                String cnam = item.constName;
+                AstType cty = item.constType;
+                Expr cex    = item.constExpr;
+                String llt  = this.llvmTy(cty);
+                if (cex != null && cex.kind == ExprKind.INT_LIT) {
+                    this.addHeader("@${cnam} = private constant ${llt} ${cex.intVal}");
+                } else if (cex != null && cex.kind == ExprKind.FLOAT_LIT) {
+                    this.addHeader("@${cnam} = private constant double ${cex.floatVal}");
+                } else if (cex != null && cex.kind == ExprKind.STR_LIT) {
+                    String sc = this.emitStrConst(cex.strVal);
+                    this.addHeader("@${cnam}.ptr = private constant i8* ${sc}");
+                } else if (cex != null && cex.kind == ExprKind.BOOL_LIT) {
+                    Integer bv = 0;
+                    if (cex.boolVal) { bv = 1; }
+                    this.addHeader("@${cnam} = private constant i64 ${bv}");
+                } else if (cex != null && cex.kind == ExprKind.CHAR_LIT) {
+                    this.addHeader("@${cnam} = private constant i64 ${cex.intVal}");
+                }
+            }
             i++;
         }
     }

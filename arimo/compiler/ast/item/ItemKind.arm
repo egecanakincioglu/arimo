@@ -28,4 +28,5 @@ public class ItemKind {
     public static readonly EXTERN    : Integer = 7;
     public static readonly EXTENSION : Integer = 8;
     public static readonly UNION     : Integer = 9;
+    public static readonly CONST     : Integer = 10;
 }

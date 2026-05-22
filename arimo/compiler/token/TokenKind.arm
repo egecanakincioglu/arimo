@@ -24,6 +24,7 @@ public class TokenKind {
     public static readonly BOOL              : Integer = 3;
     public static readonly STR               : Integer = 4;
     public static readonly IDENT             : Integer = 5;
+    public static readonly CHAR_LIT          : Integer = 6;
 
     public static readonly PACKAGE           : Integer = 10;
     public static readonly IMPORT            : Integer = 11;
@@ -70,6 +71,7 @@ public class TokenKind {
     public static readonly TYPE_I32          : Integer = 60;
     public static readonly TYPE_I64          : Integer = 61;
     public static readonly TYPE_NORETURN     : Integer = 62;
+    public static readonly TYPE_CHAR         : Integer = 63;
 
     public static readonly STD_IO            : Integer = 70;
     public static readonly STD_MATH          : Integer = 71;
@@ -101,6 +103,7 @@ public class TokenKind {
     public static readonly ASYNC             : Integer = 102;
     public static readonly AWAIT             : Integer = 103;
     public static readonly DEFAULT           : Integer = 104;
+    public static readonly CONST             : Integer = 105;
 
     public static readonly PLUS              : Integer = 110;
     public static readonly MINUS             : Integer = 111;

@@ -126,6 +126,7 @@ public class Parser {
         if (k == TokenKind.TYPE_FLOAT)   { return TypeKind.FLOAT;   }
         if (k == TokenKind.TYPE_BOOLEAN) { return TypeKind.BOOLEAN; }
         if (k == TokenKind.TYPE_STRING)  { return TypeKind.STR;     }
+        if (k == TokenKind.TYPE_CHAR)    { return TypeKind.CHAR;    }
         if (k == TokenKind.TYPE_VOID)    { return TypeKind.VOID;    }
         if (k == TokenKind.TYPE_U8)      { return TypeKind.U8;      }
         if (k == TokenKind.TYPE_U16)     { return TypeKind.U16;     }
@@ -453,6 +454,13 @@ public class Parser {
         if (k == TokenKind.INT) {
             Integer v = this.advance().intVal;
             return Expr.intLit(v, sl, sc);
+        }
+
+        if (k == TokenKind.CHAR_LIT) {
+            Integer cv = this.advance().intVal;
+            Expr ce = Expr(ExprKind.CHAR_LIT, sl, sc);
+            ce.intVal = cv;
+            return this.parseSuffix(ce);
         }
 
         if (k == TokenKind.FLOAT) {
@@ -878,11 +886,16 @@ public class Parser {
             while (this.check(TokenKind.CATCH)) {
                 this.advance();
                 this.eat(TokenKind.LPAREN);
-                AstType exTy = this.parseType();
+                List<AstType> exTypes = List();
+                exTypes.append(this.parseType());
+                while (this.check(TokenKind.PIPE)) {
+                    this.advance();
+                    exTypes.append(this.parseType());
+                }
                 String exName = this.eatIdent();
                 this.eat(TokenKind.RPAREN);
                 List<Stmt> cbody = this.parseBlock();
-                catches.append(CatchClause(exTy, exName, cbody));
+                catches.append(CatchClause(exTypes, exName, cbody));
             }
             List<Stmt> finally_ = List();
             if (this.check(TokenKind.FINALLY)) {
@@ -1410,6 +1423,16 @@ public class Parser {
         if (this.check(TokenKind.KW_TYPE)) {
             this.advance();
             return this.parseTypeAliasDecl();
+        }
+
+        if (this.check(TokenKind.CONST)) {
+            this.advance();
+            AstType cty  = this.parseType();
+            String  cnam = this.eatIdent();
+            this.eat(TokenKind.EQ);
+            Expr cval = this.parseExpr(0);
+            this.skipSemicolon();
+            return Item.fromConst(cnam, cty, cval);
         }
 
         Token t = this.peek();

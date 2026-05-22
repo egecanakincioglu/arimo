@@ -2,7 +2,7 @@
 
 [project]
 name        = "arc"
-version     = "0.1.0"
+version     = "1.1.0"
 description = "Arimo stage 1 bootstrap compiler — arc-arimo"
 entry       = "Main.arm"
 license     = "MIT"
@@ -29,7 +29,7 @@ optimize = false
 # -- Stdlib -------------------------------------------------------------------
 
 [stdlib]
-include = ["arimo.fs", "arimo.process"]
+include = ["arimo.fs", "arimo.process", "arimo.io", "arimo.lang", "arimo.env", "arimo.util", "arimo.math"]
 
 # -- Dependencies -------------------------------------------------------------
 
