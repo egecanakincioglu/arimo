@@ -338,8 +338,8 @@ public class PEWriter {
         this.w32(file, 0);                 // CheckSum
         this.w16(file, 3);                 // Subsystem: console
         this.w16(file, 0x8100);            // DllCharacteristics: NX+no-SEH
-        this.w64(file, 0x100000);          // SizeOfStackReserve
-        this.w64(file, 0x1000);            // SizeOfStackCommit
+        this.w64(file, 0x4000000);         // SizeOfStackReserve (64 MB)
+        this.w64(file, 0x10000);           // SizeOfStackCommit (64 KB)
         this.w64(file, 0x100000);          // SizeOfHeapReserve
         this.w64(file, 0x1000);            // SizeOfHeapCommit
         this.w32(file, 0);                 // LoaderFlags
