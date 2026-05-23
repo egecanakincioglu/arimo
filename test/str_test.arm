@@ -1,0 +1,8 @@
+package test;
+
+public class StrTest {
+    public static main() : Integer {
+        String s = "hello";
+        return 0;
+    }
+}
