@@ -328,10 +328,13 @@ public class Main {
 
         String stem    = outName;
         if (stem.length() == 0) { stem = Main.resolveOutStem(inputPath); }
-        String exeFile = stem.concat(".exe");
+        Boolean isLinux = Env.platform().compareTo("linux") == 0;
+        String exeExt = ".exe";
+        if (isLinux) { exeExt = ""; }
+        String exeFile = stem.concat(exeExt);
 
         IO.println("arc: generating native code...");
-        NativeBackend nb = NativeBackend();
+        NativeBackend nb = NativeBackend(isLinux);
         nb.compile(modules, exeFile);
         IO.println("arc: done -> ${exeFile}");
     }
@@ -392,8 +395,11 @@ public class Main {
             Main.compile(entry, stdlibPath, checkOnly, projName);
 
             if (doRun && !checkOnly) {
-                IO.println("arc: running '${projName}.exe'...");
-                Process.exec(".\\".concat(projName).concat(".exe"));
+                Boolean runLinux = Env.platform().compareTo("linux") == 0;
+                String runCmd = ".\\".concat(projName).concat(".exe");
+                if (runLinux) { runCmd = "./".concat(projName); }
+                IO.println("arc: running '${runCmd}'...");
+                Process.exec(runCmd);
             }
             return;
         }
