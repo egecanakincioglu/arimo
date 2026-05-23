@@ -19,8 +19,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 package arimo.compiler.backend;
 
 import arimo.compiler.backend.X64Encoder;
-import arimo.compiler.backend.X64Fixup;
-import arimo.compiler.backend.X64FixupKind;
 import arimo.compiler.backend.X64Reg;
 
 extern "C" {
@@ -202,27 +200,28 @@ public class PEWriter {
         this.enc.applyFixups();
 
         // Apply RIP fixups (string references: LEA [rip+str_label])
-        List<X64Fixup> ripFix = this.enc.ripFixups();
+        Integer ripN = this.enc.ripFixOffs.length();
         Integer ri = 0;
-        while (ri < ripFix.length()) {
-            X64Fixup rf = ripFix.get(ri) as X64Fixup;
+        while (ri < ripN) {
+            Integer ripOff = this.enc.ripFixOffs.get(ri) as Integer;
+            String  ripLbl = this.enc.ripFixLbls.get(ri) as String;
+            ri = ri + 1;
             // Find string offset for this label
             Integer strOff = -1;
             Integer sj = 0;
             while (sj < S) {
                 String nm = this.strNames.get(sj) as String;
-                if (nm == rf.label) { strOff = strOffsets.get(sj) as Integer; }
+                if (nm == ripLbl) { strOff = strOffsets.get(sj) as Integer; }
                 sj = sj + 1;
             }
             Integer targetRVA = rdataRVA + strOff;
-            Integer ripRVA    = this.textRVA + rf.offset + 4;
+            Integer ripRVA    = this.textRVA + ripOff + 4;
             Integer rel32     = targetRVA - ripRVA;
             List<Integer> buf = this.enc.buf;
-            buf.set(rf.offset,     rel32         & 0xFF);
-            buf.set(rf.offset + 1, (rel32 >> 8)  & 0xFF);
-            buf.set(rf.offset + 2, (rel32 >> 16) & 0xFF);
-            buf.set(rf.offset + 3, (rel32 >> 24) & 0xFF);
-            ri = ri + 1;
+            buf.set(ripOff,     rel32         & 0xFF);
+            buf.set(ripOff + 1, (rel32 >> 8)  & 0xFF);
+            buf.set(ripOff + 2, (rel32 >> 16) & 0xFF);
+            buf.set(ripOff + 3, (rel32 >> 24) & 0xFF);
         }
 
         // ===== Step 4: Build .rdata bytes =====

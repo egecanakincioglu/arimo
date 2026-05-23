@@ -38,16 +38,22 @@ public class X64Fixup {
 }
 
 public class X64Encoder {
-    public  buf      : List<Integer>;
-    private lblNames : List<String>;
-    private lblOffs  : List<Integer>;
-    private fixups   : List<X64Fixup>;
+    public  buf         : List<Integer>;
+    private lblNames    : List<String>;
+    private lblOffs     : List<Integer>;
+    public  jmpFixOffs  : List<Integer>;
+    public  jmpFixLbls  : List<String>;
+    public  ripFixOffs  : List<Integer>;
+    public  ripFixLbls  : List<String>;
 
     public constructor() {
-        this.buf      = List();
-        this.lblNames = List();
-        this.lblOffs  = List();
-        this.fixups   = List();
+        this.buf        = List();
+        this.lblNames   = List();
+        this.lblOffs    = List();
+        this.jmpFixOffs = List();
+        this.jmpFixLbls = List();
+        this.ripFixOffs = List();
+        this.ripFixLbls = List();
     }
 
     public size() : Integer {
@@ -101,7 +107,13 @@ public class X64Encoder {
 
     private emitRel32(label: String, kind: Integer) {
         Integer pos = this.buf.length();
-        this.fixups.append(X64Fixup(pos, label, kind));
+        if (kind == X64FixupKind.RIP) {
+            this.ripFixOffs.append(pos);
+            this.ripFixLbls.append(label);
+        } else {
+            this.jmpFixOffs.append(pos);
+            this.jmpFixLbls.append(label);
+        }
         this.emit32(0);
     }
 
@@ -126,31 +138,18 @@ public class X64Encoder {
 
     public applyFixups() {
         Integer i = 0;
-        while (i < this.fixups.length()) {
-            X64Fixup f = this.fixups.get(i) as X64Fixup;
-            if (f.kind == X64FixupKind.JUMP) {
-                Integer target = this.labelOffset(f.label);
-                Integer rel32  = target - (f.offset + 4);
-                this.buf.set(f.offset,     rel32         & 0xFF);
-                this.buf.set(f.offset + 1, (rel32 >> 8)  & 0xFF);
-                this.buf.set(f.offset + 2, (rel32 >> 16) & 0xFF);
-                this.buf.set(f.offset + 3, (rel32 >> 24) & 0xFF);
-            }
+        Integer n = this.jmpFixOffs.length();
+        while (i < n) {
+            Integer off   = this.jmpFixOffs.get(i) as Integer;
+            String  lbl   = this.jmpFixLbls.get(i) as String;
+            Integer target = this.labelOffset(lbl);
+            Integer rel32  = target - (off + 4);
+            this.buf.set(off,     rel32         & 0xFF);
+            this.buf.set(off + 1, (rel32 >> 8)  & 0xFF);
+            this.buf.set(off + 2, (rel32 >> 16) & 0xFF);
+            this.buf.set(off + 3, (rel32 >> 24) & 0xFF);
             i = i + 1;
         }
-    }
-
-    public ripFixups() : List<X64Fixup> {
-        List<X64Fixup> result = List();
-        Integer i = 0;
-        while (i < this.fixups.length()) {
-            X64Fixup f = this.fixups.get(i) as X64Fixup;
-            if (f.kind == X64FixupKind.RIP) {
-                result.append(f);
-            }
-            i = i + 1;
-        }
-        return result;
     }
 
     // ===== MOV =====
