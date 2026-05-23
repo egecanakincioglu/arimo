@@ -22,6 +22,9 @@ Thumbs.db
 *.swo
 .claudeignore
 
+# Release binaries — local only (published via GitHub Releases)
+dist/
+
 # Installer — local only (hardcoded local paths, output/ binary)
 installer/
 
