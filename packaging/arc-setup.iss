@@ -29,7 +29,7 @@ UninstallDisplayIcon={app}\arc.exe
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "addtopath"; Description: "Add arc to PATH (recommended)"; GroupDescription: "Environment:"; Flags: checked
+Name: "addtopath"; Description: "Add arc to PATH (recommended)"; GroupDescription: "Environment:"
 
 [Files]
 Source: "..\arc.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -59,10 +59,6 @@ end;
 
 [Icons]
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
-
-[Run]
-Filename: "{cmd}"; Parameters: "/C setx PATH ""%PATH%;{app}"""; \
-    Flags: runhidden; Tasks: addtopath
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
