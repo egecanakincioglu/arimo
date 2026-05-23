@@ -135,6 +135,18 @@ public class IRInstr {
         return IRInstr(IROpcode.RET);
     }
 
+    public static syscall(dst: IRValue, sysNum: Integer, args: List<IRValue>) : IRInstr {
+        IRInstr i = IRInstr(IROpcode.SYSCALL);
+        i.dst = dst;
+        i.ty  = sysNum;
+        Integer j = 0;
+        while (j < args.length()) {
+            i.operands.append(args.get(j) as IRValue);
+            j = j + 1;
+        }
+        return i;
+    }
+
     public static conv(op: Integer, dst: IRValue, src: IRValue, toTy: Integer) : IRInstr {
         IRInstr i = IRInstr(op);
         i.ty  = toTy;

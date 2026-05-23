@@ -58,7 +58,8 @@ public class IROpcode {
     public static readonly ITOP  : Integer = 32;
     public static readonly PTOI  : Integer = 33;
 
-    public static readonly MOV   : Integer = 34;
+    public static readonly MOV     : Integer = 34;
+    public static readonly SYSCALL : Integer = 35;
 
     public static name(op: Integer) : String {
         if (op == IROpcode.ADD)   { return "add"; }
@@ -94,7 +95,8 @@ public class IROpcode {
         if (op == IROpcode.TRUNC) { return "trunc"; }
         if (op == IROpcode.ITOP)  { return "itop"; }
         if (op == IROpcode.PTOI)  { return "ptoi"; }
-        if (op == IROpcode.MOV)   { return "mov"; }
+        if (op == IROpcode.MOV)     { return "mov"; }
+        if (op == IROpcode.SYSCALL) { return "syscall"; }
         return "?";
     }
 }
