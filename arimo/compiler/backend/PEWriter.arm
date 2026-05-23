@@ -196,13 +196,19 @@ public class PEWriter {
             ti = ti + 1;
         }
 
+        IO.println("arc: [dbg] applying jump fixups...");
         // Apply intra-.text jump fixups
         this.enc.applyFixups();
+        IO.println("arc: [dbg] jump fixups done");
 
         // Apply RIP fixups (string references: LEA [rip+str_label])
         Integer ripN = this.enc.ripFixOffs.length();
+        IO.println("arc: [dbg] rip fixups: ${ripN}, S=${S}, bufLen=${this.enc.buf.length()}");
         Integer ri = 0;
         while (ri < ripN) {
+            if (ri == 0 || ri == 100 || ri == 300 || ri == 600 || ri == 900) {
+                IO.println("arc: [dbg] rip loop ri=${ri}");
+            }
             Integer ripOff = this.enc.ripFixOffs.get(ri) as Integer;
             String  ripLbl = this.enc.ripFixLbls.get(ri) as String;
             ri = ri + 1;
@@ -214,16 +220,22 @@ public class PEWriter {
                 if (nm == ripLbl) { strOff = strOffsets.get(sj) as Integer; }
                 sj = sj + 1;
             }
-            Integer targetRVA = rdataRVA + strOff;
-            Integer ripRVA    = this.textRVA + ripOff + 4;
-            Integer rel32     = targetRVA - ripRVA;
-            List<Integer> buf = this.enc.buf;
-            buf.set(ripOff,     rel32         & 0xFF);
-            buf.set(ripOff + 1, (rel32 >> 8)  & 0xFF);
-            buf.set(ripOff + 2, (rel32 >> 16) & 0xFF);
-            buf.set(ripOff + 3, (rel32 >> 24) & 0xFF);
+            if (strOff < 0) {
+                IO.println("arc: [dbg] MISSING label ${ripLbl} at ri=${ri}");
+                ri = ripN;
+            } else {
+                Integer targetRVA = rdataRVA + strOff;
+                Integer ripRVA    = this.textRVA + ripOff + 4;
+                Integer rel32     = targetRVA - ripRVA;
+                List<Integer> buf = this.enc.buf;
+                buf.set(ripOff,     rel32         & 0xFF);
+                buf.set(ripOff + 1, (rel32 >> 8)  & 0xFF);
+                buf.set(ripOff + 2, (rel32 >> 16) & 0xFF);
+                buf.set(ripOff + 3, (rel32 >> 24) & 0xFF);
+            }
         }
 
+        IO.println("arc: [dbg] rip fixups done");
         // ===== Step 4: Build .rdata bytes =====
         List<Integer> rdata = List();
 
@@ -281,6 +293,7 @@ public class PEWriter {
             fni = fni + 1;
         }
 
+        IO.println("arc: [dbg] rdata built, size=${rdata.length()}");
         // ===== Step 5: Assemble file =====
         List<Integer> file = List();
 
@@ -371,6 +384,7 @@ public class PEWriter {
         // Pad headers to fileAlign
         this.wPad(file, this.fileAlign - file.length());
 
+        IO.println("arc: [dbg] headers done, file=${file.length()}");
         // --- .text section ---
         Integer bi = 0;
         while (bi < this.enc.buf.length()) {
@@ -379,6 +393,7 @@ public class PEWriter {
         }
         this.wPad(file, textFileSize - textVirtSize);
 
+        IO.println("arc: [dbg] text section done");
         // --- .rdata section ---
         Integer rdi = 0;
         while (rdi < rdata.length()) {

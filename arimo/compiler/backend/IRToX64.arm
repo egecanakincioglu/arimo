@@ -333,7 +333,11 @@ public class IRToX64 {
             IRValue ptr = instr.operands.get(1) as IRValue;
             Integer vr  = this.loadVal(val);
             Integer pr  = this.loadVal2(ptr);
-            this.enc.movMemBaseR(pr, vr);
+            if (instr.ty == IRType.I8) {
+                this.enc.movByteMemR(pr, vr);
+            } else {
+                this.enc.movMemBaseR(pr, vr);
+            }
             return;
         }
 
