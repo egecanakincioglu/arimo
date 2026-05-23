@@ -239,6 +239,24 @@ public class X64Encoder {
         }
     }
 
+    public movByteMemR(base: Integer, src: Integer) {
+        Integer rex = 0x40;
+        if (src >= 8)  { rex = rex | 0x04; }
+        if (base >= 8) { rex = rex | 0x01; }
+        this.emit8(rex);
+        this.emit8(0x88);
+        Integer rm4 = base & 7;
+        if (rm4 == 4) {
+            this.modRM(0, src, 4);
+            this.emit8(0x24);
+        } else if (rm4 == 5) {
+            this.modRM(1, src, 5);
+            this.emit8(0);
+        } else {
+            this.modRM(0, src, base);
+        }
+    }
+
     // ===== LEA =====
 
     public leaRip(dst: Integer, label: String) {

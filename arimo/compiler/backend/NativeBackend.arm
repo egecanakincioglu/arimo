@@ -51,7 +51,9 @@ public class NativeBackend {
     }
 
     public compile(modules: List<ArimoModule>, outPath: String) {
+        IO.println("arc: [dbg] lowering IR...");
         this.lowerer.lower(modules);
+        IO.println("arc: [dbg] lower done, fns=${this.lowerer.irFns.length()}");
 
         Integer si = 0;
         while (si < this.lowerer.strNames.length()) {
@@ -60,6 +62,7 @@ public class NativeBackend {
             this.pe.addString(nm, ct);
             si = si + 1;
         }
+        IO.println("arc: [dbg] strings added");
 
         IRToX64 irx = IRToX64(this.enc, this.ra);
 
@@ -67,11 +70,14 @@ public class NativeBackend {
         Integer fi = 0;
         while (fi < this.lowerer.irFns.length()) {
             IRFunction fn = this.lowerer.irFns.get(fi) as IRFunction;
+            IO.println("arc: [dbg] emit fn ${fi}: ${fn.name}");
             if (fn.name == "_start") { entryOff = this.enc.size(); }
             irx.emitFunction(fn);
             fi = fi + 1;
         }
+        IO.println("arc: [dbg] all fns emitted");
         List<Integer> peBytes = this.pe.build(entryOff);
+        IO.println("arc: [dbg] PE built");
         this.pe.writeTo(outPath, peBytes);
     }
 }
