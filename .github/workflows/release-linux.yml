@@ -41,7 +41,7 @@ jobs:
         run: |
           ARC0="$(realpath ../arc-bootstrap/arc)"
           cp -r ../arc-bootstrap/stdlib "$(dirname "$ARC0")/stdlib" 2>/dev/null || true
-          "$ARC0" build
+          "$ARC0" build --target linux
           chmod +x arc
 
       - name: Install fpm
