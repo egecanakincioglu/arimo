@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to upload to (e.g. v1.0.0)"
+        description: "Release tag to upload to (e.g. v1.0)"
         required: true
-        default: "v1.0.0"
+        default: "v1.0"
       bootstrap_tag:
-        description: "arc bootstrap binary tag to download (e.g. v1.0.0)"
+        description: "arc bootstrap binary tag to download (e.g. v1.0)"
         required: true
-        default: "v1.0.0"
+        default: "v1.0"
 
 permissions:
   contents: write
