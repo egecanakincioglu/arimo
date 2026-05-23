@@ -438,6 +438,16 @@ public class IRLower {
             }
         }
         IRValue objVal = this.lowerExpr(obj);
+
+        if (method == "length") {
+            String ldr = this.newReg();
+            IRValue ldst = IRValue.reg(ldr, IRType.I64);
+            List<IRValue> lenArgsMC = List();
+            lenArgsMC.append(objVal);
+            this.emit(IRInstr.call(ldst, "__arimo_strlen", lenArgsMC));
+            return ldst;
+        }
+
         List<IRValue> callArgsMC = List();
         callArgsMC.append(objVal);
         Integer ai2 = 0;
@@ -471,7 +481,7 @@ public class IRLower {
         Integer i = 0;
         while (i < cd.methods.length()) {
             MethodDecl md = cd.methods.get(i) as MethodDecl;
-            if (md.body.length() > 0) {
+            if (md.body != null && md.body.length() > 0) {
                 this.lowerMethod(cd.name, md);
             }
             i = i + 1;
