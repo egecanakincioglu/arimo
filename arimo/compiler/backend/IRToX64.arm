@@ -34,19 +34,41 @@ public class IRToX64 {
     private curName    : String;
     private frame      : Integer;
     private savedCount : Integer;
+    private linux      : Boolean;
 
-    public constructor(enc: X64Encoder, ra: RegAlloc) {
+    public constructor(enc: X64Encoder, ra: RegAlloc, linux: Boolean) {
         this.enc        = enc;
         this.ra         = ra;
         this.curName    = "";
         this.frame      = 0;
         this.savedCount = 0;
+        this.linux      = linux;
     }
 
     private argRegs() : List<Integer> {
         List<Integer> r = List();
-        r.append(X64Reg.RCX);
+        if (this.linux) {
+            r.append(X64Reg.RDI);
+            r.append(X64Reg.RSI);
+            r.append(X64Reg.RDX);
+            r.append(X64Reg.RCX);
+            r.append(X64Reg.R8);
+            r.append(X64Reg.R9);
+        } else {
+            r.append(X64Reg.RCX);
+            r.append(X64Reg.RDX);
+            r.append(X64Reg.R8);
+            r.append(X64Reg.R9);
+        }
+        return r;
+    }
+
+    private syscallArgRegs() : List<Integer> {
+        List<Integer> r = List();
+        r.append(X64Reg.RDI);
+        r.append(X64Reg.RSI);
         r.append(X64Reg.RDX);
+        r.append(X64Reg.R10);
         r.append(X64Reg.R8);
         r.append(X64Reg.R9);
         return r;
@@ -153,7 +175,8 @@ public class IRToX64 {
         Integer i = 0;
         while (i < this.ra.ivals.length()) {
             LiveInterval iv = this.ra.ivals.get(i) as LiveInterval;
-            if (iv.reg >= 0 && X64Reg.isCalleeSaved(iv.reg)) {
+            Boolean isSaved = this.linux ? X64Reg.isCalleeSavedLinux(iv.reg) : X64Reg.isCalleeSaved(iv.reg);
+            if (iv.reg >= 0 && isSaved) {
                 Boolean found = false;
                 Integer j = 0;
                 while (j < used.length()) {
@@ -177,7 +200,10 @@ public class IRToX64 {
         Integer N = calleeSaved.length();
 
         // Frame must satisfy: 8*N + frameSize ≡ 0 (mod 16)
-        Integer frameRaw = spillBytes + 32;
+        // Windows: 32-byte shadow space. Linux: no shadow space.
+        Integer shadowSpace = 0;
+        if (!this.linux) { shadowSpace = 32; }
+        Integer frameRaw = spillBytes + shadowSpace;
         Integer needMod = (8 * N + frameRaw) % 16;
         Integer frameSize = frameRaw;
         if (needMod != 0) { frameSize = frameRaw + (16 - needMod); }
@@ -203,7 +229,7 @@ public class IRToX64 {
         // Save incoming parameters from arg regs to their allocated physical regs
         List<Integer> paramArgRegs = this.argRegs();
         Integer pi = 0;
-        while (pi < fn.params.length() && pi < 4) {
+        while (pi < fn.params.length() && pi < paramArgRegs.length()) {
             IRParam param = fn.params.get(pi) as IRParam;
             Integer argReg  = paramArgRegs.get(pi) as Integer;
             Integer physR   = this.ra.physReg(param.name);
@@ -368,11 +394,42 @@ public class IRToX64 {
             return;
         }
 
+        if (op == IROpcode.SYSCALL) {
+            Integer sysNum = instr.ty;
+            List<Integer> scRegs = this.syscallArgRegs();
+            Integer sargc = instr.operands.length();
+            Integer si = 0;
+            while (si < sargc && si < scRegs.length()) {
+                IRValue sarg = instr.operands.get(si) as IRValue;
+                Integer sreg = scRegs.get(si) as Integer;
+                if (sarg.kind == IRValueKind.IMM_INT) {
+                    this.enc.movRI(sreg, sarg.immInt);
+                } else if (sarg.kind == IRValueKind.REG) {
+                    Integer spr = this.ra.physReg(sarg.name);
+                    if (spr >= 0) {
+                        if (spr != sreg) { this.enc.movRR(sreg, spr); }
+                    } else {
+                        Integer ssl = this.ra.spillSlot(sarg.name);
+                        this.enc.movRMem(sreg, X64Reg.RBP, this.spillOff(ssl));
+                    }
+                } else if (sarg.kind == IRValueKind.GLOBAL) {
+                    this.enc.leaRip(sreg, sarg.name);
+                }
+                si = si + 1;
+            }
+            this.enc.movRI(X64Reg.RAX, sysNum);
+            this.enc.syscall();
+            if (!instr.dst.isNone() && instr.dst.kind == IRValueKind.REG) {
+                this.storeDst(instr.dst.name, X64Reg.RAX);
+            }
+            return;
+        }
+
         if (op == IROpcode.CALL) {
             List<Integer> argRegsLocal = this.argRegs();
             Integer argc = instr.operands.length();
             Integer ai = 0;
-            while (ai < argc && ai < 4) {
+            while (ai < argc && ai < argRegsLocal.length()) {
                 IRValue arg = instr.operands.get(ai) as IRValue;
                 Integer areg = argRegsLocal.get(ai) as Integer;
                 if (arg.kind == IRValueKind.IMM_INT) {
@@ -412,7 +469,11 @@ public class IRToX64 {
             String callTarget = "";
             if (instr.label.startsWith("__ext__")) {
                 String extName = instr.label.substring(7, instr.label.length());
-                callTarget = "${extName}__thunk";
+                if (this.linux) {
+                    callTarget = extName;
+                } else {
+                    callTarget = "${extName}__thunk";
+                }
             } else {
                 callTarget = instr.label;
             }
