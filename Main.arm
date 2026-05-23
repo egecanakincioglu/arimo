@@ -59,7 +59,6 @@ import arimo.compiler.ast.item.Item;
 import arimo.compiler.parser.Parser;
 import arimo.compiler.typechecker.ScopeFrame;
 import arimo.compiler.typechecker.TypeChecker;
-import arimo.compiler.codegen.CodeGen;
 import arimo.compiler.backend.NativeBackend;
 import arimo.fs.File;
 import arimo.process.Process;
@@ -190,8 +189,6 @@ public class Main {
         IO.println("  arc check              type-check only");
         IO.println("  arc init <name>        create new project");
         IO.println("  arc <file.arm>         compile a single file");
-        IO.println("  arc <file.arm> --emit-ir   print LLVM IR");
-        IO.println("  arc <file.arm> --native    use native backend");
         IO.println("  arc --stdlib-path <p> <file.arm>  set stdlib root");
     }
 
@@ -217,7 +214,7 @@ public class Main {
         IO.println("arc: run: cd ".concat(name).concat(" && arc build"));
     }
 
-    private static compile(inputPath: String, stdlibPath: String, emitIR: Boolean, checkOnly: Boolean, useNative: Boolean, outName: String) : Void {
+    private static compile(inputPath: String, stdlibPath: String, checkOnly: Boolean, outName: String) : Void {
         if (!File.exists(inputPath)) {
             IO.println("arc: file not found: ${inputPath}");
             return;
@@ -333,45 +330,9 @@ public class Main {
         if (stem.length() == 0) { stem = Main.resolveOutStem(inputPath); }
         String exeFile = stem.concat(".exe");
 
-        if (useNative) {
-            IO.println("arc: generating native code...");
-            NativeBackend nb = NativeBackend();
-            nb.compile(modules, exeFile);
-            IO.println("arc: done -> ${exeFile}");
-            return;
-        }
-
-        IO.println("arc: generating LLVM IR...");
-        CodeGen cg = CodeGen(tc);
-        String ir = cg.generateAll(modules);
-
-        if (emitIR) {
-            IO.println(ir);
-            return;
-        }
-
-        String llFile  = stem.concat(".ll");
-        String objFile = stem.concat(".o");
-
-        IO.println("arc: writing ${llFile}");
-        File.write(llFile, ir);
-
-        IO.println("arc: running llc...");
-        String llcCmd = "llc -filetype=obj -o ${objFile} ${llFile}";
-        Boolean llcOk = Process.success(llcCmd);
-        if (!llcOk) {
-            IO.println("arc: llc failed");
-            return;
-        }
-
-        IO.println("arc: linking...");
-        String gccCmd = "gcc ${objFile} -o ${exeFile} -lm";
-        Boolean gccOk = Process.success(gccCmd);
-        if (!gccOk) {
-            IO.println("arc: gcc failed");
-            return;
-        }
-
+        IO.println("arc: generating native code...");
+        NativeBackend nb = NativeBackend();
+        nb.compile(modules, exeFile);
         IO.println("arc: done -> ${exeFile}");
     }
 
@@ -387,18 +348,14 @@ public class Main {
         String exePath    = argv.get(0);
         String stdlibPath = Main.findStdlib(exePath);
 
-        String cmd       = argv.get(1);
-        Boolean emitIR   = false;
+        String cmd        = argv.get(1);
         Boolean checkOnly = false;
-        Boolean useNative = false;
         Boolean doRun     = false;
 
         Integer fi = 2;
         while (fi < argc) {
             String flag = argv.get(fi);
-            if (flag.compareTo("--emit-ir") == 0)     { emitIR     = true; }
-            if (flag.compareTo("--check") == 0)       { checkOnly  = true; }
-            if (flag.compareTo("--native") == 0)      { useNative  = true; }
+            if (flag.compareTo("--check") == 0) { checkOnly = true; }
             if (flag.compareTo("--stdlib-path") == 0) {
                 fi++;
                 if (fi < argc) { stdlibPath = argv.get(fi); }
@@ -432,9 +389,9 @@ public class Main {
             if (projName.length() == 0) { projName = "app"; }
 
             IO.println("arc v1.0.0 — building '${projName}'");
-            Main.compile(entry, stdlibPath, emitIR, checkOnly, useNative, projName);
+            Main.compile(entry, stdlibPath, checkOnly, projName);
 
-            if (doRun && !checkOnly && !emitIR) {
+            if (doRun && !checkOnly) {
                 IO.println("arc: running '${projName}.exe'...");
                 Process.exec(".\\".concat(projName).concat(".exe"));
             }
@@ -443,7 +400,7 @@ public class Main {
 
         if (cmd.endsWith(".arm")) {
             IO.println("arc v1.0.0 — compiling '${cmd}'");
-            Main.compile(cmd, stdlibPath, emitIR, checkOnly, useNative, "");
+            Main.compile(cmd, stdlibPath, checkOnly, "");
             return;
         }
 
