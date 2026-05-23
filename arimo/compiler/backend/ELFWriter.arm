@@ -1,0 +1,239 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+import arimo.compiler.backend.X64Encoder;
+
+extern "C" {
+    fopen(path: String, mode: String) : RawPtr<Void>;
+    fputc(c: Integer, f: RawPtr<Void>) : Integer;
+    fclose(f: RawPtr<Void>) : Integer;
+}
+
+public class ELFWriter {
+    private enc      : X64Encoder;
+    private strNames : List<String>;
+    private strConts : List<String>;
+
+    public constructor(enc: X64Encoder) {
+        this.enc      = enc;
+        this.strNames = List();
+        this.strConts = List();
+    }
+
+    public addString(name: String, content: String) {
+        this.strNames.append(name);
+        this.strConts.append(content);
+    }
+
+    private alignTo(v: Integer, a: Integer) : Integer {
+        Integer rem = v % a;
+        if (rem == 0) { return v; }
+        return v + (a - rem);
+    }
+
+    private w8(lst: List<Integer>, b: Integer) {
+        lst.append(b & 0xFF);
+    }
+
+    private w16(lst: List<Integer>, v: Integer) {
+        lst.append(v & 0xFF);
+        lst.append((v >> 8) & 0xFF);
+    }
+
+    private w32(lst: List<Integer>, v: Integer) {
+        lst.append(v & 0xFF);
+        lst.append((v >> 8) & 0xFF);
+        lst.append((v >> 16) & 0xFF);
+        lst.append((v >> 24) & 0xFF);
+    }
+
+    private w64(lst: List<Integer>, v: Integer) {
+        this.w32(lst, v);
+        this.w32(lst, (v >> 32) & 0xFFFFFFFF);
+    }
+
+    private wStr(lst: List<Integer>, s: String) {
+        Integer i = 0;
+        while (i < s.length()) {
+            lst.append(s.charCodeAt(i));
+            i = i + 1;
+        }
+        lst.append(0);
+    }
+
+    private wPad(lst: List<Integer>, count: Integer) {
+        Integer i = 0;
+        while (i < count) { lst.append(0); i = i + 1; }
+    }
+
+    private patchW32(lst: List<Integer>, offset: Integer, v: Integer) {
+        lst.set(offset,     v & 0xFF);
+        lst.set(offset + 1, (v >> 8) & 0xFF);
+        lst.set(offset + 2, (v >> 16) & 0xFF);
+        lst.set(offset + 3, (v >> 24) & 0xFF);
+    }
+
+    public build(entryOff: Integer) : List<Integer> {
+        Integer S         = this.strNames.length();
+        Integer codeSize  = this.enc.size();
+        Integer pageSize  = 4096;
+
+        // File layout:
+        //   0x000: ELF header (64 bytes) + 2 program headers (56 bytes each) = 176 bytes
+        //   0x1000: .text section (code)
+        //   0x1000 + textPadded: .data section (strings)
+
+        Integer headerSize   = 176;
+        Integer textFileOff  = pageSize;   // 0x1000
+        Integer textVA       = 0x401000;
+
+        // Precompute string offsets in .data
+        List<Integer> strOffsets = List();
+        Integer strCursor = 0;
+        Integer si = 0;
+        while (si < S) {
+            strOffsets.append(strCursor);
+            String c = this.strConts.get(si) as String;
+            strCursor = strCursor + c.length() + 1;
+            si = si + 1;
+        }
+        Integer dataSize = strCursor;
+        if (dataSize == 0) { dataSize = 8; }
+
+        Integer textPadded   = this.alignTo(codeSize, pageSize);
+        Integer dataFileOff  = textFileOff + textPadded;
+        Integer dataVA       = textVA + textPadded;
+        Integer entryVA      = textVA + entryOff;
+
+        // Apply intra-.text jump fixups
+        this.enc.applyFixups();
+
+        // Apply RIP fixups (string references: LEA [rip+str_label])
+        Integer ripN   = this.enc.ripFixOffs.length();
+        Integer bufLen = this.enc.buf.length();
+        Integer ri = 0;
+        while (ri < ripN) {
+            Integer ripOff = this.enc.ripFixOffs.get(ri) as Integer;
+            String  ripLbl = this.enc.ripFixLbls.get(ri) as String;
+            ri = ri + 1;
+            Integer strOff = -1;
+            Integer sj = 0;
+            while (sj < S) {
+                String nm = this.strNames.get(sj) as String;
+                if (nm == ripLbl) { strOff = strOffsets.get(sj) as Integer; }
+                sj = sj + 1;
+            }
+            if (strOff < 0) {
+                IO.println("arc: [warn] ELF: missing label ${ripLbl}");
+            } else if (ripOff + 3 >= bufLen) {
+                IO.println("arc: [warn] ELF: bounds ripOff=${ripOff} bufLen=${bufLen}");
+            } else {
+                Integer targetVA = dataVA + strOff;
+                Integer ripRVA   = textVA + ripOff + 4;
+                Integer rel32    = targetVA - ripRVA;
+                List<Integer> buf = this.enc.buf;
+                buf.set(ripOff,     rel32         & 0xFF);
+                buf.set(ripOff + 1, (rel32 >> 8)  & 0xFF);
+                buf.set(ripOff + 2, (rel32 >> 16) & 0xFF);
+                buf.set(ripOff + 3, (rel32 >> 24) & 0xFF);
+            }
+        }
+
+        // Build file
+        List<Integer> file = List();
+
+        // ===== ELF Header (64 bytes) =====
+        // e_ident[16]
+        file.append(0x7F); file.append(0x45); file.append(0x4C); file.append(0x46);  // magic
+        file.append(2);    // EI_CLASS: ELFCLASS64
+        file.append(1);    // EI_DATA: little-endian
+        file.append(1);    // EI_VERSION: current
+        file.append(0);    // EI_OSABI: ELFOSABI_NONE
+        this.wPad(file, 8); // padding
+        this.w16(file, 2);    // e_type: ET_EXEC
+        this.w16(file, 0x3E); // e_machine: EM_X86_64
+        this.w32(file, 1);    // e_version: EV_CURRENT
+        this.w64(file, entryVA);  // e_entry
+        this.w64(file, 64);   // e_phoff: program headers start at byte 64
+        this.w64(file, 0);    // e_shoff: no section headers
+        this.w32(file, 0);    // e_flags
+        this.w16(file, 64);   // e_ehsize
+        this.w16(file, 56);   // e_phentsize
+        this.w16(file, 2);    // e_phnum: 2 program headers
+        this.w16(file, 64);   // e_shentsize
+        this.w16(file, 0);    // e_shnum
+        this.w16(file, 0);    // e_shstrndx
+
+        // ===== Program Header [0]: PT_LOAD .text (r+x) (56 bytes) =====
+        this.w32(file, 1);    // p_type: PT_LOAD
+        this.w32(file, 5);    // p_flags: PF_R | PF_X
+        this.w64(file, textFileOff);    // p_offset
+        this.w64(file, textVA);         // p_vaddr
+        this.w64(file, textVA);         // p_paddr
+        this.w64(file, codeSize);       // p_filesz
+        this.w64(file, codeSize);       // p_memsz
+        this.w64(file, pageSize);       // p_align
+
+        // ===== Program Header [1]: PT_LOAD .data (r+w) (56 bytes) =====
+        this.w32(file, 1);    // p_type: PT_LOAD
+        this.w32(file, 6);    // p_flags: PF_R | PF_W
+        this.w64(file, dataFileOff);    // p_offset
+        this.w64(file, dataVA);         // p_vaddr
+        this.w64(file, dataVA);         // p_paddr
+        this.w64(file, dataSize);       // p_filesz
+        this.w64(file, dataSize);       // p_memsz
+        this.w64(file, pageSize);       // p_align
+
+        // Pad headers to textFileOff (0x1000)
+        this.wPad(file, textFileOff - file.length());
+
+        // ===== .text section =====
+        Integer bi = 0;
+        while (bi < this.enc.buf.length()) {
+            file.append(this.enc.buf.get(bi) as Integer);
+            bi = bi + 1;
+        }
+        // Pad .text to page boundary
+        this.wPad(file, textPadded - codeSize);
+
+        // ===== .data section (string literals) =====
+        Integer sq = 0;
+        while (sq < S) {
+            String cs = this.strConts.get(sq) as String;
+            this.wStr(file, cs);
+            sq = sq + 1;
+        }
+        if (S == 0) { this.wPad(file, 8); }
+
+        return file;
+    }
+
+    public writeTo(path: String, bytes: List<Integer>) {
+        RawPtr<Void> f = fopen(path, "wb");
+        if (f == null) { return; }
+        Integer i = 0;
+        while (i < bytes.length()) {
+            Integer b = bytes.get(i) as Integer;
+            fputc(b, f);
+            i = i + 1;
+        }
+        fclose(f);
+    }
+}

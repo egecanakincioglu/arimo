@@ -152,6 +152,13 @@ public class X64Encoder {
         }
     }
 
+    // ===== SYSCALL =====
+
+    public syscall() {
+        this.emit8(0x0F);
+        this.emit8(0x05);
+    }
+
     // ===== MOV =====
 
     public movRR(dst: Integer, src: Integer) {

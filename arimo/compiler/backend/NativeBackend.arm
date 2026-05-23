@@ -25,19 +25,26 @@ import arimo.compiler.backend.IRFunction;
 import arimo.compiler.backend.RegAlloc;
 import arimo.compiler.backend.X64Encoder;
 import arimo.compiler.backend.PEWriter;
+import arimo.compiler.backend.ELFWriter;
 
 public class NativeBackend {
     private lowerer : IRLower;
     private enc     : X64Encoder;
     private ra      : RegAlloc;
     private pe      : PEWriter;
+    private elf     : ELFWriter;
+    private linux   : Boolean;
 
-    public constructor() {
-        this.lowerer = IRLower();
+    public constructor(linux: Boolean) {
+        this.linux   = linux;
+        this.lowerer = IRLower(linux);
         this.enc     = X64Encoder();
         this.ra      = RegAlloc();
         this.pe      = PEWriter(this.enc);
-        this.setupImports();
+        this.elf     = ELFWriter(this.enc);
+        if (!linux) {
+            this.setupImports();
+        }
     }
 
     private setupImports() {
@@ -53,15 +60,7 @@ public class NativeBackend {
     public compile(modules: List<ArimoModule>, outPath: String) {
         this.lowerer.lower(modules);
 
-        Integer si = 0;
-        while (si < this.lowerer.strNames.length()) {
-            String nm = this.lowerer.strNames.get(si) as String;
-            String ct = this.lowerer.strConts.get(si) as String;
-            this.pe.addString(nm, ct);
-            si = si + 1;
-        }
-
-        IRToX64 irx = IRToX64(this.enc, this.ra);
+        IRToX64 irx = IRToX64(this.enc, this.ra, this.linux);
 
         Integer entryOff = 0;
         Integer fi = 0;
@@ -71,7 +70,26 @@ public class NativeBackend {
             irx.emitFunction(fn);
             fi = fi + 1;
         }
-        List<Integer> peBytes = this.pe.build(entryOff);
-        this.pe.writeTo(outPath, peBytes);
+
+        Integer si = 0;
+        if (this.linux) {
+            while (si < this.lowerer.strNames.length()) {
+                String nm = this.lowerer.strNames.get(si) as String;
+                String ct = this.lowerer.strConts.get(si) as String;
+                this.elf.addString(nm, ct);
+                si = si + 1;
+            }
+            List<Integer> elfBytes = this.elf.build(entryOff);
+            this.elf.writeTo(outPath, elfBytes);
+        } else {
+            while (si < this.lowerer.strNames.length()) {
+                String nm = this.lowerer.strNames.get(si) as String;
+                String ct = this.lowerer.strConts.get(si) as String;
+                this.pe.addString(nm, ct);
+                si = si + 1;
+            }
+            List<Integer> peBytes = this.pe.build(entryOff);
+            this.pe.writeTo(outPath, peBytes);
+        }
     }
 }
