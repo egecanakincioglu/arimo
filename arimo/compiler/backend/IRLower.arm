@@ -62,8 +62,10 @@ public class IRLower {
     private classFldCounts : List<Integer>;
     private curClass       : String;
     private thisReg        : String;
+    private linux          : Boolean;
 
-    public constructor() {
+    public constructor(linux: Boolean) {
+        this.linux = linux;
         this.irFns           = List();
         this.strNames        = List();
         this.strConts        = List();
@@ -308,6 +310,20 @@ public class IRLower {
     // ===== Heap + field helpers =====
 
     private emitHeapAlloc(sizeVal: IRValue) : IRValue {
+        if (this.linux) {
+            // mmap(NULL, size, PROT_READ|PROT_WRITE=3, MAP_PRIVATE|MAP_ANONYMOUS=34, -1, 0)
+            String allocReg = this.newReg();
+            IRValue allocDst = IRValue.reg(allocReg, IRType.PTR);
+            List<IRValue> mmapArgs = List();
+            mmapArgs.append(IRValue.ofInt(0, IRType.I64));
+            mmapArgs.append(sizeVal);
+            mmapArgs.append(IRValue.ofInt(3, IRType.I64));
+            mmapArgs.append(IRValue.ofInt(34, IRType.I64));
+            mmapArgs.append(IRValue.ofInt(-1, IRType.I64));
+            mmapArgs.append(IRValue.ofInt(0, IRType.I64));
+            this.emit(IRInstr.syscall(allocDst, 9, mmapArgs));
+            return allocDst;
+        }
         String phReg = this.newReg();
         IRValue phDst = IRValue.reg(phReg, IRType.I64);
         List<IRValue> phArgs = List();
@@ -1199,11 +1215,6 @@ public class IRLower {
         this.emit(IRInstr.mov(strSaved, IRValue.reg("str", IRType.PTR)));
 
         String nlName = this.internStr("\n");
-        IRValue hDst = IRValue.reg("ph_h", IRType.I64);
-        List<IRValue> hsArgs = List();
-        hsArgs.append(IRValue.ofInt(-11, IRType.I64));
-        this.emit(IRInstr.call(hDst, "__ext__GetStdHandle", hsArgs));
-
         IRValue strPtr = IRValue.reg("str_saved", IRType.PTR);
 
         String lenReg = "plen";
@@ -1212,27 +1223,50 @@ public class IRLower {
         lenArgs.append(strPtr);
         this.emit(IRInstr.call(lenDst, "__arimo_strlen", lenArgs));
 
-        IRValue bwPtr = IRValue.reg("bwPtr", IRType.PTR);
-        this.emit(IRInstr.alloc(bwPtr, 4));
+        if (this.linux) {
+            // write(1, str, len)
+            List<IRValue> wrArgs = List();
+            wrArgs.append(IRValue.ofInt(1, IRType.I64));
+            wrArgs.append(strPtr);
+            wrArgs.append(IRValue.reg("plen", IRType.I64));
+            IRValue wrDst = IRValue.reg("pwr", IRType.VOID);
+            this.emit(IRInstr.syscall(wrDst, 1, wrArgs));
+            if (addNewline) {
+                List<IRValue> wrArgs2 = List();
+                wrArgs2.append(IRValue.ofInt(1, IRType.I64));
+                wrArgs2.append(IRValue.global(nlName));
+                wrArgs2.append(IRValue.ofInt(1, IRType.I64));
+                IRValue wrDst2 = IRValue.reg("pwr2", IRType.VOID);
+                this.emit(IRInstr.syscall(wrDst2, 1, wrArgs2));
+            }
+        } else {
+            IRValue hDst = IRValue.reg("ph_h", IRType.I64);
+            List<IRValue> hsArgs = List();
+            hsArgs.append(IRValue.ofInt(-11, IRType.I64));
+            this.emit(IRInstr.call(hDst, "__ext__GetStdHandle", hsArgs));
 
-        List<IRValue> wfArgs = List();
-        wfArgs.append(IRValue.reg("ph_h", IRType.I64));
-        wfArgs.append(strPtr);
-        wfArgs.append(IRValue.reg("plen", IRType.I64));
-        wfArgs.append(IRValue.reg("bwPtr", IRType.PTR));
-        wfArgs.append(IRValue.ofInt(0, IRType.I64));
-        IRValue wfDst = IRValue.reg("pwf", IRType.VOID);
-        this.emit(IRInstr.call(wfDst, "__ext__WriteFile", wfArgs));
+            IRValue bwPtr = IRValue.reg("bwPtr", IRType.PTR);
+            this.emit(IRInstr.alloc(bwPtr, 4));
 
-        if (addNewline) {
-            List<IRValue> wfArgs2 = List();
-            wfArgs2.append(IRValue.reg("ph_h", IRType.I64));
-            wfArgs2.append(IRValue.global(nlName));
-            wfArgs2.append(IRValue.ofInt(1, IRType.I64));
-            wfArgs2.append(IRValue.reg("bwPtr", IRType.PTR));
-            wfArgs2.append(IRValue.ofInt(0, IRType.I64));
-            IRValue wfDst2 = IRValue.reg("pwf2", IRType.VOID);
-            this.emit(IRInstr.call(wfDst2, "__ext__WriteFile", wfArgs2));
+            List<IRValue> wfArgs = List();
+            wfArgs.append(IRValue.reg("ph_h", IRType.I64));
+            wfArgs.append(strPtr);
+            wfArgs.append(IRValue.reg("plen", IRType.I64));
+            wfArgs.append(IRValue.reg("bwPtr", IRType.PTR));
+            wfArgs.append(IRValue.ofInt(0, IRType.I64));
+            IRValue wfDst = IRValue.reg("pwf", IRType.VOID);
+            this.emit(IRInstr.call(wfDst, "__ext__WriteFile", wfArgs));
+
+            if (addNewline) {
+                List<IRValue> wfArgs2 = List();
+                wfArgs2.append(IRValue.reg("ph_h", IRType.I64));
+                wfArgs2.append(IRValue.global(nlName));
+                wfArgs2.append(IRValue.ofInt(1, IRType.I64));
+                wfArgs2.append(IRValue.reg("bwPtr", IRType.PTR));
+                wfArgs2.append(IRValue.ofInt(0, IRType.I64));
+                IRValue wfDst2 = IRValue.reg("pwf2", IRType.VOID);
+                this.emit(IRInstr.call(wfDst2, "__ext__WriteFile", wfArgs2));
+            }
         }
         this.emit(IRInstr.retVoid());
     }
@@ -1971,7 +2005,11 @@ public class IRLower {
         List<IRValue> exitArgs = List();
         exitArgs.append(mainResult);
         IRValue exitDst = IRValue.reg("ex", IRType.VOID);
-        this.emit(IRInstr.call(exitDst, "__ext__ExitProcess", exitArgs));
+        if (this.linux) {
+            this.emit(IRInstr.syscall(exitDst, 60, exitArgs));
+        } else {
+            this.emit(IRInstr.call(exitDst, "__ext__ExitProcess", exitArgs));
+        }
         this.emit(IRInstr.retVoid());
     }
 
