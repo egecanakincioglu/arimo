@@ -1,0 +1,9 @@
+package test;
+
+public class AddTest {
+    public static main() : Integer {
+        Integer a = 3;
+        Integer b = 4;
+        return a + b;
+    }
+}
