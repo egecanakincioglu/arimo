@@ -58,16 +58,6 @@ jobs:
           Write-Host "arc.exe produced: $((Get-Item arc.exe).Length) bytes"
           Pop-Location
 
-      - name: Build Inno Setup installer
-        shell: pwsh
-        run: |
-          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-          Push-Location arimo
-          New-Item -ItemType Directory -Force dist | Out-Null
-          & $iscc "packaging\arc-setup.iss"
-          if ($LASTEXITCODE -ne 0) { Write-Error "ISCC failed"; exit 1 }
-          Pop-Location
-
       - name: Create zip package
         shell: pwsh
         run: |
@@ -85,7 +75,6 @@ jobs:
         run: |
           $tag = "${{ github.event.inputs.tag }}"
           gh release upload $tag `
-            "arimo\dist\arimo-$tag-windows-x64-setup.exe" `
             "arimo\dist\arimo-$tag-windows-x64.zip" `
             --repo egecanakincioglu/arimo `
             --clobber

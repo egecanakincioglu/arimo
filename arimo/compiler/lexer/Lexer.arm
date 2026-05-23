@@ -34,6 +34,10 @@ public class Lexer {
         this.len    = source.length();
         this.line   = 1;
         this.col    = 1;
+        // Strip UTF-8 BOM (0xEF 0xBB 0xBF = 239 187 191)
+        if (this.len >= 3 && source.charCodeAt(0) == 239 && source.charCodeAt(1) == 187 && source.charCodeAt(2) == 191) {
+            this.pos = 3;
+        }
     }
 
 
