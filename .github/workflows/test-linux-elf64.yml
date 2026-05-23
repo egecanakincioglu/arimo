@@ -1,0 +1,123 @@
+name: Test Linux ELF64
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to test (e.g. v1.0)"
+        required: true
+        default: "v1.0"
+  push:
+    branches: [main]
+    paths:
+      - "arimo/compiler/backend/**"
+      - "Main.arm"
+
+jobs:
+  test-elf64:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download arc Linux release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.tag || 'v1.0' }}"
+          mkdir -p arc-release
+          gh release download "$TAG" \
+            --repo egecanakincioglu/arimo \
+            --pattern "arimo-${TAG}-linux-x64.tar.gz" \
+            --output arc.tar.gz
+          tar -xzf arc.tar.gz -C arc-release --strip-components=1
+          chmod +x arc-release/arc
+          echo "arc binary:"
+          file arc-release/arc
+          arc-release/arc || true
+
+      - name: Create Hello World project
+        run: |
+          mkdir -p testproj
+          cat > testproj/arc.toml << 'EOF'
+          [project]
+          name    = "hello"
+          version = "0.1.0"
+          entry   = "Main.arm"
+
+          [build]
+          target = "x86_64-unknown-linux-gnu"
+          EOF
+
+          cat > testproj/Main.arm << 'EOF'
+          package hello;
+
+          public class Main {
+              public static main() : Void {
+                  IO.println("Hello, Arimo!");
+              }
+          }
+          EOF
+
+      - name: Compile with arc
+        run: |
+          ARC="$(realpath arc-release/arc)"
+          ARC_DIR="$(dirname $ARC)"
+          # arc autodiscovers stdlib next to itself
+          ls "$ARC_DIR/stdlib/arimo/fs/" || echo "no stdlib dir"
+          cd testproj
+          "$ARC" build 2>&1
+          echo "exit code: $?"
+          ls -la hello 2>/dev/null || echo "binary not found"
+
+      - name: Run and verify output
+        run: |
+          cd testproj
+          if [ ! -f hello ]; then
+            echo "FAIL: hello binary not produced"
+            exit 1
+          fi
+          OUTPUT=$(./hello 2>&1)
+          echo "Output: $OUTPUT"
+          if [ "$OUTPUT" = "Hello, Arimo!" ]; then
+            echo "PASS: ELF64 Hello World works"
+          else
+            echo "FAIL: expected 'Hello, Arimo!' got '$OUTPUT'"
+            exit 1
+          fi
+
+      - name: Compile and run arithmetic test
+        run: |
+          ARC="$(realpath arc-release/arc)"
+          mkdir -p arithtest
+          cat > arithtest/arc.toml << 'EOF'
+          [project]
+          name    = "arith"
+          version = "0.1.0"
+          entry   = "Main.arm"
+
+          [build]
+          target = "x86_64-unknown-linux-gnu"
+          EOF
+
+          cat > arithtest/Main.arm << 'EOF'
+          package arith;
+
+          public class Main {
+              public static main() : Void {
+                  Integer a = 6;
+                  Integer b = 7;
+                  Integer c = a * b;
+                  IO.println("6 * 7 = ${c}");
+              }
+          }
+          EOF
+
+          cd arithtest
+          "$ARC" build 2>&1
+          OUTPUT=$(./arith 2>&1)
+          echo "Output: $OUTPUT"
+          if [ "$OUTPUT" = "6 * 7 = 42" ]; then
+            echo "PASS: arithmetic works"
+          else
+            echo "FAIL: expected '6 * 7 = 42' got '$OUTPUT'"
+            exit 1
+          fi
