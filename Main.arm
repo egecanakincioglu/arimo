@@ -336,6 +336,7 @@ public class Main {
         IO.println("arc: generating native code...");
         NativeBackend nb = NativeBackend(isLinux);
         nb.compile(modules, exeFile);
+        if (isLinux) { Process.exec("chmod +x ".concat(exeFile)); }
         IO.println("arc: done -> ${exeFile}");
     }
 
