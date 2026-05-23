@@ -64,7 +64,7 @@ jobs:
           # arc autodiscovers stdlib next to itself
           ls "$ARC_DIR/stdlib/arimo/fs/" || echo "no stdlib dir"
           cd testproj
-          "$ARC" build 2>&1
+          "$ARC" build --target linux 2>&1
           echo "exit code: $?"
           ls -la hello 2>/dev/null || echo "binary not found"
 
@@ -112,7 +112,7 @@ jobs:
           EOF
 
           cd arithtest
-          "$ARC" build 2>&1
+          "$ARC" build --target linux 2>&1
           OUTPUT=$(./arith 2>&1)
           echo "Output: $OUTPUT"
           if [ "$OUTPUT" = "6 * 7 = 42" ]; then

@@ -190,6 +190,7 @@ public class Main {
         IO.println("  arc init <name>        create new project");
         IO.println("  arc <file.arm>         compile a single file");
         IO.println("  arc --stdlib-path <p> <file.arm>  set stdlib root");
+        IO.println("  arc --target linux|windows        override target platform");
     }
 
     private static initProject(name: String) : Void {
@@ -214,7 +215,7 @@ public class Main {
         IO.println("arc: run: cd ".concat(name).concat(" && arc build"));
     }
 
-    private static compile(inputPath: String, stdlibPath: String, checkOnly: Boolean, outName: String) : Void {
+    private static compile(inputPath: String, stdlibPath: String, checkOnly: Boolean, outName: String, isLinux: Boolean) : Void {
         if (!File.exists(inputPath)) {
             IO.println("arc: file not found: ${inputPath}");
             return;
@@ -328,7 +329,6 @@ public class Main {
 
         String stem    = outName;
         if (stem.length() == 0) { stem = Main.resolveOutStem(inputPath); }
-        Boolean isLinux = Env.platform().compareTo("linux") == 0;
         String exeExt = ".exe";
         if (isLinux) { exeExt = ""; }
         String exeFile = stem.concat(exeExt);
@@ -354,6 +354,7 @@ public class Main {
         String cmd        = argv.get(1);
         Boolean checkOnly = false;
         Boolean doRun     = false;
+        Boolean isLinux   = Env.platform().compareTo("linux") == 0;
 
         Integer fi = 2;
         while (fi < argc) {
@@ -362,6 +363,14 @@ public class Main {
             if (flag.compareTo("--stdlib-path") == 0) {
                 fi++;
                 if (fi < argc) { stdlibPath = argv.get(fi); }
+            }
+            if (flag.compareTo("--target") == 0) {
+                fi++;
+                if (fi < argc) {
+                    String tgt = argv.get(fi);
+                    if (tgt.startsWith("linux"))   { isLinux = true; }
+                    if (tgt.startsWith("windows")) { isLinux = false; }
+                }
             }
             fi++;
         }
@@ -392,12 +401,11 @@ public class Main {
             if (projName.length() == 0) { projName = "app"; }
 
             IO.println("arc v1.0.0 — building '${projName}'");
-            Main.compile(entry, stdlibPath, checkOnly, projName);
+            Main.compile(entry, stdlibPath, checkOnly, projName, isLinux);
 
             if (doRun && !checkOnly) {
-                Boolean runLinux = Env.platform().compareTo("linux") == 0;
                 String runCmd = ".\\".concat(projName).concat(".exe");
-                if (runLinux) { runCmd = "./".concat(projName); }
+                if (isLinux) { runCmd = "./".concat(projName); }
                 IO.println("arc: running '${runCmd}'...");
                 Process.exec(runCmd);
             }
@@ -406,7 +414,7 @@ public class Main {
 
         if (cmd.endsWith(".arm")) {
             IO.println("arc v1.0.0 — compiling '${cmd}'");
-            Main.compile(cmd, stdlibPath, checkOnly, "");
+            Main.compile(cmd, stdlibPath, checkOnly, "", isLinux);
             return;
         }
 
