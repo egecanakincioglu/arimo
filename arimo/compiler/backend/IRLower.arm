@@ -823,6 +823,178 @@ public class IRLower {
 
     // ===== Constructor lowering =====
 
+    private lowerLinuxLibcCall(name: String, args: List<Expr>) : IRValue {
+        // fopen(path, mode) → open(path, flags, 0o666=438) syscall
+        if (name == "fopen") {
+            IRValue pathVal = this.lowerExpr(args.get(0) as Expr);
+            IRValue modeVal = this.lowerExpr(args.get(1) as Expr);
+            String mbyteR = this.newReg();
+            IRValue mbyte = IRValue.reg(mbyteR, IRType.I64);
+            this.emit(IRInstr.load(mbyte, modeVal, IRType.I8));
+            String flagsR = this.newReg();
+            IRValue flags = IRValue.reg(flagsR, IRType.I64);
+            String notRLbl = this.newLabel("fo_nr");
+            String notALbl = this.newLabel("fo_na");
+            String openLbl = this.newLabel("fo_op");
+            this.emit(IRInstr.cmp(mbyte, IRValue.ofInt(114, IRType.I64)));
+            this.emit(IRInstr.branch(IROpcode.JNE, notRLbl));
+            this.emit(IRInstr.mov(flags, IRValue.ofInt(0, IRType.I64)));
+            this.emit(IRInstr.jmp(openLbl));
+            this.emit(IRInstr.label(notRLbl));
+            this.emit(IRInstr.cmp(mbyte, IRValue.ofInt(97, IRType.I64)));
+            this.emit(IRInstr.branch(IROpcode.JNE, notALbl));
+            this.emit(IRInstr.mov(flags, IRValue.ofInt(1089, IRType.I64)));
+            this.emit(IRInstr.jmp(openLbl));
+            this.emit(IRInstr.label(notALbl));
+            this.emit(IRInstr.mov(flags, IRValue.ofInt(577, IRType.I64)));
+            this.emit(IRInstr.label(openLbl));
+            String fdR = this.newReg();
+            IRValue fd = IRValue.reg(fdR, IRType.I64);
+            List<IRValue> openArgs = List();
+            openArgs.append(pathVal);
+            openArgs.append(flags);
+            openArgs.append(IRValue.ofInt(438, IRType.I64));
+            this.emit(IRInstr.syscall(fd, 2, openArgs));
+            String retR = this.newReg();
+            IRValue ret = IRValue.reg(retR, IRType.I64);
+            String errLbl = this.newLabel("fo_er");
+            String okLbl  = this.newLabel("fo_ok");
+            this.emit(IRInstr.cmp(fd, IRValue.ofInt(0, IRType.I64)));
+            this.emit(IRInstr.branch(IROpcode.JL, errLbl));
+            this.emit(IRInstr.mov(ret, fd));
+            this.emit(IRInstr.jmp(okLbl));
+            this.emit(IRInstr.label(errLbl));
+            this.emit(IRInstr.mov(ret, IRValue.ofInt(0, IRType.I64)));
+            this.emit(IRInstr.label(okLbl));
+            return ret;
+        }
+        // fread(buf, size, n, fd) → read(fd, buf, size*n) syscall 0
+        if (name == "fread") {
+            IRValue bufVal  = this.lowerExpr(args.get(0) as Expr);
+            IRValue sizeVal = this.lowerExpr(args.get(1) as Expr);
+            IRValue nVal    = this.lowerExpr(args.get(2) as Expr);
+            IRValue fdVal   = this.lowerExpr(args.get(3) as Expr);
+            String totR = this.newReg();
+            IRValue total = IRValue.reg(totR, IRType.I64);
+            this.emit(IRInstr.binop(IROpcode.MUL, total, sizeVal, nVal));
+            String resR = this.newReg();
+            IRValue result = IRValue.reg(resR, IRType.I64);
+            List<IRValue> rdArgs = List();
+            rdArgs.append(fdVal);
+            rdArgs.append(bufVal);
+            rdArgs.append(total);
+            this.emit(IRInstr.syscall(result, 0, rdArgs));
+            return result;
+        }
+        // fwrite(buf, size, n, fd) → write(fd, buf, size*n) syscall 1
+        if (name == "fwrite") {
+            IRValue bufVal  = this.lowerExpr(args.get(0) as Expr);
+            IRValue sizeVal = this.lowerExpr(args.get(1) as Expr);
+            IRValue nVal    = this.lowerExpr(args.get(2) as Expr);
+            IRValue fdVal   = this.lowerExpr(args.get(3) as Expr);
+            String totR = this.newReg();
+            IRValue total = IRValue.reg(totR, IRType.I64);
+            this.emit(IRInstr.binop(IROpcode.MUL, total, sizeVal, nVal));
+            String resR = this.newReg();
+            IRValue result = IRValue.reg(resR, IRType.I64);
+            List<IRValue> wrArgs = List();
+            wrArgs.append(fdVal);
+            wrArgs.append(bufVal);
+            wrArgs.append(total);
+            this.emit(IRInstr.syscall(result, 1, wrArgs));
+            return result;
+        }
+        // fclose(fd) → close(fd) syscall 3
+        if (name == "fclose") {
+            IRValue fdVal = this.lowerExpr(args.get(0) as Expr);
+            String clR = this.newReg();
+            IRValue clDst = IRValue.reg(clR, IRType.I64);
+            List<IRValue> clArgs = List();
+            clArgs.append(fdVal);
+            this.emit(IRInstr.syscall(clDst, 3, clArgs));
+            String zR = this.newReg();
+            IRValue zero = IRValue.reg(zR, IRType.I64);
+            this.emit(IRInstr.mov(zero, IRValue.ofInt(0, IRType.I64)));
+            return zero;
+        }
+        // fseek(fd, offset, whence) → lseek(fd, offset, whence) syscall 8
+        if (name == "fseek") {
+            IRValue fdVal     = this.lowerExpr(args.get(0) as Expr);
+            IRValue offsetVal = this.lowerExpr(args.get(1) as Expr);
+            IRValue whenceVal = this.lowerExpr(args.get(2) as Expr);
+            String skR = this.newReg();
+            IRValue skDst = IRValue.reg(skR, IRType.I64);
+            List<IRValue> skArgs = List();
+            skArgs.append(fdVal);
+            skArgs.append(offsetVal);
+            skArgs.append(whenceVal);
+            this.emit(IRInstr.syscall(skDst, 8, skArgs));
+            String zR = this.newReg();
+            IRValue zero = IRValue.reg(zR, IRType.I64);
+            this.emit(IRInstr.mov(zero, IRValue.ofInt(0, IRType.I64)));
+            return zero;
+        }
+        // ftell(fd) → lseek(fd, 0, SEEK_CUR=1) syscall 8
+        if (name == "ftell") {
+            IRValue fdVal = this.lowerExpr(args.get(0) as Expr);
+            String posR = this.newReg();
+            IRValue pos = IRValue.reg(posR, IRType.I64);
+            List<IRValue> ftArgs = List();
+            ftArgs.append(fdVal);
+            ftArgs.append(IRValue.ofInt(0, IRType.I64));
+            ftArgs.append(IRValue.ofInt(1, IRType.I64));
+            this.emit(IRInstr.syscall(pos, 8, ftArgs));
+            return pos;
+        }
+        // remove(path) → unlink(path) syscall 87
+        if (name == "remove") {
+            IRValue pathVal = this.lowerExpr(args.get(0) as Expr);
+            String rmR = this.newReg();
+            IRValue rmDst = IRValue.reg(rmR, IRType.I64);
+            List<IRValue> rmArgs = List();
+            rmArgs.append(pathVal);
+            this.emit(IRInstr.syscall(rmDst, 87, rmArgs));
+            return rmDst;
+        }
+        // calloc(n, size) → mmap(NULL, n*size, PROT_RW=3, MAP_PRIVATE|ANON=34, -1, 0) syscall 9
+        if (name == "calloc") {
+            IRValue nVal    = this.lowerExpr(args.get(0) as Expr);
+            IRValue sizeVal = this.lowerExpr(args.get(1) as Expr);
+            String totR = this.newReg();
+            IRValue total = IRValue.reg(totR, IRType.I64);
+            this.emit(IRInstr.binop(IROpcode.MUL, total, nVal, sizeVal));
+            String ptrR = this.newReg();
+            IRValue ptr = IRValue.reg(ptrR, IRType.PTR);
+            List<IRValue> mmArgs = List();
+            mmArgs.append(IRValue.ofInt(0, IRType.I64));
+            mmArgs.append(total);
+            mmArgs.append(IRValue.ofInt(3, IRType.I64));
+            mmArgs.append(IRValue.ofInt(34, IRType.I64));
+            mmArgs.append(IRValue.ofInt(-1, IRType.I64));
+            mmArgs.append(IRValue.ofInt(0, IRType.I64));
+            this.emit(IRInstr.syscall(ptr, 9, mmArgs));
+            return ptr;
+        }
+        // fputc(c, fd) → stack-alloc 1 byte, store c, write(fd, buf, 1) syscall 1
+        if (name == "fputc") {
+            IRValue cVal  = this.lowerExpr(args.get(0) as Expr);
+            IRValue fdVal = this.lowerExpr(args.get(1) as Expr);
+            String bufR = this.newReg();
+            IRValue buf = IRValue.reg(bufR, IRType.PTR);
+            this.emit(IRInstr.alloc(buf, 1));
+            this.emit(IRInstr.store(cVal, buf, IRType.I8));
+            String wR = this.newReg();
+            IRValue wDst = IRValue.reg(wR, IRType.I64);
+            List<IRValue> wArgs = List();
+            wArgs.append(fdVal);
+            wArgs.append(buf);
+            wArgs.append(IRValue.ofInt(1, IRType.I64));
+            this.emit(IRInstr.syscall(wDst, 1, wArgs));
+            return cVal;
+        }
+        return IRValue.none();
+    }
+
     private lowerCtor(class_: String, args: List<Expr>) : IRValue {
         if (class_ == "List") {
             String lr = this.newReg();
@@ -830,6 +1002,10 @@ public class IRLower {
             List<IRValue> lArgs = List();
             this.emit(IRInstr.call(lDst, "__arimo_list_new", lArgs));
             return lDst;
+        }
+        if (this.linux) {
+            IRValue libcRes = this.lowerLinuxLibcCall(class_, args);
+            if (!libcRes.isNone()) { return libcRes; }
         }
         Integer clsIdx = this.classIdxOf(class_);
         Integer sz = 8;
