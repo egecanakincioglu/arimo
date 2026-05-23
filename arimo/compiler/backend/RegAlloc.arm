@@ -66,8 +66,6 @@ public class RegAlloc {
 
     private initPool() {
         this.freePool = List();
-        this.freePool.append(X64Reg.R11);
-        this.freePool.append(X64Reg.R10);
         this.freePool.append(X64Reg.R9);
         this.freePool.append(X64Reg.R8);
         this.freePool.append(X64Reg.RDX);
