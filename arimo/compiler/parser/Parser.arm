@@ -99,7 +99,7 @@ public class Parser {
     private eat(kind: Integer) : Token {
         if (!this.check(kind)) {
             Token t = this.peek();
-            IO.error("parse error at ${t.line}:${t.col} — expected token ${kind} got ${t.kind}");
+            IO.error("parse error at ${t.line}:${t.col} - expected token ${kind} got ${t.kind}");
             this.hasError = true;
             return this.eofTok;
         }
@@ -109,7 +109,7 @@ public class Parser {
     private eatIdent() : String {
         if (!this.check(TokenKind.IDENT)) {
             Token t = this.peek();
-            IO.error("parse error at ${t.line}:${t.col} — expected identifier");
+            IO.error("parse error at ${t.line}:${t.col} - expected identifier");
             this.hasError = true;
             return "";
         }
@@ -266,7 +266,7 @@ public class Parser {
             return AstType.named(name);
         }
 
-        IO.error("parse error at ${sl}:${sc} — unexpected token in type: ${k}");
+        IO.error("parse error at ${sl}:${sc} - unexpected token in type: ${k}");
         this.hasError = true;
         this.advance();
         return AstType.simple(TypeKind.VOID);
@@ -592,7 +592,7 @@ public class Parser {
             return this.parseSuffix(Expr.ident(colName, sl, sc));
         }
 
-        IO.error("parse error at ${sl}:${sc} — unexpected token in expression: ${k}");
+        IO.error("parse error at ${sl}:${sc} - unexpected token in expression: ${k}");
         this.hasError = true;
         this.advance();
         return Expr.nullLit(sl, sc);
@@ -636,7 +636,7 @@ public class Parser {
                 if (this.check(TokenKind.IDENT)) {
                     member = this.advance().strVal;
                 } else {
-                    IO.error("parse error at ${sl}:${sc} — expected member name after '.'");
+                    IO.error("parse error at ${sl}:${sc} - expected member name after '.'");
                     this.hasError = true;
                     cont = false;
                 }
@@ -718,7 +718,7 @@ public class Parser {
             return MatchPattern.binding(first);
         }
 
-        IO.error("parse error — unexpected token in match pattern");
+        IO.error("parse error - unexpected token in match pattern");
         this.hasError = true;
         return MatchPattern.wildcard();
     }
@@ -1436,7 +1436,7 @@ public class Parser {
         }
 
         Token t = this.peek();
-        IO.error("parse error at ${t.line}:${t.col} — unexpected token at top level: ${t.kind}");
+        IO.error("parse error at ${t.line}:${t.col} - unexpected token at top level: ${t.kind}");
         this.hasError = true;
         this.advance();
         return Item.fromClass(ClassDecl(Visibility.PUBLIC, "Error"));
