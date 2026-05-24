@@ -181,7 +181,7 @@ public class Main {
     }
 
     private static printUsage() : Void {
-        IO.println("arc v1.0.0 — Arimo Stage 1 Compiler");
+        IO.println("arc v1.0 - Arimo Native Compiler");
         IO.println("");
         IO.println("Usage:");
         IO.println("  arc build              compile project (arc.toml)");
@@ -401,7 +401,7 @@ public class Main {
             if (entry.length() == 0)    { entry    = "Main.arm"; }
             if (projName.length() == 0) { projName = "app"; }
 
-            IO.println("arc v1.0.0 — building '${projName}'");
+            IO.println("arc v1.0 - building '${projName}'");
             Main.compile(entry, stdlibPath, checkOnly, projName, isLinux);
 
             if (doRun && !checkOnly) {
@@ -414,7 +414,7 @@ public class Main {
         }
 
         if (cmd.endsWith(".arm")) {
-            IO.println("arc v1.0.0 — compiling '${cmd}'");
+            IO.println("arc v1.0 - compiling '${cmd}'");
             Main.compile(cmd, stdlibPath, checkOnly, "", isLinux);
             return;
         }
