@@ -240,7 +240,7 @@ public class Main {
             IO.println("arc: parse failed");
             return;
         }
-        IO.println("arc: parse ok — ${mod.items.length()} items, package ${mod.path}");
+        IO.println("arc: parse ok - ${mod.items.length()} items, package ${mod.path}");
 
         List<ArimoModule> modules = List();
         List<String> visited = List();
@@ -309,7 +309,7 @@ public class Main {
                 IO.println(tc.errors.get(ei));
                 ei++;
             }
-            IO.println("arc: type check failed — ${errCount} error(s)");
+            IO.println("arc: type check failed - ${errCount} error(s)");
             return;
         }
         Integer warnCount = tc.warnings.length();
@@ -392,7 +392,7 @@ public class Main {
             if (cmd.compareTo("check") == 0) { checkOnly = true; }
 
             if (!File.exists("arc.toml")) {
-                IO.println("arc: arc.toml not found — run from project root");
+                IO.println("arc: arc.toml not found - run from project root");
                 return;
             }
             String toml     = File.read("arc.toml");
