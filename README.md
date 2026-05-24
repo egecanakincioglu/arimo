@@ -1,7 +1,7 @@
 # Arimo
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.0.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-v1.0-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-AGPL--3.0-darkred?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/compiler-arc-orange?style=flat-square" alt="compiler">
   <img src="https://img.shields.io/badge/extension-.arm-green?style=flat-square" alt="extension">
@@ -480,7 +480,7 @@ Full language reference: **[documentation/index.md](documentation/index.md)**
 | [Collections](documentation/collections/collections-overview.md) | List, HashMap, Array, Slice, Result |
 | [Standard Library](documentation/stdlib/stdlib-overview.md) | arimo.lang, arimo.fs, arimo.io, arimo.util, arimo.env |
 | [CLI](documentation/cli/arc-cli.md) | arc build, run, check, clean, init |
-| [Missing Features](missing-features/critical-gaps.md) | What's not in v1.0.0 and why |
+| [Missing Features](missing-features/critical-gaps.md) | What's not in v1.0 and why |
 
 ---
 
@@ -488,7 +488,7 @@ Full language reference: **[documentation/index.md](documentation/index.md)**
 
 | Version | Status | Highlights |
 |---|---|---|
-| **v1.0.0** | ✅ Released | Full OOP, generics, pattern matching, ARC, BorrowChecker, ArimoIR, native codegen |
+| **v1.0** | ✅ Released | Full OOP, generics, pattern matching, ARC, BorrowChecker, ArimoIR, native codegen |
 | v1.1.0 | Planned | stdlib expansion, Math trig, regex |
 | v1.2.0 | Planned | `async`/`await` runtime, coroutine scheduler |
 | v2.0.0 | Future | Dependency management, package registry |
