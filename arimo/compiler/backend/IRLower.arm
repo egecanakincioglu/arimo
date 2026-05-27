@@ -1119,7 +1119,7 @@ public class IRLower {
 
         // toString() on Integer or unknown type
         if (method == "toString") {
-            if (objCls == "String" || this.isStringExpr(obj)) { return objVal; }
+            if (objCls == "String" || this.isStringExpr(obj)) { return IRValue.reg(objVal.name, objVal.ty); }
             if (objCls == "" || objCls == "Integer") {
                 String tsReg = this.newReg();
                 IRValue tsDst = IRValue.reg(tsReg, IRType.PTR);
