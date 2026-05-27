@@ -141,7 +141,7 @@ public class IRLower {
         Integer i = 0;
         while (i < count) {
             String fn = this.allFieldNames.get(start + i) as String;
-            if (fn == fieldName) { return i; }
+            if (fn == fieldName) { return i + 1; }
             i = i + 1;
         }
         return -1;
@@ -149,8 +149,8 @@ public class IRLower {
 
     private classSizeBytes(clsIdx: Integer) : Integer {
         Integer count = this.classFldCounts.get(clsIdx) as Integer;
-        if (count == 0) { return 8; }
-        return count * 8;
+        if (count == 0) { return 16; }
+        return (1 + count) * 8;
     }
 
     // ===== Variable class tracking =====
@@ -201,7 +201,7 @@ public class IRLower {
                 Integer fldIdx = this.fieldIdxOf(clsIdx, expr.field);
                 if (fldIdx >= 0) {
                     Integer start = this.classFldStarts.get(clsIdx) as Integer;
-                    return this.allFieldClasses.get(start + fldIdx) as String;
+                    return this.allFieldClasses.get(start + fldIdx - 1) as String;
                 }
             }
             return "";
@@ -225,6 +225,41 @@ public class IRLower {
             String m = expr.method;
             if (m == "length" || m == "size" || m == "indexOf" ||
                 m == "charCodeAt" || m == "charAt" || m == "compareTo") { return true; }
+        }
+        return false;
+    }
+
+    private isStringExpr(expr: Expr) : Boolean {
+        if (expr.kind == ExprKind.STR_LIT)    { return true; }
+        if (expr.kind == ExprKind.STR_INTERP) { return true; }
+        if (expr.kind == ExprKind.IDENT) {
+            String cls = this.varClassOf(expr.strVal);
+            return cls == "String";
+        }
+        if (expr.kind == ExprKind.FIELD) {
+            String objCls = this.inferClass(expr.object);
+            Integer clsIdx = this.classIdxOf(objCls);
+            if (clsIdx >= 0) {
+                Integer fldIdx = this.fieldIdxOf(clsIdx, expr.field);
+                if (fldIdx >= 0) {
+                    Integer start = this.classFldStarts.get(clsIdx) as Integer;
+                    String fldCls = this.allFieldClasses.get(start + fldIdx - 1) as String;
+                    return fldCls == "String";
+                }
+            }
+            return false;
+        }
+        if (expr.kind == ExprKind.METHOD) {
+            String m = expr.method;
+            if (m == "concat" || m == "substring" || m == "toString" ||
+                m == "toUpperCase" || m == "toLowerCase" || m == "trim") { return true; }
+            return false;
+        }
+        if (expr.kind == ExprKind.CTOR)  { return expr.class_ == "String"; }
+        if (expr.kind == ExprKind.CAST) {
+            if (expr.castTy.kind == TypeKind.STR)   { return true; }
+            if (expr.castTy.kind == TypeKind.NAMED) { return expr.castTy.name == "String"; }
+            return false;
         }
         return false;
     }
@@ -790,7 +825,19 @@ public class IRLower {
 
     private lowerStaticCall(class_: String, method: String, args: List<Expr>) : IRValue {
         if (class_ == "IO" && method == "println") {
-            IRValue strArg = this.lowerExpr(args.get(0) as Expr);
+            Expr argExpr = args.get(0) as Expr;
+            IRValue strArg;
+            if (this.isStringExpr(argExpr)) {
+                strArg = this.lowerExpr(argExpr);
+            } else {
+                IRValue rawVal = this.lowerExpr(argExpr);
+                String tsReg = this.newReg();
+                IRValue tsDst = IRValue.reg(tsReg, IRType.PTR);
+                List<IRValue> tsArgs = List();
+                tsArgs.append(rawVal);
+                this.emit(IRInstr.call(tsDst, "__arimo_i64_to_str", tsArgs));
+                strArg = tsDst;
+            }
             List<IRValue> callArgs = List();
             callArgs.append(strArg);
             String dr = this.newReg();
@@ -799,7 +846,19 @@ public class IRLower {
             return IRValue.none();
         }
         if (class_ == "IO" && method == "print") {
-            IRValue strArg2 = this.lowerExpr(args.get(0) as Expr);
+            Expr argExpr2 = args.get(0) as Expr;
+            IRValue strArg2;
+            if (this.isStringExpr(argExpr2)) {
+                strArg2 = this.lowerExpr(argExpr2);
+            } else {
+                IRValue rawVal2 = this.lowerExpr(argExpr2);
+                String tsReg2 = this.newReg();
+                IRValue tsDst2 = IRValue.reg(tsReg2, IRType.PTR);
+                List<IRValue> tsArgs2 = List();
+                tsArgs2.append(rawVal2);
+                this.emit(IRInstr.call(tsDst2, "__arimo_i64_to_str", tsArgs2));
+                strArg2 = tsDst2;
+            }
             List<IRValue> callArgs2 = List();
             callArgs2.append(strArg2);
             String dr2 = this.newReg();
@@ -1054,6 +1113,18 @@ public class IRLower {
                 lArgs.append(objVal);
                 this.emit(IRInstr.call(lDst, "__arimo_strlen", lArgs));
                 return lDst;
+            }
+        }
+
+        // toString() on Integer or unknown type
+        if (method == "toString") {
+            if (objCls == "" || objCls == "Integer") {
+                String tsReg = this.newReg();
+                IRValue tsDst = IRValue.reg(tsReg, IRType.PTR);
+                List<IRValue> tsArgs = List();
+                tsArgs.append(objVal);
+                this.emit(IRInstr.call(tsDst, "__arimo_i64_to_str", tsArgs));
+                return tsDst;
             }
         }
 
@@ -1313,7 +1384,15 @@ public class IRLower {
         }
 
         this.lowerBody(md.body);
-        this.emit(IRInstr.ret(IRValue.ofInt(0, IRType.I64)));
+        IRFunction curFn = this.lastFn();
+        Boolean needsRet = true;
+        if (curFn.instrs.length() > 0) {
+            IRInstr lastInstr = curFn.instrs.get(curFn.instrs.length() - 1) as IRInstr;
+            if (lastInstr.op == IROpcode.RET) { needsRet = false; }
+        }
+        if (needsRet) {
+            this.emit(IRInstr.ret(IRValue.ofInt(0, IRType.I64)));
+        }
 
         if (md.isStatic && md.name == "main" && this.mainFn == "") {
             this.mainFn = fnName;
