@@ -21,6 +21,7 @@ package arimo.compiler.backend;
 import arimo.compiler.backend.X64Reg;
 import arimo.compiler.backend.IRFunction;
 import arimo.compiler.backend.IRInstr;
+import arimo.compiler.backend.IRParam;
 import arimo.compiler.backend.IRValue;
 import arimo.compiler.backend.IRValueKind;
 
@@ -98,6 +99,12 @@ public class RegAlloc {
 
     private computeIntervals(fn: IRFunction) {
         this.ivals = List();
+        Integer pi = 0;
+        while (pi < fn.params.length()) {
+            IRParam param = fn.params.get(pi) as IRParam;
+            this.ivFindOrCreate(param.name, 0);
+            pi = pi + 1;
+        }
         Integer instrLen = fn.instrs.length();
         Integer i = 0;
         while (i < instrLen) {
