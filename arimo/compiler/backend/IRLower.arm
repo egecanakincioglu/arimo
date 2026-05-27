@@ -648,9 +648,29 @@ public class IRLower {
             IRValue operand = this.lowerExpr(expr.operand);
             String dr = this.newReg();
             IRValue dst = IRValue.reg(dr, IRType.I64);
-            if (expr.op == 1)      { this.emit(IRInstr.unop(IROpcode.NEG, dst, operand)); }
+            if (expr.op == 1) { this.emit(IRInstr.unop(IROpcode.NEG, dst, operand)); }
             else if (expr.op == 2) { this.emit(IRInstr.unop(IROpcode.NOT, dst, operand)); }
-            else                   { this.emit(IRInstr.mov(dst, operand)); }
+            else if (expr.op == 4 || expr.op == 5 || expr.op == 6 || expr.op == 7) {
+                if (expr.operand.kind == ExprKind.IDENT) {
+                    String varName = expr.operand.strVal;
+                    String nr = this.newReg();
+                    IRValue nv = IRValue.reg(nr, IRType.I64);
+                    if (expr.op == 6 || expr.op == 7) {
+                        this.emit(IRInstr.mov(dst, operand));
+                        if (expr.op == 6) { this.emit(IRInstr.binop(IROpcode.ADD, nv, IRValue.reg(dr, IRType.I64), IRValue.ofInt(1, IRType.I64))); }
+                        else              { this.emit(IRInstr.binop(IROpcode.SUB, nv, IRValue.reg(dr, IRType.I64), IRValue.ofInt(1, IRType.I64))); }
+                        this.varDefine(varName, nr);
+                    } else {
+                        if (expr.op == 4) { this.emit(IRInstr.binop(IROpcode.ADD, nv, operand, IRValue.ofInt(1, IRType.I64))); }
+                        else              { this.emit(IRInstr.binop(IROpcode.SUB, nv, operand, IRValue.ofInt(1, IRType.I64))); }
+                        this.varDefine(varName, nr);
+                        return nv;
+                    }
+                } else {
+                    this.emit(IRInstr.mov(dst, operand));
+                }
+            }
+            else { this.emit(IRInstr.mov(dst, operand)); }
             return dst;
         }
 
@@ -1443,11 +1463,9 @@ public class IRLower {
     }
 
     private lowerClass(cd: ClassDecl) {
-        IO.println("arc: [dbg] class ${cd.name}");
         if (cd.ctor != null) {
             ConstructorDecl ctor = cd.ctor as ConstructorDecl;
             if (ctor.body != null && ctor.body.length() > 0) {
-                IO.println("arc: [dbg]   ctor");
                 this.lowerConstructor(cd.name, ctor);
             }
         }
@@ -1455,7 +1473,6 @@ public class IRLower {
         while (i < cd.methods.length()) {
             MethodDecl md = cd.methods.get(i) as MethodDecl;
             if (md.body != null && md.body.length() > 0) {
-                IO.println("arc: [dbg]   method ${md.name}");
                 this.lowerMethod(cd.name, md);
             }
             i = i + 1;
@@ -2307,17 +2324,14 @@ public class IRLower {
     }
 
     public lower(modules: List<ArimoModule>) {
-        IO.println("arc: [dbg] registerClasses...");
         this.registerClasses(modules);
         this.internStr("\n");
         Integer i = 0;
         while (i < modules.length()) {
             ArimoModule m = modules.get(i) as ArimoModule;
-            IO.println("arc: [dbg] lowerModule ${i} ${m.path}");
             this.lowerModule(m);
             i = i + 1;
         }
-        IO.println("arc: [dbg] modules done, generating helpers...");
         this.generateStrlenHelper();
         this.generateListNew();
         this.generateListLength();
