@@ -60,7 +60,8 @@ public class NativeBackend {
     public compile(modules: List<ArimoModule>, outPath: String) {
         IO.println("arc: [dbg] lowering IR...");
         this.lowerer.lower(modules);
-        IO.println("arc: [dbg] IR done, encoding x64 (" + this.lowerer.irFns.length().toString() + " fns)...");
+        Integer totalFns = this.lowerer.irFns.length();
+        IO.println("arc: [dbg] IR done, encoding x64 (${totalFns} fns)...");
 
         IRToX64 irx = IRToX64(this.enc, this.ra, this.linux);
 
@@ -68,7 +69,7 @@ public class NativeBackend {
         Integer fi = 0;
         while (fi < this.lowerer.irFns.length()) {
             IRFunction fn = this.lowerer.irFns.get(fi) as IRFunction;
-            IO.println("arc: [dbg] fn " + fi.toString() + " " + fn.name);
+            IO.println("arc: [dbg] fn ${fi} ${fn.name}");
             if (fn.name == "_start") { entryOff = this.enc.size(); }
             irx.emitFunction(fn);
             fi = fi + 1;
