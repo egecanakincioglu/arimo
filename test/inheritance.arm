@@ -1,0 +1,8 @@
+package test;
+
+// Simple class inheritance test
+public class InheritanceTest {
+    public static main() : Void {
+        IO.println("inheritance test");
+    }
+}

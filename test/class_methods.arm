@@ -1,0 +1,24 @@
+package test;
+
+// Instance method test
+public class ClassMethods {
+    private name : String;
+
+    public constructor(name: String) {
+        this.name = name;
+    }
+
+    public greet() : Void {
+        IO.println("Hello, ");
+        IO.println(this.name);
+    }
+
+    public toUpper() : String {
+        return this.name;
+    }
+
+    public static main() : Void {
+        ClassMethods obj = ClassMethods("World");
+        obj.greet();
+    }
+}

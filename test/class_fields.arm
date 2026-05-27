@@ -1,0 +1,25 @@
+package test;
+
+// Field access test
+public class ClassFields {
+    private value : Integer;
+
+    public constructor(v: Integer) {
+        this.value = v;
+    }
+
+    public getValue() : Integer {
+        return this.value;
+    }
+
+    public setValue(v: Integer) : Void {
+        this.value = v;
+    }
+
+    public static main() : Void {
+        ClassFields obj = ClassFields(42);
+        IO.println(obj.getValue());
+        obj.setValue(100);
+        IO.println(obj.getValue());
+    }
+}

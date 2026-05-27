@@ -1,0 +1,23 @@
+package test;
+
+// Constructor argümanlı test
+public class ConstructorArgs {
+    private x : Integer;
+    private y : Integer;
+
+    public constructor(x: Integer, y: Integer) {
+        this.x = x;
+        this.y = y;
+    }
+
+    public sum() : Integer {
+        return this.x + this.y;
+    }
+
+    public static main() : Void {
+        ConstructorArgs obj = ConstructorArgs(10, 20);
+        Integer result = obj.sum();
+        IO.println("sum: ");
+        IO.println(result);
+    }
+}
