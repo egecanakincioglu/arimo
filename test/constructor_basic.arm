@@ -1,0 +1,19 @@
+package test;
+
+// Basit constructor testi
+public class ConstructorBasic {
+    private name : String;
+
+    public constructor() {
+        this.name = "test";
+    }
+
+    public getName() : String {
+        return this.name;
+    }
+
+    public static main() : Void {
+        ConstructorBasic obj = ConstructorBasic();
+        IO.println(obj.getName());
+    }
+}

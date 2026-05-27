@@ -1,0 +1,25 @@
+package test;
+
+// Zincirleme constructor call test (BULUNAN BUG)
+public class ConstructorChained {
+    private values : List<Integer>;
+
+    public constructor() {
+        this.values = List();
+    }
+
+    public addValue(x: Integer) : ConstructorChained {
+        this.values.append(x);
+        return this;
+    }
+
+    public getLength() : Integer {
+        return this.values.length();
+    }
+
+    public static main() : Void {
+        // Zincirleme call - senin bulduğun bug burada tetikleniyor
+        ConstructorChained obj = ConstructorChained().addValue(1).addValue(2).addValue(3);
+        IO.println(obj.getLength());
+    }
+}

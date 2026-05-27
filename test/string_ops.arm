@@ -1,0 +1,29 @@
+package test;
+
+// String operations test
+public class StringOperations {
+    public static main() : Void {
+        String s1 = "Hello";
+        String s2 = "World";
+
+        // concat
+        String combined = s1.concat(" ").concat(s2);
+        IO.println(combined);
+
+        // length
+        Integer len = combined.length();
+        IO.println(len);
+
+        // charAt
+        String ch = s1.charAt(0).toString();
+        IO.println(ch);
+
+        // indexOf
+        Integer idx = combined.indexOf("o");
+        IO.println(idx);
+
+        // substring
+        String sub = s1.substring(0, 3);
+        IO.println(sub);
+    }
+}

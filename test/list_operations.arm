@@ -1,0 +1,23 @@
+package test;
+
+// List operations test
+public class ListOperations {
+    public static main() : Void {
+        List<Integer> nums = List();
+        nums.append(1);
+        nums.append(2);
+        nums.append(3);
+
+        Integer len = nums.length();
+        IO.println(len);
+
+        Integer first = nums.get(0);
+        IO.println(first);
+
+        Integer last = nums.get(2);
+        IO.println(last);
+
+        nums.set(1, 100);
+        IO.println(nums.get(1));
+    }
+}
