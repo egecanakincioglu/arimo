@@ -2310,7 +2310,7 @@ public class IRLower {
         Integer i = 0;
         while (i < modules.length()) {
             ArimoModule m = modules.get(i) as ArimoModule;
-            IO.println("arc: [dbg] lowerModule ${i} ${m.package_}");
+            IO.println("arc: [dbg] lowerModule ${i} ${m.path}");
             this.lowerModule(m);
             i = i + 1;
         }
