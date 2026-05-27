@@ -212,6 +212,9 @@ public class X64Encoder {
         if (base == X64Reg.RSP || base == X64Reg.R12) {
             this.modRM(0, dst, 4);
             this.emit8(0x24);
+        } else if ((base & 7) == 5) {
+            this.modRM(1, dst, base & 7);
+            this.emit8(0);
         } else {
             this.modRM(0, dst, base);
         }
@@ -223,6 +226,9 @@ public class X64Encoder {
         if (base == X64Reg.RSP || base == X64Reg.R12) {
             this.modRM(0, src, 4);
             this.emit8(0x24);
+        } else if ((base & 7) == 5) {
+            this.modRM(1, src, base & 7);
+            this.emit8(0);
         } else {
             this.modRM(0, src, base);
         }
@@ -241,6 +247,9 @@ public class X64Encoder {
         if (base == X64Reg.RSP || base == X64Reg.R12) {
             this.modRM(0, dst, 4);
             this.emit8(0x24);
+        } else if ((base & 7) == 5) {
+            this.modRM(1, dst, base & 7);
+            this.emit8(0);
         } else {
             this.modRM(0, dst, base);
         }
