@@ -2304,14 +2304,17 @@ public class IRLower {
     }
 
     public lower(modules: List<ArimoModule>) {
+        IO.println("arc: [dbg] registerClasses...");
         this.registerClasses(modules);
         this.internStr("\n");
         Integer i = 0;
         while (i < modules.length()) {
             ArimoModule m = modules.get(i) as ArimoModule;
+            IO.println("arc: [dbg] lowerModule ${i} ${m.package_}");
             this.lowerModule(m);
             i = i + 1;
         }
+        IO.println("arc: [dbg] modules done, generating helpers...");
         this.generateStrlenHelper();
         this.generateListNew();
         this.generateListLength();
