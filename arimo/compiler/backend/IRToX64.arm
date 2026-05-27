@@ -213,6 +213,9 @@ public class IRToX64 {
         this.savedCount = N;
 
         this.enc.defineLabel(fn.name);
+        if (!this.linux && fn.name == "_start") {
+            this.enc.subRI(X64Reg.RSP, 8);
+        }
         this.enc.pushR(X64Reg.RBP);
         this.enc.movRR(X64Reg.RBP, X64Reg.RSP);
 
