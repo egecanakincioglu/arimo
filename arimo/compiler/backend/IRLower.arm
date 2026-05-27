@@ -1463,9 +1463,11 @@ public class IRLower {
     }
 
     private lowerClass(cd: ClassDecl) {
+        IO.println("arc: [dbg] class ${cd.name}");
         if (cd.ctor != null) {
             ConstructorDecl ctor = cd.ctor as ConstructorDecl;
             if (ctor.body != null && ctor.body.length() > 0) {
+                IO.println("arc: [dbg]   ctor");
                 this.lowerConstructor(cd.name, ctor);
             }
         }
@@ -1473,10 +1475,13 @@ public class IRLower {
         while (i < cd.methods.length()) {
             MethodDecl md = cd.methods.get(i) as MethodDecl;
             if (md.body != null && md.body.length() > 0) {
+                IO.println("arc: [dbg]   method ${md.name}");
                 this.lowerMethod(cd.name, md);
+                IO.println("arc: [dbg]   done ${md.name}");
             }
             i = i + 1;
         }
+        IO.println("arc: [dbg] class done ${cd.name}");
     }
 
     private lowerModule(m: ArimoModule) {
