@@ -653,18 +653,22 @@ public class IRLower {
             else if (expr.op == 4 || expr.op == 5 || expr.op == 6 || expr.op == 7) {
                 if (expr.operand.kind == ExprKind.IDENT) {
                     String varName = expr.operand.strVal;
-                    String nr = this.newReg();
-                    IRValue nv = IRValue.reg(nr, IRType.I64);
-                    if (expr.op == 6 || expr.op == 7) {
-                        this.emit(IRInstr.mov(dst, operand));
-                        if (expr.op == 6) { this.emit(IRInstr.binop(IROpcode.ADD, nv, IRValue.reg(dr, IRType.I64), IRValue.ofInt(1, IRType.I64))); }
-                        else              { this.emit(IRInstr.binop(IROpcode.SUB, nv, IRValue.reg(dr, IRType.I64), IRValue.ofInt(1, IRType.I64))); }
-                        this.varDefine(varName, nr);
+                    String oldReg  = this.varLookup(varName);
+                    if (oldReg != "") {
+                        IRValue inPlace = IRValue.reg(oldReg, IRType.I64);
+                        if (expr.op == 6 || expr.op == 7) {
+                            // POST: copy old value to dst, then update oldReg in-place
+                            this.emit(IRInstr.mov(dst, inPlace));
+                            if (expr.op == 6) { this.emit(IRInstr.binop(IROpcode.ADD, inPlace, inPlace, IRValue.ofInt(1, IRType.I64))); }
+                            else              { this.emit(IRInstr.binop(IROpcode.SUB, inPlace, inPlace, IRValue.ofInt(1, IRType.I64))); }
+                        } else {
+                            // PRE: update oldReg in-place, return it (now holds new value)
+                            if (expr.op == 4) { this.emit(IRInstr.binop(IROpcode.ADD, inPlace, inPlace, IRValue.ofInt(1, IRType.I64))); }
+                            else              { this.emit(IRInstr.binop(IROpcode.SUB, inPlace, inPlace, IRValue.ofInt(1, IRType.I64))); }
+                            return inPlace;
+                        }
                     } else {
-                        if (expr.op == 4) { this.emit(IRInstr.binop(IROpcode.ADD, nv, operand, IRValue.ofInt(1, IRType.I64))); }
-                        else              { this.emit(IRInstr.binop(IROpcode.SUB, nv, operand, IRValue.ofInt(1, IRType.I64))); }
-                        this.varDefine(varName, nr);
-                        return nv;
+                        this.emit(IRInstr.mov(dst, operand));
                     }
                 } else {
                     this.emit(IRInstr.mov(dst, operand));
