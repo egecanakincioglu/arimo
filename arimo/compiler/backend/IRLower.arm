@@ -224,7 +224,7 @@ public class IRLower {
         if (expr.kind == ExprKind.METHOD) {
             String m = expr.method;
             if (m == "length" || m == "size" || m == "indexOf" ||
-                m == "charCodeAt" || m == "charAt" || m == "compareTo") { return true; }
+                m == "charCodeAt" || m == "compareTo") { return true; }
         }
         return false;
     }
@@ -252,7 +252,8 @@ public class IRLower {
         if (expr.kind == ExprKind.METHOD) {
             String m = expr.method;
             if (m == "concat" || m == "substring" || m == "toString" ||
-                m == "toUpperCase" || m == "toLowerCase" || m == "trim") { return true; }
+                m == "toUpperCase" || m == "toLowerCase" || m == "trim" ||
+                m == "charAt") { return true; }
             return false;
         }
         if (expr.kind == ExprKind.CTOR)  { return expr.class_ == "String"; }
@@ -1118,6 +1119,7 @@ public class IRLower {
 
         // toString() on Integer or unknown type
         if (method == "toString") {
+            if (objCls == "String" || this.isStringExpr(obj)) { return objVal; }
             if (objCls == "" || objCls == "Integer") {
                 String tsReg = this.newReg();
                 IRValue tsDst = IRValue.reg(tsReg, IRType.PTR);
@@ -1306,13 +1308,23 @@ public class IRLower {
             this.emit(IRInstr.call(dst, "__arimo_indexof_from", a));
             return dst;
         }
-        if (method == "charCodeAt" || method == "charAt") {
+        if (method == "charCodeAt") {
             IRValue idx = this.lowerExpr(args.get(0) as Expr);
             List<IRValue> a = List();
             a.append(objVal);
             a.append(idx);
             String dr = this.newReg();
             IRValue dst = IRValue.reg(dr, IRType.I64);
+            this.emit(IRInstr.call(dst, "__arimo_charcodeat", a));
+            return dst;
+        }
+        if (method == "charAt") {
+            IRValue idx = this.lowerExpr(args.get(0) as Expr);
+            List<IRValue> a = List();
+            a.append(objVal);
+            a.append(idx);
+            String dr = this.newReg();
+            IRValue dst = IRValue.reg(dr, IRType.PTR);
             this.emit(IRInstr.call(dst, "__arimo_charat", a));
             return dst;
         }
@@ -2122,8 +2134,8 @@ public class IRLower {
         this.emit(IRInstr.ret(IRValue.ofInt(-1, IRType.I64)));
     }
 
-    private generateCharAt() {
-        this.beginFn("__arimo_charat", IRType.I64);
+    private generateCharCodeAt() {
+        this.beginFn("__arimo_charcodeat", IRType.I64);
         this.addParamToLast("s",   IRType.PTR);
         this.addParamToLast("idx", IRType.I64);
         this.resetFnContext();
@@ -2137,6 +2149,29 @@ public class IRLower {
         IRValue c   = IRValue.reg(cReg, IRType.I64);
         this.emit(IRInstr.load(c, p, IRType.I8));
         this.emit(IRInstr.ret(c));
+    }
+
+    private generateCharAt() {
+        this.beginFn("__arimo_charat", IRType.PTR);
+        this.addParamToLast("s",   IRType.PTR);
+        this.addParamToLast("idx", IRType.I64);
+        this.resetFnContext();
+        this.emit(IRInstr.label("entry"));
+        IRValue sP  = IRValue.reg("s",   IRType.PTR);
+        IRValue idx = IRValue.reg("idx", IRType.I64);
+        String pReg = this.newReg();
+        IRValue p   = IRValue.reg(pReg, IRType.PTR);
+        this.emit(IRInstr.binop(IROpcode.ADD, p, sP, idx));
+        String cReg = this.newReg();
+        IRValue c   = IRValue.reg(cReg, IRType.I64);
+        this.emit(IRInstr.load(c, p, IRType.I8));
+        IRValue buf = this.emitHeapAlloc(IRValue.ofInt(2, IRType.I64));
+        this.emit(IRInstr.store(c, buf, IRType.I8));
+        String npReg = this.newReg();
+        IRValue np   = IRValue.reg(npReg, IRType.PTR);
+        this.emit(IRInstr.binop(IROpcode.ADD, np, buf, IRValue.ofInt(1, IRType.I64)));
+        this.emit(IRInstr.store(IRValue.ofInt(0, IRType.I64), np, IRType.I8));
+        this.emit(IRInstr.ret(buf));
     }
 
     private generateI64ToStr() {
@@ -2290,6 +2325,7 @@ public class IRLower {
         this.generateStartsWith();
         this.generateEndsWith();
         this.generateIndexOf();
+        this.generateCharCodeAt();
         this.generateCharAt();
         this.generateI64ToStr();
         this.generatePrintHelper("__arimo_println", true);
