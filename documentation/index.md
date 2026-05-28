@@ -43,7 +43,7 @@ Arimo is a statically-typed, object-oriented systems programming language with n
 
 ## Memory
 
-- [memory-model](./memory/memory-model.md) — Layered memory: ARC, GC, manual memory, planned BorrowChecker
+- [memory-model](./memory/memory-model.md) — Layered memory target: ARC+GC, manual memory, planned BorrowChecker
 - [low-level](./memory/low-level.md) — `RawPtr`, `Memory`, `extern "C"`, inline assembly
 
 ## Collections

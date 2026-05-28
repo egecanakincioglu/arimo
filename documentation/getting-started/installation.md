@@ -9,14 +9,14 @@ date: 2026-05-22
 
 ## Requirements
 
-- **OS:** Windows x86-64 (Windows 10 or later)
+- **OS:** Windows x86-64 or Linux x86-64
 - **Disk:** ~5 MB for the compiler and standard library
 
 ## Download
 
 Download the latest `arc` release from the official GitHub repository. The release package includes:
 
-- `arc.exe` — the Arimo compiler
+- `arc.exe` on Windows, or `arc` on Linux — the Arimo compiler
 - `stdlib/` — standard library source files
 
 Place both in the same directory. `arc` auto-discovers `stdlib/` from its own location.
@@ -36,7 +36,8 @@ arc v1.0
 ## Directory Layout
 
 ```
-arc.exe
+arc.exe              # Windows
+# or: arc            # Linux
 stdlib/
   arimo/
     lang/
@@ -51,7 +52,8 @@ stdlib/
 
 ```
 arc build
-myapp.exe
+./myapp              # Linux
+myapp.exe            # Windows
 ```
 
 Or in one step:

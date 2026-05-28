@@ -66,6 +66,8 @@ version = "0.1.0"
 entry   = "Main.arm"
 ```
 
+The current v1 generator writes a Windows target by default. On Linux, use `--target linux` for compile commands or edit `[build].target` in `arc.toml` to a Linux target before building.
+
 Generated `Main.arm`:
 
 ```arm
