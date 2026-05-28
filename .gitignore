@@ -7,6 +7,8 @@
 
 # Claude Code worktrees & settings
 .claude/
+.codex/
+.agents/
 
 # Rust
 **/*.rs.bk
@@ -38,6 +40,7 @@ orchestrator/venv/
 orchestrator/
 brain/
 CLAUDE.md
+AGENTS.md
 /reference/
 
 # obsidian-mind — vault kişisel içerik (tümü local)
@@ -90,4 +93,6 @@ Memories.md
 # Obsidian
 .obsidian
 graphify-out
+.graphify
 .remember
+skills-lock.json
