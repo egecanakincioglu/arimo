@@ -17,7 +17,7 @@
 <p align="center">
   <a href="documentation/index.md">📖 Documentation</a> ·
   <a href="documentation/getting-started/hello-world.md">Quick Start</a> ·
-  <a href="missing-features/critical-gaps.md">Roadmap Gaps</a> ·
+  <a href="documentation/reference/project-status.md">Project Status</a> ·
   <a href="documentation/reference/versioning.md">Changelog</a>
 </p>
 
@@ -68,11 +68,11 @@ Most languages choose one approach. Arimo layers three:
 
 | Layer | Mechanism | When |
 |---|---|---|
-| **Managed** | ARC + GC cooperation | Default for ordinary objects |
+| **Managed** | ARC + GC cooperation | Default target for ordinary objects |
 | **Manual** | `Memory.alloc` / `Memory.free` | `@ManualMemory` — zero-overhead, kernel/driver code |
 | **BorrowChecker** | Compile-time static analysis | Planned later v1 iteration |
 
-You choose manual control per class. BorrowChecker is intentionally not part of the v1.0 compiler yet; the Rust bootstrap has a historical implementation and v1 will get its own later.
+You choose manual control per class with `@ManualMemory`. ARC+GC lowering is staged in v1; BorrowChecker is intentionally not part of the v1.0 compiler yet. The Rust bootstrap has a historical BorrowChecker implementation and v1 will get its own later.
 
 ```arm
 // Managed — default
@@ -473,11 +473,11 @@ Full language reference: **[documentation/index.md](documentation/index.md)**
 |---|---|
 | [Getting Started](documentation/getting-started/introduction.md) | Installation, hello world, arc.toml |
 | [Language](documentation/language/variables-and-types.md) | Types, operators, control flow, OOP, generics, pattern matching, async |
-| [Memory](documentation/memory/memory-model.md) | ARC, GC, manual memory, planned BorrowChecker |
+| [Memory](documentation/memory/memory-model.md) | ARC+GC target model, manual memory, planned BorrowChecker |
 | [Collections](documentation/collections/collections-overview.md) | List, HashMap, Array, Slice, Result |
 | [Standard Library](documentation/stdlib/stdlib-overview.md) | arimo.lang, arimo.fs, arimo.io, arimo.util, arimo.env |
 | [CLI](documentation/cli/arc-cli.md) | arc build, run, check, init, direct file mode |
-| [Missing Features](missing-features/critical-gaps.md) | What's not in v1.0 and why |
+| [Project Status](documentation/reference/project-status.md) | Current v1.0 scope, gaps, and planned work |
 
 ---
 
@@ -485,7 +485,7 @@ Full language reference: **[documentation/index.md](documentation/index.md)**
 
 | Version | Status | Highlights |
 |---|---|---|
-| **v1.0** | Released | Arimo-written compiler, ArimoIR, native backend, core OOP/type system |
+| **v1.0** | Active milestone | Arimo-written compiler, ArimoIR, native backend, core OOP/type system |
 | v0.5-beta | Historical | Rust bootstrap compiler retained for language history |
 | v1.1 | Planned | stdlib expansion, Math trig, regex |
 | v1.2 | Planned | `async`/`await` runtime, coroutine scheduler |

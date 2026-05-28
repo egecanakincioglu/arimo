@@ -1,6 +1,6 @@
 ---
 title: Memory Model
-description: Arimo's layered memory model — ARC, GC, manual memory, and planned BorrowChecker
+description: Arimo's layered memory model target — ARC+GC, manual memory, and planned BorrowChecker
 tags: [memory]
 date: 2026-05-22
 ---
@@ -13,18 +13,18 @@ Arimo's memory model is designed as a layered system. The v1 compiler is moving 
 
 | Layer | Mechanism | When Active |
 |---|---|---|
-| Managed | ARC + GC cooperation | Default for ordinary class instances |
+| Managed | ARC + GC cooperation | Default target for ordinary class instances |
 | Manual | `Memory.alloc` / `Memory.free` | `@ManualMemory` annotated code |
 | BorrowChecker | Compile-time analysis | Planned later v1 iteration |
 
 ## Managed Memory: ARC + GC
 
-Ordinary, non-manual objects are managed by the runtime memory system. ARC gives deterministic ownership tracking for object references. GC is planned to cooperate with ARC so unmanaged cycles and non-manual graph lifetimes can be handled by the runtime algorithm instead of user code.
+Ordinary, non-manual objects are intended to be managed by the runtime memory system. ARC gives deterministic ownership tracking for object references, while GC cooperates with ARC so unmanaged cycles and non-manual graph lifetimes can be handled by the runtime algorithm instead of user code. This lowering is staged in v1 and should be treated as an active implementation area, not a completed BorrowChecker replacement.
 
 ```arm
 Counter c = Counter(0);   // managed object
 c.increment();
-// runtime memory algorithm owns cleanup
+// runtime memory algorithm owns cleanup once managed lowering is enabled
 ```
 
 Manual-memory classes and raw pointers are outside this managed path.
