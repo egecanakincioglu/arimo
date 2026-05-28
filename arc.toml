@@ -3,9 +3,9 @@
 [project]
 name        = "arc"
 version     = "1.0"
-description = "Arimo stage 1 bootstrap compiler — arc-arimo"
+description = "Arimo v1 native compiler"
 entry       = "Main.arm"
-license     = "MIT"
+license     = "AGPL-3.0"
 readme      = "README.md"
 keywords    = []
 homepage    = ""

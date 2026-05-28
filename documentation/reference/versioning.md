@@ -7,7 +7,7 @@ date: 2026-05-22
 
 # Versioning
 
-Arimo uses **Semantic Versioning (SemVer)**: `MAJOR.MINOR.PATCH`
+Arimo uses a simple public version line for the v1 compiler: `MAJOR.MINOR`.
 
 ## Version Rules
 
@@ -15,17 +15,18 @@ Arimo uses **Semantic Versioning (SemVer)**: `MAJOR.MINOR.PATCH`
 |---|---|
 | `MAJOR` | Breaking syntax or semantic change — existing `.arm` files may stop compiling |
 | `MINOR` | New language feature — new keyword, syntax construct, or major stdlib module |
-| `PATCH` | Bug fix, compiler correctness improvement, or minor stdlib addition |
+| Patch/build metadata | Bug fix, compiler correctness improvement, or minor stdlib addition |
 
 ## Current Version
 
-**v1.0.0** — first public release
+**v1.0** — first public v1 native compiler milestone
 
-### What v1.0.0 includes
+### What v1.0 includes
 
-- Lexer, Parser, TypeChecker, BorrowChecker
+- Lexer, Parser, TypeChecker
 - Full OOP: classes, abstract classes, interfaces, enums, structs, generics
-- ARC memory management
+- Native backend with ArimoIR, x86-64 encoding, PE/ELF writers
+- ARC/GC/manual memory model design; implementation is staged
 - Exception handling (`try`/`catch`/`finally`)
 - Pattern matching (`match`) with guards, binding, multi-pattern
 - Lambda expressions and closures
@@ -35,18 +36,24 @@ Arimo uses **Semantic Versioning (SemVer)**: `MAJOR.MINOR.PATCH`
 - All annotations (`@ManualMemory`, `@ForceInline`, `@Packed`, etc.)
 - Collections: `List<T>`, `HashMap<K,V>`, `TreeMap<K,V>`, `Array<T,N>`, `Slice<T>`, `Pair<A,B>`, `Result<T,E>`
 - Standard library: `arimo.lang`, `arimo.fs`, `arimo.io`, `arimo.util`, `arimo.env`, `arimo.process`
-- `arc` CLI: `build`, `run`, `check`, `clean`, `init`
+- `arc` CLI: `build`, `run`, `check`, `init`, direct `.arm` file compilation
 - Native code generation — no LLVM, no GCC required
 - Self-hosting: `arc` is written in Arimo and compiled by itself
+
+BorrowChecker is intentionally not part of the v1.0 compiler implementation yet. The older Rust bootstrap includes a historical BorrowChecker; v1 will receive its own BorrowChecker in a later iteration.
+
+## Bootstrap History
+
+The Rust bootstrap compiler is historical Stage 0 context and should be labeled **v0.5-beta**. It exists to preserve the language's implementation history and bootstrap path, not as the current v1 native compiler.
 
 ## Planned Versions
 
 | Version | Target Feature |
 |---|---|
-| v1.1.0 | Full generic instantiation (monomorphization) |
-| v1.2.0 | `async`/`await`, coroutines |
-| v1.3.0 | Operator overloading on classes (currently only structs) |
-| v2.0.0 | Fully self-contained toolchain with no external dependencies |
+| v1.1 | Full generic instantiation (monomorphization) |
+| v1.2 | `async`/`await`, coroutines |
+| v1.3 | Operator overloading on classes (currently only structs) |
+| v2.0 | Fully self-contained toolchain with completed memory-safety layers |
 
 ## arc --version
 
@@ -57,7 +64,7 @@ arc --version
 Output:
 
 ```
-arc 1.0.0 (arimo-language)
+arc v1.0
 ```
 
 ## Git Tags
@@ -65,7 +72,7 @@ arc 1.0.0 (arimo-language)
 Releases are tagged in the repository:
 
 ```
-v1.0.0
+v1.0
 ```
 
 ## Related

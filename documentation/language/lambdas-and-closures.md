@@ -83,7 +83,7 @@ List<Integer> evens = nums.filter(isEven);   // pass stored lambda
 
 ## Lambda Implementation
 
-Closures are implemented as fat pointers: a function pointer plus a heap-allocated capture struct. No garbage collection — the capture struct is freed when the lambda goes out of scope.
+Closures are implemented as fat pointers: a function pointer plus a heap-allocated capture struct. Closure capture lifetime is part of the managed memory model.
 
 ## Related
 

@@ -14,7 +14,7 @@ date: 2026-05-22
 ```toml
 [project]
 name    = "myapp"
-version = "1.0.0"
+version = "1.0"
 entry   = "Main.arm"
 ```
 
@@ -23,10 +23,10 @@ entry   = "Main.arm"
 ```toml
 [project]
 name        = "arc"
-version     = "0.1.0"
+version     = "1.0"
 description = "Short description of your project"
 entry       = "Main.arm"          # source file containing main()
-license     = "MIT"
+license     = "AGPL-3.0"
 readme      = "README.md"
 keywords    = ["compiler", "lang"]
 homepage    = "https://example.com"

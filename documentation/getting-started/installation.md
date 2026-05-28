@@ -30,7 +30,7 @@ arc --version
 Expected output:
 
 ```
-arc 1.0.0 (arimo-language)
+arc v1.0
 ```
 
 ## Directory Layout
@@ -50,14 +50,14 @@ stdlib/
 ## Compile and Run a Program
 
 ```
-arc build Main.arm
-Main.exe
+arc build
+myapp.exe
 ```
 
 Or in one step:
 
 ```
-arc run Main.arm
+arc run
 ```
 
 ## Related

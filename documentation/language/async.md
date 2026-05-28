@@ -25,11 +25,11 @@ async foo() : Integer {
 }
 ```
 
-## Current Status (v1.0.0)
+## Current Status (v1.0)
 
 The parser accepts `async` methods and `await` expressions and produces the correct AST nodes. The async runtime (state machine transformation, coroutine scheduling) is **not yet implemented** in the code generator.
 
-Attempting to compile an `async` method with `await` in v1.0.0 will parse successfully but may fail or produce incorrect output at codegen.
+Attempting to compile an `async` method with `await` in v1.0 will parse successfully but may fail or produce incorrect output at codegen.
 
 Full `async`/`await` support is planned for **v1.2.0**.
 

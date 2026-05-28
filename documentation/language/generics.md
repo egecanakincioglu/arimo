@@ -92,7 +92,7 @@ HashMap<String, Integer> map = HashMap();
 
 ## Current Limitations
 
-Generic type instantiation is shallow in v1.0.0. The type checker validates bounds, but full generic specialization (monomorphization) is planned for v1.1.0. Practical generic usage works correctly for collections and `Result`.
+Generic type instantiation is shallow in v1.0. The type checker validates bounds, but full generic specialization (monomorphization) is planned for v1.1. Practical generic usage works correctly for collections and `Result`.
 
 ## Related
 

@@ -5,13 +5,13 @@
   <img src="https://img.shields.io/badge/license-AGPL--3.0-darkred?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/compiler-arc-orange?style=flat-square" alt="compiler">
   <img src="https://img.shields.io/badge/extension-.arm-green?style=flat-square" alt="extension">
-  <img src="https://img.shields.io/badge/memory-ARC%20%2B%20BorrowChecker%20%2B%20Manual-purple?style=flat-square" alt="memory">
+  <img src="https://img.shields.io/badge/memory-ARC%20%2B%20GC%20%2B%20Manual-purple?style=flat-square" alt="memory">
   <img src="https://img.shields.io/badge/IR-ArimoIR-red?style=flat-square" alt="IR">
   <img src="https://img.shields.io/badge/native-no%20LLVM%20%7C%20no%20GCC-black?style=flat-square" alt="native">
 </p>
 
 <p align="center">
-  <strong>A statically-typed, object-oriented systems programming language with its own IR, three-layer memory safety, and native code generation — no LLVM, no GCC required.</strong>
+  <strong>A statically-typed, object-oriented systems programming language with its own IR, layered memory management, and native code generation.</strong>
 </p>
 
 <p align="center">
@@ -38,11 +38,11 @@ public class Application {
 ```
 
 ```
-arc run Main.arm
+arc run
 # Hello, Arimo!
 ```
 
-Arimo compiles `.arm` source files directly to native executables through its own intermediate representation (**ArimoIR**). No LLVM toolchain. No external C compiler. One binary, zero runtime dependencies.
+The v1 `arc` compiler compiles `.arm` source files directly to native executables through its own intermediate representation (**ArimoIR**) and native backend.
 
 ---
 
@@ -56,26 +56,26 @@ Most languages that target native code depend on LLVM or GCC. Arimo has its own 
 .arm  →  AST  →  ArimoIR  →  x86-64 machine code  →  PE32+ / ELF executable
 ```
 
-The `arc` compiler produces a working native executable without any installed toolchain. This means:
+The v1 `arc` compiler is designed to produce native executables without depending on LLVM or GCC. This means:
 - Reproducible builds on any machine
 - No version mismatches between LLVM releases
 - Full control over every compilation stage
 - The compiler itself is self-hosting (arc compiles arc)
 
-### Three-Layer Memory Safety
+### Layered Memory Management
 
 Most languages choose one approach. Arimo layers three:
 
 | Layer | Mechanism | When |
 |---|---|---|
-| **BorrowChecker** | Compile-time static analysis | Always — catches use-after-move, mutation-while-borrowed |
-| **ARC** | Automatic Reference Counting | Class instances — no GC pauses, deterministic cleanup |
+| **Managed** | ARC + GC cooperation | Default for ordinary objects |
 | **Manual** | `Memory.alloc` / `Memory.free` | `@ManualMemory` — zero-overhead, kernel/driver code |
+| **BorrowChecker** | Compile-time static analysis | Planned later v1 iteration |
 
-You choose the layer per class. Safety by default, manual control on demand.
+You choose manual control per class. BorrowChecker is intentionally not part of the v1.0 compiler yet; the Rust bootstrap has a historical implementation and v1 will get its own later.
 
 ```arm
-// ARC — default, automatic
+// Managed — default
 public class HttpServer { ... }
 
 // Manual — zero overhead, kernel code
@@ -331,22 +331,19 @@ Float area = match (shape) {
 ## The `arc` Compiler
 
 ```bash
-arc build Main.arm          # compile to native executable
-arc run   Main.arm          # compile + run immediately
-arc check Main.arm          # type-check only (no output)
+arc build                   # compile project from arc.toml
+arc run                     # compile + run project
+arc check                   # type-check only (no output)
+arc Main.arm                # compile a single file directly
 arc init  myapp             # scaffold new project
-arc clean                   # remove build artifacts
 ```
 
 Key flags:
 
 | Flag | Effect |
 |---|---|
-| `--release` | Optimized build |
-| `--emit-ir` | Output ArimoIR text and exit |
-| `-O2` / `-O3` | Optimization level |
-| `-c` | Compile to object file only |
 | `--stdlib-path <dir>` | Override stdlib location |
+| `--target linux|windows` | Override target platform |
 
 ```toml
 # arc.toml
@@ -417,10 +414,10 @@ Collections (`List<T>`, `HashMap<K,V>`, `TreeMap<K,V>`, `Array<T,N>`, `Slice<T>`
 
 | | **Arimo** | Java | C++ | Rust | Go |
 |---|---|---|---|---|---|
-| Memory model | ARC + BorrowChecker + Manual | GC | Manual | Ownership | GC |
+| Memory model | ARC + GC + Manual, BorrowChecker planned | GC | Manual | Ownership | GC |
 | Null safety | Built-in (`?`) | Optional (verbose) | None | `Option<T>` | None |
 | Own IR | ✅ ArimoIR | JVM bytecode | LLVM/direct | LLVM | Go IR |
-| No GC pauses | ✅ | ❌ | ✅ | ✅ | ❌ |
+| Manual opt-out | ✅ `@ManualMemory` | ❌ | ✅ | Limited | ❌ |
 | OS/kernel target | ✅ `@Freestanding` | ❌ | ✅ | ✅ | Limited |
 | SIMD built-in | ✅ `Vec4f` etc. | ❌ | Partial | Partial | ❌ |
 | Inline assembly | ✅ `asm {}` | ❌ | ✅ | ✅ | ❌ |
@@ -438,7 +435,7 @@ Collections (`List<T>`, `HashMap<K,V>`, `TreeMap<K,V>`, `Array<T,N>`, `Slice<T>`
 # Download arc for your platform from Releases
 # Place arc.exe (Windows) or arc (Linux/macOS) on your PATH
 arc --version
-# arc 1.0.0 (arimo-language)
+# arc v1.0
 ```
 
 ### Hello World
@@ -454,7 +451,7 @@ public class Application {
 ```
 
 ```bash
-arc run Main.arm
+arc run
 # Hello, Arimo!
 ```
 
@@ -476,10 +473,10 @@ Full language reference: **[documentation/index.md](documentation/index.md)**
 |---|---|
 | [Getting Started](documentation/getting-started/introduction.md) | Installation, hello world, arc.toml |
 | [Language](documentation/language/variables-and-types.md) | Types, operators, control flow, OOP, generics, pattern matching, async |
-| [Memory](documentation/memory/memory-model.md) | BorrowChecker, ARC, manual memory, RawPtr |
+| [Memory](documentation/memory/memory-model.md) | ARC, GC, manual memory, planned BorrowChecker |
 | [Collections](documentation/collections/collections-overview.md) | List, HashMap, Array, Slice, Result |
 | [Standard Library](documentation/stdlib/stdlib-overview.md) | arimo.lang, arimo.fs, arimo.io, arimo.util, arimo.env |
-| [CLI](documentation/cli/arc-cli.md) | arc build, run, check, clean, init |
+| [CLI](documentation/cli/arc-cli.md) | arc build, run, check, init, direct file mode |
 | [Missing Features](missing-features/critical-gaps.md) | What's not in v1.0 and why |
 
 ---
@@ -488,10 +485,11 @@ Full language reference: **[documentation/index.md](documentation/index.md)**
 
 | Version | Status | Highlights |
 |---|---|---|
-| **v1.0** | ✅ Released | Full OOP, generics, pattern matching, ARC, BorrowChecker, ArimoIR, native codegen |
-| v1.1.0 | Planned | stdlib expansion, Math trig, regex |
-| v1.2.0 | Planned | `async`/`await` runtime, coroutine scheduler |
-| v2.0.0 | Future | Dependency management, package registry |
+| **v1.0** | Released | Arimo-written compiler, ArimoIR, native backend, core OOP/type system |
+| v0.5-beta | Historical | Rust bootstrap compiler retained for language history |
+| v1.1 | Planned | stdlib expansion, Math trig, regex |
+| v1.2 | Planned | `async`/`await` runtime, coroutine scheduler |
+| v2.0 | Future | Completed memory-safety layers and package ecosystem |
 
 ---
 

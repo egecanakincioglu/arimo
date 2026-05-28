@@ -24,7 +24,9 @@ public class Application {
 ## Compile and Run
 
 ```
-arc run Main.arm
+arc init myapp
+cd myapp
+arc run
 ```
 
 Output:
@@ -48,6 +50,7 @@ Hello, World!
 - No `import` needed for `IO` — it is part of `arimo.lang` which is always available
 - The entry point class can have any name, as long as it has `public static main() : Void`
 - Only one `main()` per program (across all compiled files)
+- Direct single-file compilation is also available with `arc Main.arm`.
 
 ## Next Steps
 
