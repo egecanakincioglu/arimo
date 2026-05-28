@@ -1,15 +1,15 @@
 ---
 title: Arimo Language Documentation
-description: Complete reference for the Arimo programming language v1.0.0
+description: Complete reference for the Arimo programming language v1.0
 tags: [index, docs]
 date: 2026-05-22
 ---
 
 # Arimo Language Documentation
 
-> Version: **v1.0.0** · Compiler: `arc` · Extension: `.arm`
+> Version: **v1.0** · Compiler: `arc` · Extension: `.arm`
 
-Arimo is a statically-typed, object-oriented systems programming language with automatic reference counting, null safety, and native code generation. It compiles directly to native executables without requiring LLVM or an external C compiler.
+Arimo is a statically-typed, object-oriented systems programming language with null safety, a layered memory model, and native code generation. The v1 compiler emits native executables through ArimoIR and its own backend.
 
 ## Getting Started
 
@@ -43,7 +43,7 @@ Arimo is a statically-typed, object-oriented systems programming language with a
 
 ## Memory
 
-- [memory-model](./memory/memory-model.md) — Three-layer memory: BorrowChecker, ARC, GC
+- [memory-model](./memory/memory-model.md) — Layered memory: ARC, GC, manual memory, planned BorrowChecker
 - [low-level](./memory/low-level.md) — `RawPtr`, `Memory`, `extern "C"`, inline assembly
 
 ## Collections
@@ -67,17 +67,18 @@ Arimo is a statically-typed, object-oriented systems programming language with a
 
 ## CLI
 
-- [arc-cli](./cli/arc-cli.md) — `arc build`, `arc run`, `arc check`, `arc clean`, `arc init`
+- [arc-cli](./cli/arc-cli.md) — `arc build`, `arc run`, `arc check`, `arc init`, direct file mode
 
 ## Reference
 
 - [syntax-cheatsheet](./reference/syntax-cheatsheet.md) — One-page syntax quick reference
 - [vs-java-typescript](./reference/vs-java-typescript.md) — Arimo vs Java vs TypeScript comparison
 - [versioning](./reference/versioning.md) — Semantic versioning and release history
+- [project-status](./reference/project-status.md) — Current implementation status and open architecture questions
 
 ## Missing Features
 
-Features from TypeScript, C, C++, and Java not present in Arimo v1.0.0:
+Features from TypeScript, C, C++, and Java not present in Arimo v1.0:
 
 - [missing-features-overview](#) — overview and navigation
 - [type-system-advanced](#) — Union types, intersection types, conditional/mapped types (TypeScript)

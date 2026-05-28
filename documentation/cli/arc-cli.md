@@ -1,42 +1,41 @@
 ---
 title: arc CLI
-description: arc compiler commands — build, run, check, clean, init, and flags
+description: arc v1 compiler commands — build, run, check, init, direct file mode, and flags
 tags: [cli]
 date: 2026-05-22
 ---
 
 # arc CLI
 
-`arc` is the Arimo compiler and project tool.
+`arc` is the Arimo v1 compiler and project tool.
 
 ## Commands
 
 ### arc build
 
-Compile an `.arm` file or project to a native executable:
+Compile the current project using `arc.toml`:
 
 ```
-arc build Main.arm           # compile single file → Main.exe
 arc build                    # compile project using arc.toml
-arc build --release          # optimized build (profile: release)
 ```
 
-### Direct file compilation (legacy mode)
+`arc build` must be run from a directory containing `arc.toml`. The entry file comes from `[project].entry`; if missing, `Main.arm` is used.
 
-Pass `.arm` files directly without a subcommand:
+### Direct file compilation
+
+Pass one `.arm` file directly without a subcommand:
 
 ```
 arc Main.arm                 # compile single file
-arc Main.arm Lib.arm         # compile multiple files
-arc Main.arm --emit-ir       # compile + emit IR
 ```
+
+Imports are discovered from the entry file. Direct multi-file command arguments are not part of the v1 CLI surface.
 
 ### arc run
 
 Compile and immediately execute:
 
 ```
-arc run Main.arm             # compile + run
 arc run                      # compile + run using arc.toml entry point
 ```
 
@@ -45,17 +44,10 @@ arc run                      # compile + run using arc.toml entry point
 Type-check without producing an executable:
 
 ```
-arc check Main.arm           # type-check + borrow-check only
-arc check --strict           # enable additional warnings
+arc check                    # type-check only using arc.toml entry point
 ```
 
-### arc clean
-
-Remove build artifacts:
-
-```
-arc clean                    # remove output executables and build cache
-```
+BorrowChecker is planned for a later v1 iteration; `arc check` currently runs parser and type-checker validation.
 
 ### arc init
 
@@ -63,7 +55,6 @@ Initialize a new Arimo project in the current directory:
 
 ```
 arc init myapp               # creates myapp/ with arc.toml and Main.arm
-arc init                     # initialize in current directory
 ```
 
 Generated `arc.toml`:
@@ -80,45 +71,35 @@ Generated `Main.arm`:
 ```arm
 package myapp;
 
-public class Application {
+public class Main {
     public static main() : Void {
         IO.println("Hello, Arimo!");
     }
 }
 ```
 
+The current v1 generator writes `public class Main` in the scaffolded file.
+
 ## Flags
 
 | Flag | Command | Effect |
 |---|---|---|
-| `--release` | `build`, `run` | Enable optimizations (from profile) |
-| `--emit-ir` | `build`, direct | Output LLVM IR text (`.ll`) and exit |
-| `-O2` | `build`, direct | Optimization level 2 |
-| `-O3` | direct | Optimization level 3 |
-| `-c` | `build`, direct | Compile only — produce `.o`, skip linking |
 | `--stdlib-path <dir>` | all | Override stdlib directory |
-| `--version` / `version` / `-v` | — | Print compiler version |
-| `--help` | — | Print usage |
+| `--target linux|windows` | all compile modes | Override target platform |
+| `--check` | direct file mode | Type-check only |
 
 ## Stdlib Discovery
 
 `arc` looks for `stdlib/` in the same directory as `arc.exe`. Override with `--stdlib-path`:
 
 ```
-arc build Main.arm --stdlib-path C:/arimo/stdlib
+arc --stdlib-path C:/arimo/stdlib Main.arm
+arc build --stdlib-path C:/arimo/stdlib
 ```
 
 ## Version
 
-```
-arc --version
-```
-
-Output:
-
-```
-arc 1.0.0 (arimo-language)
-```
+The v1 CLI banner is `arc v1.0`.
 
 ## Related
 

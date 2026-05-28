@@ -7,12 +7,12 @@ date: 2026-05-22
 
 # Introduction to Arimo
 
-Arimo is a statically-typed, object-oriented systems programming language. It compiles `.arm` source files to native executables using the `arc` compiler — no LLVM, no GCC, no runtime required.
+Arimo is a statically-typed, object-oriented systems programming language. The v1 `arc` compiler is written in Arimo and compiles `.arm` source files to native executables through its own backend.
 
 ## Design Goals
 
 - **Null safety by default** — every nullable type is explicitly marked with `?`
-- **No garbage collector** — memory managed through ARC (Automatic Reference Counting) and a BorrowChecker
+- **Layered memory** — ARC + GC for managed objects, `@ManualMemory` for explicit control, BorrowChecker planned
 - **Systems-capable** — inline assembly, `extern "C"`, raw pointers, SIMD types
 - **OOP-first** — classes, interfaces, abstract classes, generics, inheritance
 - **Zero surprises** — nothing is implicitly imported; every dependency is declared
@@ -23,12 +23,12 @@ Arimo is a statically-typed, object-oriented systems programming language. It co
 |---|---|
 | Typing | Static, strong, with type inference on locals |
 | Null safety | `String?` for nullable, `String` never null |
-| Memory | ARC + BorrowChecker (no GC) |
+| Memory | ARC + GC + Manual, BorrowChecker planned |
 | Dispatch | `ClassName(args)` — no `new` keyword |
 | Entry point | `public static main() : Void` |
 | Source extension | `.arm` |
 | Compiler | `arc` |
-| Target | x86-64 native (Windows PE32+) |
+| Target | x86-64 native (Windows PE32+ / Linux ELF64) |
 
 ## Language Paradigm
 
@@ -46,7 +46,7 @@ public class Application {
 
 ## Version
 
-This documentation covers **Arimo v1.0.0** — the first public release. The compiler (`arc`) is self-hosting: `arc` is written in Arimo and compiled by itself.
+This documentation covers **Arimo v1.0**. The Rust bootstrap compiler is historical Stage 0 context (`v0.5-beta`); the active v1 compiler lives in this repository and is written in Arimo.
 
 ## Related
 

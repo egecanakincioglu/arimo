@@ -57,7 +57,7 @@ import arimo.process.*;
 Integer code = Process.exec("echo hello");
 IO.println("exit code: ${code}");   // 0
 
-Boolean ok = Process.success("arc check Main.arm");
+Boolean ok = Process.success("arc Main.arm --check");
 if (!ok) {
     IO.println("compilation check failed");
 }

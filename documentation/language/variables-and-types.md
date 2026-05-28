@@ -132,7 +132,7 @@ Vec4f norm = v4.normalize();    // unit vector
 Float d    = v4.dot(other);     // dot product
 ```
 
-> SIMD type registration is in the type system (v1.0.0). Full IR emission for all SIMD ops is targeted for a future release.
+> SIMD type registration is in the type system (v1.0). Full IR emission for all SIMD ops is targeted for a future release.
 
 ## Related
 
