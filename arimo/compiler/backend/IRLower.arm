@@ -851,7 +851,7 @@ public class IRLower {
     private lowerStaticCall(class_: String, method: String, args: List<Expr>) : IRValue {
         if (class_ == "IO" && method == "println") {
             Expr argExpr = args.get(0) as Expr;
-            IRValue strArg;
+            IRValue strArg = IRValue.none();
             if (this.isStringExpr(argExpr)) {
                 strArg = this.lowerExpr(argExpr);
             } else {
@@ -872,7 +872,7 @@ public class IRLower {
         }
         if (class_ == "IO" && method == "print") {
             Expr argExpr2 = args.get(0) as Expr;
-            IRValue strArg2;
+            IRValue strArg2 = IRValue.none();
             if (this.isStringExpr(argExpr2)) {
                 strArg2 = this.lowerExpr(argExpr2);
             } else {
