@@ -71,6 +71,7 @@ public class X64Reg {
     public static isCalleeSavedLinux(r: Integer) : Boolean {
         return r == X64Reg.RBX || r == X64Reg.RBP ||
                r == X64Reg.R12 || r == X64Reg.R13 ||
-               r == X64Reg.R14 || r == X64Reg.R15;
+               r == X64Reg.R14 || r == X64Reg.R15 ||
+               r == X64Reg.R8  || r == X64Reg.R9;
     }
 }
