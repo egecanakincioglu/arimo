@@ -908,44 +908,40 @@ public class IRLower {
     private lowerStaticCall(class_: String, method: String, args: List<Expr>) : IRValue {
         if (class_ == "IO" && method == "println") {
             Expr argExpr = args.get(0) as Expr;
-            IRValue strArg = IRValue.none();
             if (this.isStringExpr(argExpr)) {
-                strArg = this.lowerExpr(argExpr);
+                IRValue strArg = this.lowerExpr(argExpr);
+                List<IRValue> callArgs = List();
+                callArgs.append(strArg);
+                String dr = this.newReg();
+                IRValue dst = IRValue.reg(dr, IRType.VOID);
+                this.emit(IRInstr.call(dst, "__arimo_println", callArgs));
             } else {
                 IRValue rawVal = this.lowerExpr(argExpr);
-                String tsReg = this.newReg();
-                IRValue tsDst = IRValue.reg(tsReg, IRType.PTR);
-                List<IRValue> tsArgs = List();
-                tsArgs.append(rawVal);
-                this.emit(IRInstr.call(tsDst, "__arimo_i64_to_str", tsArgs));
-                strArg = tsDst;
+                List<IRValue> intArgs = List();
+                intArgs.append(rawVal);
+                String dr = this.newReg();
+                IRValue dst = IRValue.reg(dr, IRType.VOID);
+                this.emit(IRInstr.call(dst, "__arimo_println_int", intArgs));
             }
-            List<IRValue> callArgs = List();
-            callArgs.append(strArg);
-            String dr = this.newReg();
-            IRValue dst = IRValue.reg(dr, IRType.VOID);
-            this.emit(IRInstr.call(dst, "__arimo_println", callArgs));
             return IRValue.none();
         }
         if (class_ == "IO" && method == "print") {
             Expr argExpr2 = args.get(0) as Expr;
-            IRValue strArg2 = IRValue.none();
             if (this.isStringExpr(argExpr2)) {
-                strArg2 = this.lowerExpr(argExpr2);
+                IRValue strArg2 = this.lowerExpr(argExpr2);
+                List<IRValue> callArgs2 = List();
+                callArgs2.append(strArg2);
+                String dr2 = this.newReg();
+                IRValue dst2 = IRValue.reg(dr2, IRType.VOID);
+                this.emit(IRInstr.call(dst2, "__arimo_print", callArgs2));
             } else {
                 IRValue rawVal2 = this.lowerExpr(argExpr2);
-                String tsReg2 = this.newReg();
-                IRValue tsDst2 = IRValue.reg(tsReg2, IRType.PTR);
-                List<IRValue> tsArgs2 = List();
-                tsArgs2.append(rawVal2);
-                this.emit(IRInstr.call(tsDst2, "__arimo_i64_to_str", tsArgs2));
-                strArg2 = tsDst2;
+                List<IRValue> intArgs2 = List();
+                intArgs2.append(rawVal2);
+                String dr2 = this.newReg();
+                IRValue dst2 = IRValue.reg(dr2, IRType.VOID);
+                this.emit(IRInstr.call(dst2, "__arimo_print_int", intArgs2));
             }
-            List<IRValue> callArgs2 = List();
-            callArgs2.append(strArg2);
-            String dr2 = this.newReg();
-            IRValue dst2 = IRValue.reg(dr2, IRType.VOID);
-            this.emit(IRInstr.call(dst2, "__arimo_print", callArgs2));
             return IRValue.none();
         }
         String fnName = "${class_}__${method}";
@@ -1558,6 +1554,34 @@ public class IRLower {
             }
             i = i + 1;
         }
+    }
+
+    // ===== Print-int helpers (avoid two-call register pressure in caller) =====
+
+    private generatePrintlnInt(name: String, addNewline: Boolean) {
+        this.beginFn(name, IRType.VOID);
+        this.addParamToLast("n", IRType.I64);
+        this.resetFnContext();
+        this.emit(IRInstr.label("entry"));
+
+        IRValue nv = IRValue.reg("n", IRType.I64);
+
+        // Convert to string
+        String tsReg = this.newReg();
+        IRValue tsDst = IRValue.reg(tsReg, IRType.PTR);
+        List<IRValue> tsArgs = List();
+        tsArgs.append(nv);
+        this.emit(IRInstr.call(tsDst, "__arimo_i64_to_str", tsArgs));
+
+        // Print
+        String target = "__arimo_println";
+        if (!addNewline) { target = "__arimo_print"; }
+        List<IRValue> callArgs = List();
+        callArgs.append(tsDst);
+        String dr = this.newReg();
+        IRValue dst = IRValue.reg(dr, IRType.VOID);
+        this.emit(IRInstr.call(dst, target, callArgs));
+        this.emit(IRInstr.retVoid());
     }
 
     // ===== Print helpers =====
@@ -2418,6 +2442,8 @@ public class IRLower {
         this.generateCharCodeAt();
         this.generateCharAt();
         this.generateI64ToStr();
+        this.generatePrintlnInt("__arimo_println_int", true);
+        this.generatePrintlnInt("__arimo_print_int", false);
         this.generatePrintHelper("__arimo_println", true);
         this.generatePrintHelper("__arimo_print", false);
         this.generateStartFn();

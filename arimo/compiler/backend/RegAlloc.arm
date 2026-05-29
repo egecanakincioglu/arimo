@@ -164,15 +164,14 @@ public class RegAlloc {
                     }
                     ti = ti + 1;
                 }
-                // Backward jump: extend ALL intervals that start before the jump
-                // (conservative: any value defined before the backward jump could be
-                //  used in the next iteration via the loop back-edge)
+                // Backward jump: extend intervals live at the loop entry
+                // (intervals that start before the target AND are used at or after it)
                 if (targetPos >= 0 && targetPos < ji) {
                     Integer ki = 0;
                     while (ki < this.ivals.length()) {
                         LiveInterval iv = this.ivals.get(ki) as LiveInterval;
-                        if (iv.start < ji && iv.end < ji) {
-                            iv.end = ji;
+                        if (iv.start <= targetPos && iv.end >= targetPos) {
+                            if (iv.end < ji) { iv.end = ji; }
                         }
                         ki = ki + 1;
                     }
