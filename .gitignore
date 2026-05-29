@@ -34,6 +34,7 @@ installer/
 missing-features/
 
 # Tüm dökümanlar sadece local
+docs/
 documents/
 .env
 orchestrator/venv/
@@ -72,6 +73,7 @@ node_modules/
 *.o
 
 # Test artifacts
+test/
 test_*.arm
 test_*.txt
 test_*.bin
@@ -89,6 +91,12 @@ stage*_err.txt
 stage*_stdin.txt
 Memories.md
 *.bin
+
+# Temp — local only
+tmp/
+
+# Tools — local only
+/tools
 
 # Obsidian
 .obsidian
