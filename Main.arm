@@ -200,7 +200,7 @@ public class Main {
         String tomlContent = "[project]\nname        = \"";
         tomlContent = tomlContent.concat(name);
         tomlContent = tomlContent.concat("\"\nversion     = \"0.1.0\"\nentry       = \"Main.arm\"\n\n[build]\ntarget = \"x86_64-pc-windows-gnu\"\n");
-        String tomlPath = name.concat("\\arc.toml");
+        String tomlPath = name.concat("/arc.toml");
         File.write(tomlPath, tomlContent);
 
         String mainContent = "package ";
@@ -208,7 +208,7 @@ public class Main {
         mainContent = mainContent.concat(";\n\npublic class Main {\n    public static main() : Void {\n        IO.println(\"Hello from ");
         mainContent = mainContent.concat(name);
         mainContent = mainContent.concat("!\");\n    }\n}\n");
-        String mainPath = name.concat("\\Main.arm");
+        String mainPath = name.concat("/Main.arm");
         File.write(mainPath, mainContent);
 
         IO.println("arc: created project '".concat(name).concat("'"));
