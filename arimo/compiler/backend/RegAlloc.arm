@@ -21,6 +21,7 @@ package arimo.compiler.backend;
 import arimo.compiler.backend.X64Reg;
 import arimo.compiler.backend.IRFunction;
 import arimo.compiler.backend.IRInstr;
+import arimo.compiler.backend.IROpcode;
 import arimo.compiler.backend.IRParam;
 import arimo.compiler.backend.IRValue;
 import arimo.compiler.backend.IRValueKind;
@@ -122,6 +123,62 @@ public class RegAlloc {
                 j = j + 1;
             }
             i = i + 1;
+        }
+
+        // --- Loop back-edge analysis ---
+        // Backward jumps extend live intervals to prevent register reuse
+        // across loop iterations (e.g., param "a" used in copy loop body
+        // would otherwise appear dead after first use, getting its register
+        // stolen by a loop temporary like the loaded character).
+
+        // Record label positions
+        List<String> lblNames = List();
+        List<Integer> lblPoss  = List();
+        Integer li = 0;
+        while (li < instrLen) {
+            IRInstr liInstr = fn.instrs.get(li) as IRInstr;
+            if (liInstr.op == IROpcode.LABEL) {
+                lblNames.append(liInstr.label);
+                lblPoss.append(li);
+            }
+            li = li + 1;
+        }
+
+        // Extend intervals for backward jumps
+        Integer ji = 0;
+        while (ji < instrLen) {
+            IRInstr jiInstr = fn.instrs.get(ji) as IRInstr;
+            Integer jop = jiInstr.op;
+            Boolean isJump = jop == IROpcode.JMP || jop == IROpcode.JE  ||
+                             jop == IROpcode.JNE || jop == IROpcode.JG  ||
+                             jop == IROpcode.JL  || jop == IROpcode.JGE ||
+                             jop == IROpcode.JLE;
+            if (isJump && jiInstr.label != "") {
+                // Find target label position
+                Integer ti = 0;
+                Integer targetPos = -1;
+                while (ti < lblNames.length()) {
+                    if (lblNames.get(ti) as String == jiInstr.label) {
+                        targetPos = lblPoss.get(ti) as Integer;
+                        ti = lblNames.length();
+                    }
+                    ti = ti + 1;
+                }
+                // Backward jump: extend ALL intervals that start before the jump
+                // (conservative: any value defined before the backward jump could be
+                //  used in the next iteration via the loop back-edge)
+                if (targetPos >= 0 && targetPos < ji) {
+                    Integer ki = 0;
+                    while (ki < this.ivals.length()) {
+                        LiveInterval iv = this.ivals.get(ki) as LiveInterval;
+                        if (iv.start < ji && iv.end < ji) {
+                            iv.end = ji;
+                        }
+                        ki = ki + 1;
+                    }
+                }
+            }
+            ji = ji + 1;
         }
     }
 
