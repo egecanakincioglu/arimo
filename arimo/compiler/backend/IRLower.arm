@@ -149,8 +149,11 @@ public class IRLower {
 
     private classSizeBytes(clsIdx: Integer) : Integer {
         Integer count = this.classFldCounts.get(clsIdx) as Integer;
-        if (count == 0) { return 16; }
-        return (1 + count) * 8;
+        return (1 + count) * 8 + 8;
+    }
+
+    private refCountOff(clsIdx: Integer) : Integer {
+        return this.classSizeBytes(clsIdx) - 8;
     }
 
     // ===== Variable class tracking =====
@@ -372,6 +375,30 @@ public class IRLower {
         haArgs.append(sizeVal);
         this.emit(IRInstr.call(allocDst, "__ext__HeapAlloc", haArgs));
         return allocDst;
+    }
+
+    private emitHeapFree(objPtr: IRValue, clsIdx: Integer) {
+        Integer sz = this.classSizeBytes(clsIdx);
+        if (this.linux) {
+            List<IRValue> munmapArgs = List();
+            munmapArgs.append(objPtr);
+            munmapArgs.append(IRValue.ofInt(sz, IRType.I64));
+            String freeReg = this.newReg();
+            IRValue freeDst = IRValue.reg(freeReg, IRType.VOID);
+            this.emit(IRInstr.syscall(freeDst, 11, munmapArgs));
+        } else {
+            String phReg = this.newReg();
+            IRValue phDst = IRValue.reg(phReg, IRType.I64);
+            List<IRValue> phArgs = List();
+            this.emit(IRInstr.call(phDst, "__ext__GetProcessHeap", phArgs));
+            List<IRValue> hfArgs = List();
+            hfArgs.append(phDst);
+            hfArgs.append(IRValue.ofInt(0, IRType.I64));
+            hfArgs.append(objPtr);
+            String freeReg = this.newReg();
+            IRValue freeDst = IRValue.reg(freeReg, IRType.VOID);
+            this.emit(IRInstr.call(freeDst, "__ext__HeapFree", hfArgs));
+        }
     }
 
     private emitFieldPtr(objVal: IRValue, offset: Integer) : IRValue {
@@ -1092,9 +1119,12 @@ public class IRLower {
             if (!libcRes.isNone()) { return libcRes; }
         }
         Integer clsIdx = this.classIdxOf(class_);
-        Integer sz = 8;
+        Integer sz = 16;
         if (clsIdx >= 0) { sz = this.classSizeBytes(clsIdx); }
         IRValue objPtr = this.emitHeapAlloc(IRValue.ofInt(sz, IRType.I64));
+        if (clsIdx >= 0) {
+            this.emitFieldStore(objPtr, this.refCountOff(clsIdx), IRValue.ofInt(1, IRType.I64));
+        }
         List<IRValue> initArgs = List();
         initArgs.append(objPtr);
         Integer ai = 0;
