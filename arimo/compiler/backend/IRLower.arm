@@ -1142,8 +1142,14 @@ public class IRLower {
     // ===== Method call lowering =====
 
     private lowerMethodCall(obj: Expr, method: String, args: List<Expr>) : IRValue {
-        if (obj.kind == ExprKind.IDENT && obj.strVal == "IO") {
-            return this.lowerStaticCall("IO", method, args);
+        if (obj.kind == ExprKind.IDENT) {
+            if (obj.strVal == "IO") {
+                return this.lowerStaticCall("IO", method, args);
+            }
+            // Static method call on known class: ClassName.method()
+            if (this.classIdxOf(obj.strVal) >= 0) {
+                return this.lowerStaticCall(obj.strVal, method, args);
+            }
         }
 
         IRValue objVal = this.lowerExpr(obj);
