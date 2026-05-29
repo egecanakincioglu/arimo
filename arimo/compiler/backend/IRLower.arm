@@ -60,6 +60,8 @@ public class IRLower {
     private allFieldClasses: List<String>;
     private classFldStarts : List<Integer>;
     private classFldCounts : List<Integer>;
+    private methodRetNames  : List<String>;
+    private methodRetClasses: List<String>;
     private curClass       : String;
     private thisReg        : String;
     private linux          : Boolean;
@@ -83,6 +85,8 @@ public class IRLower {
         this.allFieldClasses = List();
         this.classFldStarts  = List();
         this.classFldCounts  = List();
+        this.methodRetNames  = List();
+        this.methodRetClasses = List();
         this.curClass        = "";
         this.thisReg         = "";
         this.irFns.append(IRFunction("__placeholder", IRType.VOID));
@@ -123,6 +127,16 @@ public class IRLower {
         this.classNames.append(cd.name);
         this.classFldStarts.append(start);
         this.classFldCounts.append(count);
+
+        // Track method return types for inferClass(METHOD)
+        Integer mi = 0;
+        while (mi < cd.methods.length()) {
+            MethodDecl md = cd.methods.get(mi) as MethodDecl;
+            String retCls = this.tyToClass(md.returnTy);
+            this.methodRetNames.append("${cd.name}__${md.name}");
+            this.methodRetClasses.append(retCls);
+            mi = mi + 1;
+        }
     }
 
     private classIdxOf(name: String) : Integer {
@@ -206,6 +220,22 @@ public class IRLower {
                     Integer start = this.classFldStarts.get(clsIdx) as Integer;
                     return this.allFieldClasses.get(start + fldIdx - 1) as String;
                 }
+            }
+            return "";
+        }
+        if (expr.kind == ExprKind.METHOD) {
+            String objCls = this.inferClass(expr.object);
+            if (objCls != "") {
+                String key = "${objCls}__${expr.method}";
+                Integer i = 0;
+                while (i < this.methodRetNames.length()) {
+                    if (this.methodRetNames.get(i) as String == key) {
+                        return this.methodRetClasses.get(i) as String;
+                    }
+                    i = i + 1;
+                }
+                // Built-in method (String/List): assume method returns receiver type (common for chaining)
+                return objCls;
             }
             return "";
         }
