@@ -476,6 +476,31 @@ public class IRLower {
         this.emitFieldStore(objVal, this.refCountOff(clsIdx), newRef);
     }
 
+    // ===== ARC release helper =====
+
+    private emitRelease(objVal: IRValue, clsIdx: Integer) {
+        // Null guard: release(null) is no-op (prevents SIGSEGV on x=null → scope exit)
+        String nullSkipLbl = this.newLabel("rel_null_skip");
+        this.emit(IRInstr.cmp(objVal, IRValue.ofInt(0, IRType.I64)));
+        this.emit(IRInstr.branch(IROpcode.JE, nullSkipLbl));
+
+        // Inline release: dec [obj + refCountOff]
+        IRValue curRef = this.emitFieldLoad(objVal, this.refCountOff(clsIdx));
+        String nr = this.newReg();
+        IRValue newRef = IRValue.reg(nr, IRType.I64);
+        this.emit(IRInstr.binop(IROpcode.SUB, newRef, curRef, IRValue.ofInt(1, IRType.I64)));
+        this.emitFieldStore(objVal, this.refCountOff(clsIdx), newRef);
+
+        // Conditional free: only when refcount reaches 0
+        this.emit(IRInstr.cmp(newRef, IRValue.ofInt(0, IRType.I64)));
+        String freeSkipLbl = this.newLabel("rel_free_skip");
+        this.emit(IRInstr.branch(IROpcode.JNE, freeSkipLbl));
+        this.emitHeapFree(objVal, clsIdx);
+        this.emit(IRInstr.label(freeSkipLbl));
+
+        this.emit(IRInstr.label(nullSkipLbl));
+    }
+
     // ===== Condition lowering =====
 
     private lowerCond(expr: Expr) : Integer {
