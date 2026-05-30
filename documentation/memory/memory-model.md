@@ -19,17 +19,38 @@ Arimo's memory model is designed as a layered system. The v1 compiler is moving 
 
 ## Managed Memory: ARC + GC
 
-Ordinary, non-manual objects are managed by the ARC memory system in a phased rollout. ARC Phase 1 (refcount infrastructure, heap allocation/free, constructor refcount initialization) is merged and active. Phases 2-6 (retain/release helpers, assignment integration, scope exit, object tear-down, tests) are planned for immediate implementation.
+Ordinary, non-manual objects are managed by the ARC memory system. All ARC phases (1-5) are merged and active:
+- Phase 1: Refcount infrastructure, heap allocation/free, constructor refcount initialization
+- Phase 2: Inline retain/release helpers
+- Phase 3: Assignment ownership (retain new, release old)
+- Phase 4: Scope exit auto-release, return ownership transfer, break/continue unwind
+- Phase 5: Recursive field release, inheritance chain teardown
 
 ARC gives deterministic ownership tracking for object references. Manual-memory classes and raw pointers are outside the managed path.
 
 ```arm
-Counter c = Counter(0);   // managed object
-c.increment();
-// runtime memory algorithm owns cleanup once managed lowering is enabled
+Counter c = Counter(0);   // managed object, refcount=1
+Counter d = c;             // retain: refcount=2
+// scope exit: release(d) → rc=1, release(c) → rc=0 → free
 ```
 
-Manual-memory classes and raw pointers are outside this managed path.
+### Known ARC Limitation: Reference Cycles
+
+ARC cannot detect or collect cyclic references. Two objects referencing each other will never be freed:
+
+```arm
+class A { B b; }
+class B { A a; }
+A a = A(); B b = B();
+a.b = b;  // retain(b) → rc=2
+b.a = a;  // retain(a) → rc=2
+// scope exit: release(a) → rc=1, release(b) → rc=1
+// Neither reaches 0 — memory leak
+```
+
+This is expected ARC behavior, not a bug. Future v1.x iterations may add a cycle collector or weak references. For now, avoid reference cycles in managed objects, or use `@ManualMemory` for explicit control.
+
+Manual-memory classes and raw pointers are outside the managed path.
 
 ## Manual Memory
 
