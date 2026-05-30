@@ -1,16 +1,15 @@
-name: Release Linux
+name: Release Linux (V1 Self-Hosted)
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to upload to (e.g. v1.0)"
+        description: "Release tag (e.g. v1.0.0)"
         required: true
-        default: "v1.0"
-      bootstrap_tag:
-        description: "arc bootstrap binary tag to download (e.g. v1.0)"
-        required: true
-        default: "v1.0"
+        default: "v1.0.0"
+  push:
+    tags:
+      - "v*"
 
 permissions:
   contents: write
@@ -20,31 +19,84 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout arimo (Stage 1 source)
+      - name: Checkout arimo (V1 source)
         uses: actions/checkout@v4
         with:
           path: arimo
 
-      - name: Download bootstrap arc binary (v1.0.0)
-        run: |
-          BTAG=${{ github.event.inputs.bootstrap_tag }}
-          mkdir -p arc-bootstrap
-          wget -q "https://github.com/egecanakincioglu/arimo/releases/download/${BTAG}/arimo-${BTAG}-linux-x64.tar.gz" \
-            -O arc-bootstrap.tar.gz
-          tar -xzf arc-bootstrap.tar.gz -C arc-bootstrap --strip-components=1
-          chmod +x arc-bootstrap/arc
-          echo "Bootstrap arc version:"
-          ./arc-bootstrap/arc || true
+      - name: Checkout arimo-bootstrap (Stage 0)
+        uses: actions/checkout@v4
+        with:
+          repository: egecanakincioglu/arimo-bootstrap
+          path: arimo-bootstrap
 
-      - name: Compile Stage 1 with bootstrap arc
+      - name: Install LLVM 22
+        run: |
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s 22
+          sudo apt-get install -y llvm-22-dev libclang-22-dev clang-22
+          echo "LLVM_SYS_221_PREFIX=/usr/lib/llvm-22" >> $GITHUB_ENV
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            arimo-bootstrap/target
+          key: linux-v1-${{ hashFiles('arimo-bootstrap/Cargo.lock') }}
+
+      - name: Build Stage 0 (bootstrap)
+        working-directory: arimo-bootstrap
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+      - name: Build Stage 1 (self-hosted)
         working-directory: arimo
         run: |
-          ARC0="$(realpath ../arc-bootstrap/arc)"
-          cp -r ../arc-bootstrap/stdlib "$(dirname "$ARC0")/stdlib" 2>/dev/null || true
+          ARC0="../arimo-bootstrap/target/x86_64-unknown-linux-gnu/release/arc"
+          chmod +x "$ARC0"
+          cp -r stdlib "../arimo-bootstrap/target/x86_64-unknown-linux-gnu/release/"
           "$ARC0" build --target linux
           chmod +x arc
 
-      - name: Install fpm
+      - name: Verify S1→S2 (second self-hosting)
+        working-directory: arimo
+        run: |
+          cp arc /tmp/arc.s1
+          /tmp/arc.s1 build --target linux
+          cp arc /tmp/arc.s2
+
+      - name: Verify S2→S3 (determinism)
+        working-directory: arimo
+        run: |
+          /tmp/arc.s2 build --target linux
+          cp arc /tmp/arc.s3
+          sha256sum /tmp/arc.s2 /tmp/arc.s3
+          diff /tmp/arc.s2 /tmp/arc.s3 && echo "DETERMINISTIC: S2 ≡ S3" || { echo "FAIL: non-deterministic"; exit 1; }
+
+      - name: Run test suite
+        working-directory: arimo/test
+        run: |
+          ARC="/home/runner/work/arimo/arimo/arimo/arc"
+          PASS=0; FAIL=0
+          for f in *.arm; do
+            out="${f%.arm}"
+            "$ARC" "$f" --target linux 2>&1 | tail -1
+            if [ -f "$out" ]; then
+              chmod +x "$out" && ./"$out" >/dev/null 2>&1 && ((PASS++)) || { echo "FAIL: $f"; ((FAIL++)); }
+              rm -f "$out"
+            else
+              echo "FAIL(compile): $f"; ((FAIL++))
+            fi
+          done
+          echo "$PASS/$((PASS+FAIL)) core tests"
+          [ $FAIL -eq 0 ] || exit 1
+
+      - name: Install packaging tools
         run: |
           sudo apt-get install -y ruby ruby-dev build-essential rpm
           sudo gem install fpm --no-document
@@ -52,14 +104,14 @@ jobs:
       - name: Package Linux release
         working-directory: arimo
         run: |
-          TAG=${{ github.event.inputs.tag }}
-          VERSION=${TAG#v}
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
 
           mkdir -p dist/arimo-linux-x64/stdlib
           cp arc dist/arimo-linux-x64/
           cp -r stdlib/. dist/arimo-linux-x64/stdlib/
 
-          cat > dist/arimo-linux-x64/install.sh << 'EOF'
+          cat > dist/arimo-linux-x64/install.sh << 'INSTALL'
           #!/bin/bash
           set -e
           if [ "$(id -u)" -ne 0 ]; then
@@ -70,54 +122,39 @@ jobs:
           chmod +x /usr/local/bin/arc
           mkdir -p /usr/local/lib/arimo
           cp -r stdlib /usr/local/lib/arimo/
-          echo "Arimo installed. Run: arc --version"
-          EOF
+          echo "Arimo v1 installed. Run: arc --version"
+          INSTALL
           chmod +x dist/arimo-linux-x64/install.sh
 
-          # tar.gz
           cd dist
-          tar -czf arimo-${TAG}-linux-x64.tar.gz arimo-linux-x64/
+          tar -czf "arimo-${TAG}-linux-x64.tar.gz" arimo-linux-x64/
           cd ..
 
-          # .deb
           mkdir -p pkg-root/usr/local/bin
           mkdir -p pkg-root/usr/local/lib/arimo/stdlib
           cp arc pkg-root/usr/local/bin/arc
           cp -r stdlib/. pkg-root/usr/local/lib/arimo/stdlib/
 
-          fpm -s dir -t deb \
-            -n arimo \
-            -v ${VERSION} \
-            --architecture amd64 \
-            --description "Arimo programming language compiler — arc" \
+          fpm -s dir -t deb -n arimo -v "${VERSION}" --architecture amd64 \
+            --description "Arimo programming language compiler v1 — self-hosted native compiler" \
             --url "https://github.com/egecanakincioglu/arimo" \
-            --maintainer "Egecan Akıncıoğlu <egecanakincioglu@icloud.com>" \
-            --license "AGPL-3.0" \
-            --prefix / \
-            -C pkg-root \
-            -p dist/arimo-${TAG}-linux-x64.deb \
-            .
+            --maintainer "Egecan Akıncıoğlu <dev@egecanakincioglu.com>" \
+            --license "AGPL-3.0" --prefix / -C pkg-root \
+            -p "dist/arimo-${TAG}-linux-x64.deb" .
 
-          # .rpm
-          fpm -s dir -t rpm \
-            -n arimo \
-            -v ${VERSION} \
-            --architecture x86_64 \
-            --description "Arimo programming language compiler — arc" \
+          fpm -s dir -t rpm -n arimo -v "${VERSION}" --architecture x86_64 \
+            --description "Arimo programming language compiler v1 — self-hosted native compiler" \
             --url "https://github.com/egecanakincioglu/arimo" \
-            --maintainer "Egecan Akıncıoğlu <egecanakincioglu@icloud.com>" \
-            --license "AGPL-3.0" \
-            --prefix / \
-            -C pkg-root \
-            -p dist/arimo-${TAG}-linux-x64.rpm \
-            .
+            --maintainer "Egecan Akıncıoğlu <dev@egecanakincioglu.com>" \
+            --license "AGPL-3.0" --prefix / -C pkg-root \
+            -p "dist/arimo-${TAG}-linux-x64.rpm" .
 
       - name: Upload to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG=${{ github.event.inputs.tag }}
-          gh release upload ${TAG} \
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          gh release upload "${TAG}" \
             arimo/dist/arimo-${TAG}-linux-x64.tar.gz \
             arimo/dist/arimo-${TAG}-linux-x64.deb \
             arimo/dist/arimo-${TAG}-linux-x64.rpm \
