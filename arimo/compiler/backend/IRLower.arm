@@ -269,6 +269,20 @@ public class IRLower {
         return "";
     }
 
+    private inferStaticCallReturn(className: String, methodName: String) : String {
+        String key = "${className}__${methodName}";
+        Integer i = 0;
+        while (i < this.methodRetNames.length()) {
+            if (this.methodRetNames.get(i) as String == key) {
+                return this.methodRetClasses.get(i) as String;
+            }
+            i = i + 1;
+        }
+        // Known built-in returning String
+        if (className == "Env" && methodName == "platform") { return "String"; }
+        return "";
+    }
+
     private isIntegerExpr(expr: Expr) : Boolean {
         if (expr.kind == ExprKind.INT_LIT)  { return true; }
         if (expr.kind == ExprKind.BOOL_LIT) { return true; }
@@ -310,11 +324,28 @@ public class IRLower {
             return false;
         }
         if (expr.kind == ExprKind.METHOD) {
+            // Check method return type via class metadata first
+            if (this.inferClass(expr) == "String") { return true; }
+            // Check static method call on known class (e.g., Functions.greet())
+            if (expr.object.kind == ExprKind.IDENT) {
+                String key = "${expr.object.strVal}__${expr.method}";
+                Integer ki = 0;
+                while (ki < this.methodRetNames.length()) {
+                    if (this.methodRetNames.get(ki) as String == key) {
+                        if (this.methodRetClasses.get(ki) as String == "String") { return true; }
+                    }
+                    ki = ki + 1;
+                }
+            }
+            // Fallback: hardcoded built-in string-returning methods
             String m = expr.method;
             if (m == "concat" || m == "substring" || m == "toString" ||
                 m == "toUpperCase" || m == "toLowerCase" || m == "trim" ||
                 m == "charAt") { return true; }
             return false;
+        }
+        if (expr.kind == ExprKind.STATIC_CALL) {
+            return this.inferStaticCallReturn(expr.class_, expr.method) == "String";
         }
         if (expr.kind == ExprKind.CTOR)  { return expr.class_ == "String"; }
         if (expr.kind == ExprKind.CAST) {
@@ -1124,6 +1155,9 @@ public class IRLower {
             Boolean isStr = this.isStringExpr(argExpr);
             if (argExpr.kind == ExprKind.METHOD) {
                 if (argExpr.object.kind == ExprKind.IDENT && argExpr.object.strVal == "Env") { isStr = true; }
+            }
+            if (argExpr.kind == ExprKind.STATIC_CALL) {
+                if (argExpr.class_ == "Env") { isStr = true; }
             }
             if (isStr) {
                 IRValue strArg = this.lowerExpr(argExpr);
