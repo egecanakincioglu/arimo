@@ -194,6 +194,7 @@ public class IRLower {
     // ===== Type inference =====
 
     private tyToClass(ty: AstType) : String {
+        if (ty == null)                   { return ""; }
         if (ty.kind == TypeKind.NAMED)    { return ty.name; }
         if (ty.kind == TypeKind.STR)      { return "String"; }
         if (ty.kind == TypeKind.LIST)     { return "List"; }
