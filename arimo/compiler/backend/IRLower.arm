@@ -1199,6 +1199,22 @@ public class IRLower {
             return this.lowerListMethod(objVal, method, args);
         }
 
+        // toString() handler — must go before String/List dispatch to avoid
+        // lowerStringMethod/lowerListMethod fallback generating __str_toString
+        // which is never defined.
+        if (method == "toString") {
+            if (objCls == "String" || this.isStringExpr(obj)) { return IRValue.reg(objVal.name, objVal.ty); }
+            if (objCls == "" || objCls == "Integer") {
+                String tsReg = this.newReg();
+                IRValue tsDst = IRValue.reg(tsReg, IRType.PTR);
+                List<IRValue> tsArgs = List();
+                tsArgs.append(objVal);
+                this.emit(IRInstr.call(tsDst, "__arimo_i64_to_str", tsArgs));
+                return tsDst;
+            }
+            // Unknown type: fall through
+        }
+
         // String methods
         if (objCls == "String") {
             return this.lowerStringMethod(objVal, method, args);
@@ -1215,20 +1231,6 @@ public class IRLower {
                 return lDst;
             }
         }
-
-        // toString() on Integer or unknown type
-        if (method == "toString") {
-            if (objCls == "String" || this.isStringExpr(obj)) { return IRValue.reg(objVal.name, objVal.ty); }
-            if (objCls == "" || objCls == "Integer") {
-                String tsReg = this.newReg();
-                IRValue tsDst = IRValue.reg(tsReg, IRType.PTR);
-                List<IRValue> tsArgs = List();
-                tsArgs.append(objVal);
-                this.emit(IRInstr.call(tsDst, "__arimo_i64_to_str", tsArgs));
-                return tsDst;
-            }
-        }
-
         // String method heuristic: call on unknown obj with string-like method names
         if (method == "compareTo" || method == "concat"     || method == "startsWith" ||
             method == "endsWith"  || method == "substring"  || method == "indexOf"    ||
