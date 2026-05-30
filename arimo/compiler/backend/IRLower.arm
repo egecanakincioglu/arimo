@@ -1725,14 +1725,14 @@ public class IRLower {
     private lowerClass(cd: ClassDecl) {
         if (cd.ctor != null) {
             ConstructorDecl ctor = cd.ctor as ConstructorDecl;
-            if (ctor.body != null && ctor.body.length() > 0) {
+            if (ctor.body != null) {
                 this.lowerConstructor(cd.name, ctor);
             }
         }
         Integer i = 0;
         while (i < cd.methods.length()) {
             MethodDecl md = cd.methods.get(i) as MethodDecl;
-            if (md.body != null && md.body.length() > 0) {
+            if (md.body != null) {
                 this.lowerMethod(cd.name, md);
             }
             i = i + 1;
