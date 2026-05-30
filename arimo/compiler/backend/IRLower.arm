@@ -850,6 +850,12 @@ public class IRLower {
                 String vReg = this.varLookup(expr.left.strVal);
                 if (vReg != "") {
                     IRValue rv = this.lowerExpr(expr.right);
+                    // ARC: retain reference-type variable copies (a = b)
+                    if (expr.right.kind == ExprKind.IDENT) {
+                        String rhsCls = this.inferClass(expr.right);
+                        Integer rhsClsIdx = this.classIdxOf(rhsCls);
+                        if (rhsClsIdx >= 0) { this.emitRetain(rv, rhsClsIdx); }
+                    }
                     IRValue dst = IRValue.reg(vReg, IRType.I64);
                     this.emit(IRInstr.mov(dst, rv));
                     return dst;
