@@ -199,6 +199,18 @@ public class IRLower {
         if (ty.kind == TypeKind.STR)      { return "String"; }
         if (ty.kind == TypeKind.LIST)     { return "List"; }
         if (ty.kind == TypeKind.NULLABLE) { return this.tyToClass(ty.inner); }
+        if (ty.kind == TypeKind.INTEGER)  { return "Integer"; }
+        if (ty.kind == TypeKind.BOOLEAN)  { return "Boolean"; }
+        if (ty.kind == TypeKind.FLOAT)    { return "Float"; }
+        if (ty.kind == TypeKind.CHAR)     { return "Char"; }
+        if (ty.kind == TypeKind.I64)      { return "I64"; }
+        if (ty.kind == TypeKind.I32)      { return "I32"; }
+        if (ty.kind == TypeKind.I16)      { return "I16"; }
+        if (ty.kind == TypeKind.I8)       { return "I8"; }
+        if (ty.kind == TypeKind.U64)      { return "U64"; }
+        if (ty.kind == TypeKind.U32)      { return "U32"; }
+        if (ty.kind == TypeKind.U16)      { return "U16"; }
+        if (ty.kind == TypeKind.U8)       { return "U8"; }
         return "";
     }
 
