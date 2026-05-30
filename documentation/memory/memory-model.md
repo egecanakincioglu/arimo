@@ -19,12 +19,15 @@ Arimo's memory model is designed as a layered system. The v1 compiler is moving 
 
 ## Managed Memory: ARC + GC
 
-Ordinary, non-manual objects are managed by the ARC memory system. All ARC phases (1-5) are merged and active:
-- Phase 1: Refcount infrastructure, heap allocation/free, constructor refcount initialization
-- Phase 2: Inline retain/release helpers
-- Phase 3: Assignment ownership (retain new, release old)
+Ordinary, non-manual objects are managed by the ARC memory system (complete, v1.0):
+- Phase 1: Refcount infrastructure, heap allocation/free, ctor refcount=1
+- Phase 2: Inline retain/release helpers with null guards
+- Phase 3: IDENT + FIELD assignment ownership (retain new, release old, store)
 - Phase 4: Scope exit auto-release, return ownership transfer, break/continue unwind
-- Phase 5: Recursive field release, inheritance chain teardown
+- Phase 5: Recursive field teardown, inheritance chain release
+- Phase 6: ARC test suite (14 tests) + cycle documentation
+
+31/31 tests pass (17 core + 14 ARC). Self-hosting deterministic with ARC active.
 
 ARC gives deterministic ownership tracking for object references. Manual-memory classes and raw pointers are outside the managed path.
 
