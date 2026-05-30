@@ -464,6 +464,18 @@ public class IRLower {
         this.emit(IRInstr.store(val, ptr, IRType.I64));
     }
 
+    // ===== ARC retain helper =====
+
+    private emitRetain(objVal: IRValue, clsIdx: Integer) {
+        // Inline retain: inc [obj + refCountOff]
+        // Zero CALL — pure IR instructions to avoid S1 linear-scan multi-call bug
+        IRValue curRef = this.emitFieldLoad(objVal, this.refCountOff(clsIdx));
+        String nr = this.newReg();
+        IRValue newRef = IRValue.reg(nr, IRType.I64);
+        this.emit(IRInstr.binop(IROpcode.ADD, newRef, curRef, IRValue.ofInt(1, IRType.I64)));
+        this.emitFieldStore(objVal, this.refCountOff(clsIdx), newRef);
+    }
+
     // ===== Condition lowering =====
 
     private lowerCond(expr: Expr) : Integer {
