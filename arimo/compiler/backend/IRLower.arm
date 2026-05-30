@@ -54,6 +54,9 @@ public class IRLower {
     private varClassNames  : List<String>;
     private breakLbl       : String;
     private contLbl        : String;
+    private breakDepth     : Integer;
+    private contDepth      : Integer;
+    private scopeStack     : List<List<String>>;
     private mainFn         : String;
     private classNames     : List<String>;
     private allFieldNames  : List<String>;
@@ -79,6 +82,9 @@ public class IRLower {
         this.varClassNames   = List();
         this.breakLbl        = "";
         this.contLbl         = "";
+        this.breakDepth      = 0;
+        this.contDepth       = 0;
+        this.scopeStack      = List();
         this.mainFn          = "";
         this.classNames      = List();
         this.allFieldNames   = List();
@@ -378,15 +384,61 @@ public class IRLower {
         this.varNames.append(name);
         this.varRegs.append(reg);
         this.varClassNames.append("");
+        this.trackScopedVar(name);
     }
 
     private resetFnContext() {
         this.varNames      = List();
         this.varRegs       = List();
         this.varClassNames = List();
+        this.scopeStack    = List();
         this.regCnt        = 0;
         this.curClass      = "";
         this.thisReg       = "";
+    }
+
+    // ===== Scope management =====
+
+    private pushScope() {
+        this.scopeStack.append(List());
+    }
+
+    private trackScopedVar(name: String) {
+        Integer n = this.scopeStack.length();
+        if (n > 0) {
+            List<String> top = this.scopeStack.get(n - 1) as List<String>;
+            top.append(name);
+        }
+    }
+
+    private popScope() {
+        Integer n = this.scopeStack.length();
+        if (n == 0) { return; }
+        List<String> vars = this.scopeStack.get(n - 1) as List<String>;
+        Integer i = vars.length();
+        while (i > 0) {
+            i = i - 1;
+            String vn = vars.get(i) as String;
+            // TODO: replace magic-string "__this" with ownership metadata model
+            if (vn == "__this") { continue; }
+            String vc = this.varClassOf(vn);
+            Integer vci = this.classIdxOf(vc);
+            if (vci >= 0) {
+                String vr = this.varLookup(vn);
+                if (vr != "") {
+                    this.emitRelease(IRValue.reg(vr, IRType.I64), vci);
+                }
+            }
+        }
+        this.scopeStack.removeAt(n - 1);
+    }
+
+    private emitUnwindToDepth(targetDepth: Integer) {
+        Integer n = this.scopeStack.length();
+        while (n > targetDepth) {
+            this.popScope();
+            n = this.scopeStack.length();
+        }
     }
 
     // ===== Heap + field helpers =====
@@ -531,8 +583,18 @@ public class IRLower {
         if (stmt.kind == StmtKind.RETURN) {
             if (stmt.expr.kind != ExprKind.NULL_LIT) {
                 IRValue rv = this.lowerExpr(stmt.expr);
+                // ARC: retain IDENT ref-type return value before scope release
+                // TODO: extend to FIELD/INDEX/DEREF when recursive field release (G7) implemented
+                if (stmt.expr.kind == ExprKind.IDENT) {
+                    String retCls = this.inferClass(stmt.expr);
+                    Integer retClsIdx = this.classIdxOf(retCls);
+                    if (retClsIdx >= 0) { this.emitRetain(rv, retClsIdx); }
+                }
+                // Full scope unwind
+                this.emitUnwindToDepth(0);
                 this.emit(IRInstr.ret(rv));
             } else {
+                this.emitUnwindToDepth(0);
                 this.emit(IRInstr.retVoid());
             }
             return;
@@ -596,16 +658,22 @@ public class IRLower {
             String breakL = this.newLabel("while_brk");
             String savedBreak = this.breakLbl;
             String savedCont  = this.contLbl;
+            Integer savedBreakDepth = this.breakDepth;
+            Integer savedContDepth  = this.contDepth;
             this.breakLbl = breakL;
             this.contLbl  = loopL;
+            this.breakDepth = this.scopeStack.length();
+            this.contDepth  = this.scopeStack.length();
             this.emit(IRInstr.label(loopL));
             Integer jmpOp = this.lowerCond(stmt.cond);
             this.emit(IRInstr.branch(jmpOp, breakL));
             this.lowerBody(stmt.body);
             this.emit(IRInstr.jmp(loopL));
             this.emit(IRInstr.label(breakL));
-            this.breakLbl = savedBreak;
-            this.contLbl  = savedCont;
+            this.breakLbl   = savedBreak;
+            this.contLbl    = savedCont;
+            this.breakDepth = savedBreakDepth;
+            this.contDepth  = savedContDepth;
             return;
         }
 
@@ -616,8 +684,12 @@ public class IRLower {
             String contL  = this.newLabel("for_upd");
             String savedBreak = this.breakLbl;
             String savedCont  = this.contLbl;
+            Integer savedBreakDepth = this.breakDepth;
+            Integer savedContDepth  = this.contDepth;
             this.breakLbl = breakL;
             this.contLbl  = contL;
+            this.breakDepth = this.scopeStack.length();
+            this.contDepth  = this.scopeStack.length();
             this.emit(IRInstr.label(loopL));
             if (stmt.forCond != null) {
                 Integer jop = this.lowerCond(stmt.forCond);
@@ -628,8 +700,10 @@ public class IRLower {
             if (stmt.forStep != null) { this.lowerExpr(stmt.forStep); }
             this.emit(IRInstr.jmp(loopL));
             this.emit(IRInstr.label(breakL));
-            this.breakLbl = savedBreak;
-            this.contLbl  = savedCont;
+            this.breakLbl   = savedBreak;
+            this.contLbl    = savedCont;
+            this.breakDepth = savedBreakDepth;
+            this.contDepth  = savedContDepth;
             return;
         }
 
@@ -643,8 +717,12 @@ public class IRLower {
             String breakL = this.newLabel("fe_brk");
             String savedBreak = this.breakLbl;
             String savedCont  = this.contLbl;
+            Integer savedBreakDepth = this.breakDepth;
+            Integer savedContDepth  = this.contDepth;
             this.breakLbl = breakL;
             this.contLbl  = loopL;
+            this.breakDepth = this.scopeStack.length();
+            this.contDepth  = this.scopeStack.length();
             this.emit(IRInstr.label(loopL));
             String lenReg = this.newReg();
             IRValue lenDst = IRValue.reg(lenReg, IRType.I64);
@@ -666,14 +744,24 @@ public class IRLower {
             this.emit(IRInstr.binop(IROpcode.ADD, iDst, iDst, IRValue.ofInt(1, IRType.I64)));
             this.emit(IRInstr.jmp(loopL));
             this.emit(IRInstr.label(breakL));
-            this.breakLbl = savedBreak;
-            this.contLbl  = savedCont;
+            this.breakLbl   = savedBreak;
+            this.contLbl    = savedCont;
+            this.breakDepth = savedBreakDepth;
+            this.contDepth  = savedContDepth;
             return;
         }
 
-        if (stmt.kind == StmtKind.BREAK)    { this.emit(IRInstr.jmp(this.breakLbl)); return; }
-        if (stmt.kind == StmtKind.CONTINUE) { this.emit(IRInstr.jmp(this.contLbl));  return; }
-        if (stmt.kind == StmtKind.BLOCK)    { this.lowerBody(stmt.body); return; }
+        if (stmt.kind == StmtKind.BREAK) {
+            this.emitUnwindToDepth(this.breakDepth);
+            this.emit(IRInstr.jmp(this.breakLbl));
+            return;
+        }
+        if (stmt.kind == StmtKind.CONTINUE) {
+            this.emitUnwindToDepth(this.contDepth);
+            this.emit(IRInstr.jmp(this.contLbl));
+            return;
+        }
+        if (stmt.kind == StmtKind.BLOCK)    { this.pushScope(); this.lowerBody(stmt.body); this.popScope(); return; }
         if (stmt.kind == StmtKind.THROW)    { this.lowerExpr(stmt.expr); return; }
         if (stmt.kind == StmtKind.TRY)      { this.lowerBody(stmt.tryBody); return; }
     }
