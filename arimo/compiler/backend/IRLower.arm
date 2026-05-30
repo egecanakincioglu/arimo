@@ -1121,7 +1121,11 @@ public class IRLower {
     private lowerStaticCall(class_: String, method: String, args: List<Expr>) : IRValue {
         if (class_ == "IO" && method == "println") {
             Expr argExpr = args.get(0) as Expr;
-            if (this.isStringExpr(argExpr)) {
+            Boolean isStr = this.isStringExpr(argExpr);
+            if (argExpr.kind == ExprKind.METHOD) {
+                if (argExpr.object.kind == ExprKind.IDENT && argExpr.object.strVal == "Env") { isStr = true; }
+            }
+            if (isStr) {
                 IRValue strArg = this.lowerExpr(argExpr);
                 List<IRValue> callArgs = List();
                 callArgs.append(strArg);
@@ -1140,7 +1144,11 @@ public class IRLower {
         }
         if (class_ == "IO" && method == "print") {
             Expr argExpr2 = args.get(0) as Expr;
-            if (this.isStringExpr(argExpr2)) {
+            Boolean isStr2 = this.isStringExpr(argExpr2);
+            if (argExpr2.kind == ExprKind.METHOD) {
+                if (argExpr2.object.kind == ExprKind.IDENT && argExpr2.object.strVal == "Env") { isStr2 = true; }
+            }
+            if (isStr2) {
                 IRValue strArg2 = this.lowerExpr(argExpr2);
                 List<IRValue> callArgs2 = List();
                 callArgs2.append(strArg2);
@@ -1157,6 +1165,33 @@ public class IRLower {
             }
             return IRValue.none();
         }
+
+        // Env built-ins
+        if (class_ == "Env" && method == "platform") {
+            String platform = "linux";
+            if (!this.linux) { platform = "windows"; }
+            return IRValue.global(this.internStr(platform));
+        }
+        if (class_ == "Env" && method == "exit") {
+            Integer code = 0;
+            if (args.length() > 0) {
+                Expr e = args.get(0) as Expr;
+                if (e.kind == ExprKind.INT_LIT) { code = e.intVal; }
+            }
+            if (this.linux) {
+                List<IRValue> scArgs = List();
+                scArgs.append(IRValue.ofInt(code, IRType.I64));
+                this.emit(IRInstr.syscall(IRValue.none(), 60, scArgs));
+            } else {
+                List<IRValue> ea = List();
+                ea.append(IRValue.ofInt(code, IRType.I64));
+                String er = this.newReg();
+                this.emit(IRInstr.call(IRValue.reg(er, IRType.VOID), "__ext__ExitProcess", ea));
+            }
+            return IRValue.none();
+        }
+        // TODO: Env.args() and Env.exePath() need start function argc/argv setup
+
         String fnName = "${class_}__${method}";
         List<IRValue> callArgsFn = List();
         Integer ai = 0;
@@ -1384,6 +1419,9 @@ public class IRLower {
         if (obj.kind == ExprKind.IDENT) {
             if (obj.strVal == "IO") {
                 return this.lowerStaticCall("IO", method, args);
+            }
+            if (obj.strVal == "Env") {
+                return this.lowerStaticCall("Env", method, args);
             }
             // Static method call on known class: ClassName.method()
             if (this.classIdxOf(obj.strVal) >= 0) {
