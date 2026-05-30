@@ -549,6 +549,12 @@ public class IRLower {
             String varCls = this.tyToClass(stmt.ty);
             if (stmt.initExpr.kind != ExprKind.NULL_LIT) {
                 IRValue src = this.lowerExpr(stmt.initExpr);
+                // ARC: retain ref-type initializers (let c = a)
+                if (stmt.initExpr.kind == ExprKind.IDENT) {
+                    String initCls = this.inferClass(stmt.initExpr);
+                    Integer initClsIdx = this.classIdxOf(initCls);
+                    if (initClsIdx >= 0) { this.emitRetain(src, initClsIdx); }
+                }
                 this.emit(IRInstr.mov(dst, src));
                 if (varCls == "") { varCls = this.inferClass(stmt.initExpr); }
             } else {
@@ -875,11 +881,17 @@ public class IRLower {
                 String vReg = this.varLookup(expr.left.strVal);
                 if (vReg != "") {
                     IRValue rv = this.lowerExpr(expr.right);
-                    // ARC: retain reference-type variable copies (a = b)
+                    // ARC: retain new value if ref-type variable
                     if (expr.right.kind == ExprKind.IDENT) {
                         String rhsCls = this.inferClass(expr.right);
                         Integer rhsClsIdx = this.classIdxOf(rhsCls);
                         if (rhsClsIdx >= 0) { this.emitRetain(rv, rhsClsIdx); }
+                    }
+                    // ARC: release old value before overwrite
+                    String oldCls = this.varClassOf(expr.left.strVal);
+                    Integer oldClsIdx = this.classIdxOf(oldCls);
+                    if (oldClsIdx >= 0) {
+                        this.emitRelease(IRValue.reg(vReg, IRType.I64), oldClsIdx);
                     }
                     IRValue dst = IRValue.reg(vReg, IRType.I64);
                     this.emit(IRInstr.mov(dst, rv));
