@@ -527,6 +527,11 @@ public class IRLower {
     // ===== ARC retain helper =====
 
     private emitRetain(objVal: IRValue, clsIdx: Integer) {
+        // Null guard: retain(null) is no-op (prevents SIGSEGV when field param is null)
+        String nullSkipLbl = this.newLabel("ret_null_skip");
+        this.emit(IRInstr.cmp(objVal, IRValue.ofInt(0, IRType.I64)));
+        this.emit(IRInstr.branch(IROpcode.JE, nullSkipLbl));
+
         // Inline retain: inc [obj + refCountOff]
         // Zero CALL — pure IR instructions to avoid S1 linear-scan multi-call bug
         IRValue curRef = this.emitFieldLoad(objVal, this.refCountOff(clsIdx));
@@ -534,6 +539,8 @@ public class IRLower {
         IRValue newRef = IRValue.reg(nr, IRType.I64);
         this.emit(IRInstr.binop(IROpcode.ADD, newRef, curRef, IRValue.ofInt(1, IRType.I64)));
         this.emitFieldStore(objVal, this.refCountOff(clsIdx), newRef);
+
+        this.emit(IRInstr.label(nullSkipLbl));
     }
 
     // ===== ARC release helper =====
@@ -1030,8 +1037,22 @@ public class IRLower {
                     if (fldIdx >= 0) { fldOff = fldIdx * 8; }
                 }
                 IRValue rv2 = this.lowerExpr(expr.right);
-                // TODO: ARC retain+release for ref-type fields
-                // Blocked by pre-existing FIELD store bug (SIGSEGV on any obj.field = refType)
+                // ARC: retain new value if ref-type variable (mirrors IDENT case)
+                if (expr.right.kind == ExprKind.IDENT) {
+                    String rhsCls = this.inferClass(expr.right);
+                    Integer rhsClsIdx = this.classIdxOf(rhsCls);
+                    if (rhsClsIdx >= 0) { this.emitRetain(rv2, rhsClsIdx); }
+                }
+                // ARC: release old field value before overwrite
+                if (clsIdx >= 0 && fldIdx >= 0) {
+                    Integer start = this.classFldStarts.get(clsIdx) as Integer;
+                    String oldFldCls = this.allFieldClasses.get(start + fldIdx - 1) as String;
+                    Integer oldFldClsIdx = this.classIdxOf(oldFldCls);
+                    if (oldFldClsIdx >= 0) {
+                        IRValue oldVal = this.emitFieldLoad(objVal, fldOff);
+                        this.emitRelease(oldVal, oldFldClsIdx);
+                    }
+                }
                 this.emitFieldStore(objVal, fldOff, rv2);
                 return IRValue.ofInt(0, IRType.I64);
             }
