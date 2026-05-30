@@ -1,8 +1,8 @@
 ---
 title: Versioning
-description: Arimo semantic versioning policy, version history, and release process
+description: Arimo semantic versioning policy, version history, release process, and self-hosting verification
 tags: [reference]
-date: 2026-05-22
+date: 2026-05-30
 ---
 
 # Versioning
@@ -38,7 +38,8 @@ Arimo uses a simple public version line for the v1 compiler: `MAJOR.MINOR`.
 - Standard library: `arimo.lang`, `arimo.fs`, `arimo.io`, `arimo.util`, `arimo.env`, `arimo.process`
 - `arc` CLI: `build`, `run`, `check`, `init`, direct `.arm` file compilation
 - Native code generation — no LLVM, no GCC required
-- Self-hosting: `arc` is written in Arimo and compiled by itself
+- Self-hosting: `arc` is written in Arimo and compiled by itself (verified: S2≡S3≡S4 byte-identical, deterministic)
+- Test suite: 17/17 pass (classes, strings, lists, constructors, inheritance)
 
 BorrowChecker is intentionally not part of the v1.0 compiler implementation yet. The older Rust bootstrap includes a historical BorrowChecker; v1 will receive its own BorrowChecker in a later iteration.
 

@@ -66,7 +66,7 @@ version = "0.1.0"
 entry   = "Main.arm"
 ```
 
-The current v1 generator writes a Windows target by default. On Linux, use `--target linux` for compile commands or edit `[build].target` in `arc.toml` to a Linux target before building.
+The v1 compiler auto-detects the host platform — ELF on Linux, PE on Windows. Use `--target linux|windows` to override:
 
 Generated `Main.arm`:
 
@@ -87,7 +87,7 @@ The current v1 generator writes `public class Main` in the scaffolded file.
 | Flag | Command | Effect |
 |---|---|---|
 | `--stdlib-path <dir>` | all | Override stdlib directory |
-| `--target linux|windows` | all compile modes | Override target platform |
+| `--target linux|windows` | all compile modes | Override target platform (default: host platform) |
 | `--check` | direct file mode | Type-check only |
 
 ## Stdlib Discovery
