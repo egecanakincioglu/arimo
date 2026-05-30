@@ -31,13 +31,12 @@ S2/S3/S4 are byte-identical. The compiler is deterministic on the same input.
 
 ## Test Suite
 
-**17/17 tests pass.** All compiler features verified:
+**31/31 tests pass.** 17 core language tests + 14 ARC memory management tests:
 
-- Classes, methods, constructors, inheritance, static methods
-- String operations (concat, length, charAt, indexOf, substring)
-- List operations, arithmetic, control flow
+- Core: classes, methods, constructors, inheritance, static methods, string operations, list operations, arithmetic, control flow
+- ARC: allocation, assignment, scope exit, nested scopes, return ownership, field assignment, shared ownership, break/continue unwind, recursive teardown
 
-All 17 tests compile and run correctly with elf64 output on Linux.
+All 31 tests compile and run correctly with elf64 output on Linux.
 
 ## Native Backend Status
 
@@ -54,16 +53,18 @@ The active backend is `NativeBackend`:
 
 ## Memory Model Status
 
-The layered memory model is under active implementation in phases:
+ARC memory management is complete. All phases merged and verified:
 
 | Phase | Feature | Status |
 |-------|---------|--------|
-| ARC Phase 1 | Refcount slot allocation, heap alloc/free (mmap/munmap), ctor refcount=1 | ✅ Merged |
-| ARC Phase 2 | Retain/release inline helpers (emitRetain/emitRelease) | 📋 Planned |
-| ARC Phase 3 | Assignment retain/release (lowerAssign, lowerFieldStore, return) | 📋 Planned |
-| ARC Phase 4 | Scope exit release (method/block cleanup) | 📋 Planned |
-| ARC Phase 5 | Object tear-down (free → release fields recursively) | 📋 Planned |
-| ARC Phase 6 | Tests, edge cases, self-hosting verification with ARC | 📋 Planned |
+| ARC Phase 1 | Refcount allocation, heap alloc/free, ctor refcount=1 | ✅ Merged |
+| ARC Phase 2 | Retain/release inline helpers (emitRetain/emitRelease) | ✅ Merged |
+| ARC Phase 3 | Assignment retain/release (IDENT + FIELD), VAR_DECL retain | ✅ Merged |
+| ARC Phase 4 | Scope exit release, return ownership transfer, break/continue unwind | ✅ Merged |
+| ARC Phase 5 | Recursive field teardown, inheritance chain, RETURN FIELD retain | ✅ Merged |
+| ARC Phase 6 | Test suite (14 ARC tests) + documentation | ✅ Merged |
+
+ARC is active in all self-hosted compilers (S2→S3). Null-safe: both retain and release include null guards. Deterministic: S2≡S3 byte-identical with ARC active.
 
 BorrowChecker is intentionally not implemented in the v1 compiler yet. The Rust bootstrap has a historical implementation; v1 needs its own later.
 
@@ -71,24 +72,29 @@ BorrowChecker is intentionally not implemented in the v1 compiler yet. The Rust 
 
 | PR | Category | Root Cause |
 |----|----------|------------|
-| [#106](https://github.com/egecanakincioglu/arimo/pull/106) | IRLower | NULL returnTy deref on void methods — `tyToClass` null guard |
-| [#107](https://github.com/egecanakincioglu/arimo/pull/107) | IRLower | Primitive type dispatch — `tyToClass` didn't handle INTEGER/FLOAT/BOOLEAN |
-| [#108](https://github.com/egecanakincioglu/arimo/pull/108) | IRLower | String toString() dispatch order — fell through to `__str_toString` (undefined) |
+| [#106](https://github.com/egecanakincioglu/arimo/pull/106) | IRLower | NULL returnTy deref on void methods |
+| [#107](https://github.com/egecanakincioglu/arimo/pull/107) | IRLower | Primitive type dispatch — tyToClass missing INTEGER/FLOAT/BOOLEAN |
+| [#108](https://github.com/egecanakincioglu/arimo/pull/108) | IRLower | String toString dispatch — fell through to undefined label |
+| [#118](https://github.com/egecanakincioglu/arimo/pull/118) | IRLower | Empty constructor lowering — body.length()>0 filter |
+| [#119](https://github.com/egecanakincioglu/arimo/pull/119) | IRLower | FIELD assignment ARC retain/release + emitRetain null guard |
 
 ## Resolved Backend Questions
 
-- **Runtime boundary:** Print helpers (`__arimo_println`, `__arimo_println_int`, `__arimo_print`) and string helpers (`__arimo_strlen`, `__arimo_strcat`, `__arimo_charat`, `__arimo_substr`, `__arimo_startswith`, `__arimo_endswith`, `__arimo_charcodeat`, `__arimo_i64_to_str`) are emitted inline by IRLower as IR functions.
-- **ABI coverage:** Linux (syscall) and Windows (WinAPI) calling conventions implemented. Linux target uses syscall for IO, heap, exit. Windows target uses kernel32 imports.
-- **Feature coverage:** All features used by the self-hosting compiler (62 modules) lower correctly. Unused features (interfaces, enums, generics, pattern matching, exceptions) are in parser/typechecker but not yet tested through IRLower.
+- **Runtime boundary:** Print helpers and string helpers emitted inline by IRLower as IR functions.
+- **ABI coverage:** Linux (syscall) and Windows (WinAPI) calling conventions implemented.
+- **Feature coverage:** All features used by self-hosting compiler (62 modules) lower correctly. Unused features (interfaces, enums, generics, pattern matching) are in parser/typechecker but not yet tested through IRLower.
 - **Platform detection:** PR [#36](https://github.com/egecanakincioglu/arimo-bootstrap/pull/36) — default target uses `cfg!(target_os)` at bootstrap build time. `--target linux|windows` flag available.
+- **ARC memory:** Complete (Phases 1-6). All assignments, scope exit, return, break/continue, recursive teardown, inheritance, field stores covered. Null-safe.
 
 ## Known Issues
 
 | Issue | Severity | Status |
 |-------|----------|--------|
-| ARC Phase 2-6 not implemented | HIGH | Planned, phased implementation |
 | `Env.platform()` ELF native runtime crash | MEDIUM | Pre-existing, needs investigation |
 | `inferClass` fallback (returns objCls for unknown methods) | LOW | Works in practice, defensive fix deferred |
+| `__this` magic-string → ownership metadata | LOW | Works correctly, refactor for extensibility |
+| RETURN INDEX/DEREF retain | LOW | INDEX/DEREF not yet lowered in IRLower |
+| Cycle collector / weak references | LOW | ARC limitation, documented in memory-model.md |
 | Interfaces, enums, generics untested in IRLower | LOW | Parser/typechecker support exists, not used by compiler |
 
 ## Documentation Policy
