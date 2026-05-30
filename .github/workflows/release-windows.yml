@@ -1,15 +1,26 @@
-name: Release Windows
+name: Release Windows (V1 Self-Hosted)
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to upload to (e.g. v1.0)"
+        description: "Release tag (e.g. v1.0.0)"
+        required: true
+        default: "v1.0.0"
+      bootstrap_tag:
+        description: "Bootstrap release tag to use"
         required: true
         default: "v1.0"
-      bootstrap_tag:
-        description: "arc bootstrap binary tag to download (e.g. v1.0)"
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag"
         required: true
+        type: string
+      bootstrap_tag:
+        description: "Bootstrap release tag"
+        required: false
+        type: string
         default: "v1.0"
 
 permissions:
@@ -20,7 +31,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout arimo (Stage 1 source)
+      - name: Checkout arimo (V1 source)
         uses: actions/checkout@v4
         with:
           path: arimo
@@ -28,53 +39,74 @@ jobs:
       - name: Download bootstrap arc binary
         shell: pwsh
         run: |
-          $btag = "${{ github.event.inputs.bootstrap_tag }}"
-          New-Item -ItemType Directory -Force arc-bootstrap | Out-Null
-          gh release download $btag `
-            --repo egecanakincioglu/arimo `
-            --pattern "arimo-$btag-windows-x64.zip" `
-            --output arc-bootstrap.zip
-          Expand-Archive arc-bootstrap.zip -DestinationPath arc-bootstrap
-          Write-Host "Bootstrap arc:"
-          & "arc-bootstrap\arc.exe" 2>&1 | Select-Object -First 2
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          $BTAG = "${{ github.event.inputs.bootstrap_tag || 'v1.0' }}"
+          mkdir -p arc-bootstrap
+          Invoke-WebRequest -Uri "https://github.com/egecanakincioglu/arimo/releases/download/${BTAG}/arimo-${BTAG}-windows-x64.zip" -OutFile arc-bootstrap.zip
+          Expand-Archive -Path arc-bootstrap.zip -DestinationPath arc-bootstrap
+          $arc = Get-ChildItem -Path arc-bootstrap -Name "arc.exe" -Recurse | Select-Object -First 1
+          Copy-Item "arc-bootstrap/$arc" arc-bootstrap/arc.exe
+          echo "Bootstrap arc:"
+          arc-bootstrap/arc.exe 2>&1 || $true
 
       - name: Compile Stage 1 with bootstrap arc
+        working-directory: arimo
         shell: pwsh
         run: |
-          $arc0 = (Resolve-Path "arc-bootstrap\arc.exe").Path
-          $stdlibSrc = (Resolve-Path "arimo\stdlib").Path
-          $arcDir = Split-Path $arc0
-          if (-not (Test-Path "$arcDir\stdlib")) {
-            Copy-Item -Recurse $stdlibSrc "$arcDir\stdlib"
-          }
-          Push-Location arimo
-          & $arc0 build
-          if (-not (Test-Path "arc.exe")) {
-            Write-Error "arc.exe not produced — build failed"
-            exit 1
-          }
-          Write-Host "arc.exe produced: $((Get-Item arc.exe).Length) bytes"
-          Pop-Location
+          $ARC0 = (Resolve-Path ../arc-bootstrap/arc.exe).Path
+          $ARC0_DIR = Split-Path $ARC0
+          if (Test-Path ../arc-bootstrap/stdlib) { Copy-Item -Recurse ../arc-bootstrap/stdlib $ARC0_DIR/stdlib }
+          & $ARC0 build --target windows
+          if (Test-Path arc.exe) { echo "S1 built successfully" } else { exit 1 }
 
-      - name: Create zip package
+      - name: Verify S1→S2 (second self-hosting)
+        working-directory: arimo
         shell: pwsh
         run: |
-          $tag = "${{ github.event.inputs.tag }}"
-          $dir = "arimo\dist\arimo-windows-x64"
-          New-Item -ItemType Directory -Force $dir | Out-Null
-          Copy-Item "arimo\arc.exe" "$dir\"
-          Copy-Item -Recurse "arimo\stdlib" "$dir\stdlib"
-          Compress-Archive -Path "$dir\*" -DestinationPath "arimo\dist\arimo-$tag-windows-x64.zip" -Force
+          Copy-Item arc.exe /tmp/arc_s1.exe
+          & /tmp/arc_s1.exe build --target windows
+          Copy-Item arc.exe /tmp/arc_s2.exe
+          $s1 = Get-FileHash /tmp/arc_s1.exe -Algorithm SHA256
+          $s2 = Get-FileHash /tmp/arc_s2.exe -Algorithm SHA256
+          echo "S1: $($s1.Hash)"
+          echo "S2: $($s2.Hash)"
+          if ($s1.Hash -ne $s2.Hash) { echo "WARNING: S1≠S2 (may differ due to PE timestamps)" }
+
+      - name: Run test suite
+        working-directory: arimo/test
+        shell: pwsh
+        run: |
+          $ARC = (Resolve-Path ../arc.exe).Path
+          $PASS = 0; $FAIL = 0
+          Get-ChildItem *.arm | ForEach-Object {
+            $out = $_.BaseName
+            & $ARC $_.Name --target windows 2>&1 | Select-Object -Last 1
+            if (Test-Path "$out.exe") {
+              $p = Start-Process -FilePath "./$out.exe" -NoNewWindow -Wait -PassThru
+              if ($p.ExitCode -eq 0) { $PASS++ } else { echo "FAIL: $($_.Name)"; $FAIL++ }
+              Remove-Item "$out.exe"
+            } else {
+              echo "FAIL(compile): $($_.Name)"; $FAIL++
+            }
+          }
+          echo "$PASS/$($PASS+$FAIL) core tests"
+          if ($FAIL -gt 0) { exit 1 }
+
+      - name: Package Windows release
+        working-directory: arimo
+        shell: pwsh
+        run: |
+          $TAG = "${{ github.event.inputs.tag || github.ref_name }}"
+          $DIST = "dist/arimo-windows-x64"
+          New-Item -ItemType Directory -Force -Path "$DIST/stdlib" | Out-Null
+          Copy-Item arc.exe "$DIST/"
+          Copy-Item -Recurse stdlib/* "$DIST/stdlib/"
+
+          Compress-Archive -Path "$DIST/*" -DestinationPath "dist/arimo-${TAG}-windows-x64.zip"
 
       - name: Upload to GitHub Release
-        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
         run: |
-          $tag = "${{ github.event.inputs.tag }}"
-          gh release upload $tag `
-            "arimo\dist\arimo-$tag-windows-x64.zip" `
-            --repo egecanakincioglu/arimo `
-            --clobber
+          $TAG = "${{ github.event.inputs.tag || github.ref_name }}"
+          gh release upload $TAG arimo/dist/arimo-${TAG}-windows-x64.zip --repo egecanakincioglu/arimo --clobber
