@@ -1024,11 +1024,14 @@ public class IRLower {
                 Integer clsIdx = this.classIdxOf(objCls);
                 IRValue objVal = this.lowerExpr(expr.left.object);
                 Integer fldOff = 0;
+                Integer fldIdx = -1;
                 if (clsIdx >= 0) {
-                    Integer fldIdx = this.fieldIdxOf(clsIdx, expr.left.field);
+                    fldIdx = this.fieldIdxOf(clsIdx, expr.left.field);
                     if (fldIdx >= 0) { fldOff = fldIdx * 8; }
                 }
                 IRValue rv2 = this.lowerExpr(expr.right);
+                // TODO: ARC retain+release for ref-type fields
+                // Blocked by pre-existing FIELD store bug (SIGSEGV on any obj.field = refType)
                 this.emitFieldStore(objVal, fldOff, rv2);
                 return IRValue.ofInt(0, IRType.I64);
             }
