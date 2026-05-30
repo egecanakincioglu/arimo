@@ -67,12 +67,15 @@ jobs:
         working-directory: arimo
         run: |
           cp arc /tmp/arc.s1
+          cp -r stdlib /tmp/
           /tmp/arc.s1 build --target linux
           cp arc /tmp/arc.s2
 
       - name: Verify S2→S3 (determinism)
         working-directory: arimo
         run: |
+          rm -f /tmp/stdlib 2>/dev/null || true
+          cp -r stdlib /tmp/
           /tmp/arc.s2 build --target linux
           cp arc /tmp/arc.s3
           sha256sum /tmp/arc.s2 /tmp/arc.s3
@@ -82,6 +85,7 @@ jobs:
         working-directory: arimo/test
         run: |
           ARC="/home/runner/work/arimo/arimo/arimo/arc"
+          cp -r ../stdlib . 2>/dev/null || true
           PASS=0; FAIL=0
           for f in *.arm; do
             out="${f%.arm}"
