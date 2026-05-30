@@ -59,6 +59,7 @@ public class IRLower {
     private scopeStack     : List<List<String>>;
     private mainFn         : String;
     private classNames     : List<String>;
+    private classParents   : List<Integer>;
     private allFieldNames  : List<String>;
     private allFieldClasses: List<String>;
     private classFldStarts : List<Integer>;
@@ -87,6 +88,7 @@ public class IRLower {
         this.scopeStack      = List();
         this.mainFn          = "";
         this.classNames      = List();
+        this.classParents    = List();
         this.allFieldNames   = List();
         this.allFieldClasses = List();
         this.classFldStarts  = List();
@@ -133,6 +135,12 @@ public class IRLower {
         this.classNames.append(cd.name);
         this.classFldStarts.append(start);
         this.classFldCounts.append(count);
+        // Track parent class for recursive field release (inheritance chain)
+        if (cd.extends_ != "" && cd.extends_.length() > 0) {
+            this.classParents.append(this.classIdxOf(cd.extends_));
+        } else {
+            this.classParents.append(-1);
+        }
 
         // Track method return types for inferClass(METHOD)
         Integer mi = 0;
@@ -547,6 +555,25 @@ public class IRLower {
         this.emit(IRInstr.cmp(newRef, IRValue.ofInt(0, IRType.I64)));
         String freeSkipLbl = this.newLabel("rel_free_skip");
         this.emit(IRInstr.branch(IROpcode.JNE, freeSkipLbl));
+
+        // Recursive field release — walk inheritance chain, release ref-type fields
+        Integer currIdx = clsIdx;
+        while (currIdx >= 0) {
+            Integer start = this.classFldStarts.get(currIdx) as Integer;
+            Integer count = this.classFldCounts.get(currIdx) as Integer;
+            Integer fi = count;
+            while (fi > 0) {
+                fi = fi - 1;
+                String fldCls = this.allFieldClasses.get(start + fi) as String;
+                Integer fldClsIdx = this.classIdxOf(fldCls);
+                if (fldClsIdx >= 0) {
+                    IRValue fldVal = this.emitFieldLoad(objVal, (fi + 1) * 8);
+                    this.emitRelease(fldVal, fldClsIdx);
+                }
+            }
+            currIdx = this.classParents.get(currIdx) as Integer;
+        }
+
         this.emitHeapFree(objVal, clsIdx);
         this.emit(IRInstr.label(freeSkipLbl));
 
@@ -579,13 +606,19 @@ public class IRLower {
 
     // ===== Statement lowering =====
 
+    private needsReturnRetain(expr: Expr) : Boolean {
+        if (expr.kind == ExprKind.IDENT)  { return true; }
+        if (expr.kind == ExprKind.FIELD)  { return true; }
+        // TODO: extend to INDEX/DEREF when indexed/deref field access is lowered
+        return false;
+    }
+
     private lowerStmt(stmt: Stmt) {
         if (stmt.kind == StmtKind.RETURN) {
             if (stmt.expr.kind != ExprKind.NULL_LIT) {
                 IRValue rv = this.lowerExpr(stmt.expr);
-                // ARC: retain IDENT ref-type return value before scope release
-                // TODO: extend to FIELD/INDEX/DEREF when recursive field release (G7) implemented
-                if (stmt.expr.kind == ExprKind.IDENT) {
+                // ARC: retain ref-type return value before scope release
+                if (this.needsReturnRetain(stmt.expr)) {
                     String retCls = this.inferClass(stmt.expr);
                     Integer retClsIdx = this.classIdxOf(retCls);
                     if (retClsIdx >= 0) { this.emitRetain(rv, retClsIdx); }
