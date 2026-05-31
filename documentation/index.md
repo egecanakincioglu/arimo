@@ -69,6 +69,13 @@ Arimo is a statically-typed, object-oriented systems programming language with n
 
 - [arc-cli](./cli/arc-cli.md) — `arc build`, `arc run`, `arc check`, `arc init`, direct file mode
 
+## Release Notes & Performance
+
+- [V1.0 Release Notes](../docs/release-notes/v1.0.md) — V1.0 release summary, known issues, upgrade path
+- [Performance Summary](../docs/performance-notes.md) — Concise V1 performance profile vs C/C++/Go
+- [Comprehensive Benchmark Report](../docs/performance-report.md) — Full 8-test, 4-language benchmark
+- [V1.1 Performance Roadmap](../docs/audit/v1.1-performance-roadmap-audit.md) — Benchmark-based roadmap audit
+
 ## Reference
 
 - [syntax-cheatsheet](./reference/syntax-cheatsheet.md) — One-page syntax quick reference

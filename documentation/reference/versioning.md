@@ -49,12 +49,14 @@ The Rust bootstrap compiler is historical Stage 0 context and should be labeled 
 
 ## Planned Versions
 
-| Version | Target Feature |
-|---|---|
-| v1.1 | Full generic instantiation (monomorphization) |
-| v1.2 | `async`/`await`, coroutines |
-| v1.3 | Operator overloading on classes (currently only structs) |
-| v2.0 | Fully self-contained toolchain with completed memory-safety layers |
+| Version | Focus | Key Deliverables |
+|---------|-------|------------------|
+| **v1.1** | **Memory Performance** | Bump allocator, freelist pooling, StringBuilder runtime, small string optimization |
+| **v1.2** | **Compiler Optimizations** | Constant folding, DCE, loop unrolling, CSE, strength reduction, peephole, inlining |
+| **v1.3** | **Language Features** | Inheritance, generics, interfaces, enums, pattern matching, lambdas/closures |
+| **v2.0** | **Advanced** | GVN/LICM/SROA, auto-vectorization, async/await, operator overloading, cycle collector, JIT/ARM64 |
+
+> **Performance note:** V1.0 CPU-only workloads are on par with unoptimized C (1.03× C -O0). Allocation-heavy workloads show 12-87× slowdown due to mmap-per-object. V1.1 targets these gaps. See [Performance Notes](../../docs/performance-notes.md) and [Benchmark Report](../../docs/performance-report.md).
 
 ## arc --version
 
