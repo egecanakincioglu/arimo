@@ -86,6 +86,7 @@ public class IRLower {
         this.breakDepth      = 0;
         this.contDepth       = 0;
         this.scopeStack      = List();
+        this.releaseStack    = List();
         this.mainFn          = "";
         this.classNames      = List();
         this.classParents    = List();
@@ -465,7 +466,7 @@ public class IRLower {
             if (vci >= 0) {
                 String vr = this.varLookup(vn);
                 if (vr != "") {
-                    this.emitRelease(IRValue.reg(vr, IRType.I64), vci);
+                    this.emitRelease(IRValue.reg(vr, IRType.I64), vci, 0);
                 }
             }
         }
@@ -555,6 +556,15 @@ public class IRLower {
         this.emit(IRInstr.store(val, ptr, IRType.I64));
     }
 
+    private inReleaseStack(clsIdx: Integer) : Boolean {
+        Integer i = 0;
+        while (i < this.releaseStack.length()) {
+            if (this.releaseStack.get(i) as Integer == clsIdx) { return true; }
+            i = i + 1;
+        }
+        return false;
+    }
+
     // ===== ARC retain helper =====
 
     private emitRetain(objVal: IRValue, clsIdx: Integer) {
@@ -576,7 +586,11 @@ public class IRLower {
 
     // ===== ARC release helper =====
 
-    private emitRelease(objVal: IRValue, clsIdx: Integer) {
+    // Set of class indices currently being released (prevents infinite recursion
+    // on self-referential types like Expr where Expr.left:Expr/Expr.right:Expr).
+    private releaseStack : List<Integer>;
+
+    private emitRelease(objVal: IRValue, clsIdx: Integer, emitDepth: Integer) {
         // Null guard: release(null) is no-op (prevents SIGSEGV on x=null → scope exit)
         String nullSkipLbl = this.newLabel("rel_null_skip");
         this.emit(IRInstr.cmp(objVal, IRValue.ofInt(0, IRType.I64)));
@@ -594,22 +608,29 @@ public class IRLower {
         String freeSkipLbl = this.newLabel("rel_free_skip");
         this.emit(IRInstr.branch(IROpcode.JNE, freeSkipLbl));
 
-        // Recursive field release — walk inheritance chain, release ref-type fields
-        Integer currIdx = clsIdx;
-        while (currIdx >= 0) {
-            Integer start = this.classFldStarts.get(currIdx) as Integer;
-            Integer count = this.classFldCounts.get(currIdx) as Integer;
-            Integer fi = count;
-            while (fi > 0) {
-                fi = fi - 1;
-                String fldCls = this.allFieldClasses.get(start + fi) as String;
-                Integer fldClsIdx = this.classIdxOf(fldCls);
-                if (fldClsIdx >= 0) {
-                    IRValue fldVal = this.emitFieldLoad(objVal, (fi + 1) * 8);
-                    this.emitRelease(fldVal, fldClsIdx);
+        // Recursive field release — walk inheritance chain, release ref-type fields.
+        // Cycle guard: skip self-referential types to prevent infinite recursion
+        // (e.g. Expr.left:Expr referencing same class being released).
+        if (!this.inReleaseStack(clsIdx)) {
+            this.releaseStack.append(clsIdx);
+            Integer currIdx = clsIdx;
+            while (currIdx >= 0) {
+                Integer start = this.classFldStarts.get(currIdx) as Integer;
+                Integer count = this.classFldCounts.get(currIdx) as Integer;
+                Integer fi = count;
+                while (fi > 0) {
+                    fi = fi - 1;
+                    String fldCls = this.allFieldClasses.get(start + fi) as String;
+                    Integer fldClsIdx = this.classIdxOf(fldCls);
+                    if (fldClsIdx >= 0) {
+                        IRValue fldVal = this.emitFieldLoad(objVal, (fi + 1) * 8);
+                        this.emitRelease(fldVal, fldClsIdx, emitDepth + 1);
+                    }
                 }
+                currIdx = this.classParents.get(currIdx) as Integer;
             }
-            currIdx = this.classParents.get(currIdx) as Integer;
+            // Pop from releaseStack
+            this.releaseStack.removeAt(this.releaseStack.length() - 1);
         }
 
         this.emitHeapFree(objVal, clsIdx);
@@ -1050,7 +1071,7 @@ public class IRLower {
                     String oldCls = this.varClassOf(expr.left.strVal);
                     Integer oldClsIdx = this.classIdxOf(oldCls);
                     if (oldClsIdx >= 0) {
-                        this.emitRelease(IRValue.reg(vReg, IRType.I64), oldClsIdx);
+                        this.emitRelease(IRValue.reg(vReg, IRType.I64), oldClsIdx, 0);
                     }
                     IRValue dst = IRValue.reg(vReg, IRType.I64);
                     this.emit(IRInstr.mov(dst, rv));
@@ -1081,7 +1102,7 @@ public class IRLower {
                     Integer oldFldClsIdx = this.classIdxOf(oldFldCls);
                     if (oldFldClsIdx >= 0) {
                         IRValue oldVal = this.emitFieldLoad(objVal, fldOff);
-                        this.emitRelease(oldVal, oldFldClsIdx);
+                        this.emitRelease(oldVal, oldFldClsIdx, 0);
                     }
                 }
                 this.emitFieldStore(objVal, fldOff, rv2);
