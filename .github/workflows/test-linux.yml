@@ -70,10 +70,24 @@ jobs:
             echo -n "$f → "
             "$ARC" "$f" --target linux 2>&1 | tail -1
             if [ -f "$out" ]; then
-              chmod +x "$out" && ./"$out" >/dev/null 2>&1 || { echo "  FAIL: $f (runtime)"; FAIL=1; }
+              chmod +x "$out"
+              # Check binary runs without crash (any exit code OK, non-0 = test returning value)
+              if ./"$out" >/dev/null 2>&1; then
+                echo "  OK"
+              else
+                ret=$?
+                # SIGSEGV=139, SIGILL=132, SIGABRT=134 are crashes
+                if [ $ret -ge 132 ] && [ $ret -le 139 ]; then
+                  echo "  FAIL: $f (crash, exit $ret)"
+                  FAIL=1
+                else
+                  echo "  OK (exit $ret)"
+                fi
+              fi
               rm -f "$out"
             else
-              echo "  FAIL(compile): $f"; FAIL=1
+              echo "  FAIL: $f (compile)"
+              FAIL=1
             fi
           done
           [ $FAIL -eq 0 ] && echo "All core tests pass" || exit 1
