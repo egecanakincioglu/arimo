@@ -341,6 +341,7 @@ public class Main {
     }
 
     public static main() : Void {
+        IO.println("DEBUG:main_enter");
         List<String> argv = Env.args();
         Integer argc     = argv.length();
 
