@@ -341,9 +341,7 @@ public class Main {
     }
 
     public static main() : Void {
-        IO.println("DEBUG:main_enter");
         List<String> argv = Env.args();
-        IO.println("DEBUG:args_ok");
         Integer argc     = argv.length();
 
         if (argc <= 1) {
@@ -351,17 +349,13 @@ public class Main {
             return;
         }
 
-        IO.println("DEBUG:argc=${argc}");
         String exePath    = argv.get(0);
         String stdlibPath = Main.findStdlib(exePath);
-        IO.println("DEBUG:stdlib_ok");
 
         String cmd        = argv.get(1);
         Boolean checkOnly = false;
         Boolean doRun     = false;
-        IO.println("DEBUG:platform_check");
         Boolean isLinux   = Env.platform().compareTo("linux") == 0;
-        IO.println("DEBUG:isLinux=${isLinux}");
 
         Integer fi = 2;
         while (fi < argc) {
