@@ -86,7 +86,7 @@ public class IRLower {
         this.breakDepth      = 0;
         this.contDepth       = 0;
         this.scopeStack      = List();
-        this.releaseStack    = List();
+        this.currentReleaseCls = -1;
         this.mainFn          = "";
         this.classNames      = List();
         this.classParents    = List();
@@ -556,15 +556,6 @@ public class IRLower {
         this.emit(IRInstr.store(val, ptr, IRType.I64));
     }
 
-    private inReleaseStack(clsIdx: Integer) : Boolean {
-        Integer i = 0;
-        while (i < this.releaseStack.length()) {
-            if (this.releaseStack.get(i) as Integer == clsIdx) { return true; }
-            i = i + 1;
-        }
-        return false;
-    }
-
     // ===== ARC retain helper =====
 
     private emitRetain(objVal: IRValue, clsIdx: Integer) {
@@ -586,9 +577,9 @@ public class IRLower {
 
     // ===== ARC release helper =====
 
-    // Set of class indices currently being released (prevents infinite recursion
-    // on self-referential types like Expr where Expr.left:Expr/Expr.right:Expr).
-    private releaseStack : List<Integer>;
+    // Tracks class currently being released to prevent infinite recursion
+    // on self-referential types (e.g. Expr.left:Expr). -1 = none.
+    private currentReleaseCls : Integer;
 
     private emitRelease(objVal: IRValue, clsIdx: Integer, emitDepth: Integer) {
         // Null guard: release(null) is no-op (prevents SIGSEGV on x=null → scope exit)
@@ -609,28 +600,31 @@ public class IRLower {
         this.emit(IRInstr.branch(IROpcode.JNE, freeSkipLbl));
 
         // Recursive field release — walk inheritance chain, release ref-type fields.
-        // Cycle guard: skip self-referential types to prevent infinite recursion
-        // (e.g. Expr.left:Expr referencing same class being released).
-        if (!this.inReleaseStack(clsIdx)) {
-            this.releaseStack.append(clsIdx);
-            Integer currIdx = clsIdx;
-            while (currIdx >= 0) {
-                Integer start = this.classFldStarts.get(currIdx) as Integer;
-                Integer count = this.classFldCounts.get(currIdx) as Integer;
-                Integer fi = count;
-                while (fi > 0) {
-                    fi = fi - 1;
-                    String fldCls = this.allFieldClasses.get(start + fi) as String;
-                    Integer fldClsIdx = this.classIdxOf(fldCls);
-                    if (fldClsIdx >= 0) {
+        // Self- reference guard: skip fields matching the class currently being
+        // released (e.g. Expr.left:Expr). Uses single integer, no List ops, to
+        // avoid codegen bugs in self-hosted compiler's List.insert/append/removeAt.
+        Integer releaseDepth = 0;
+        Integer currIdx = clsIdx;
+        while (currIdx >= 0) {
+            Integer start = this.classFldStarts.get(currIdx) as Integer;
+            Integer count = this.classFldCounts.get(currIdx) as Integer;
+            Integer fi = count;
+            while (fi > 0) {
+                fi = fi - 1;
+                String fldCls = this.allFieldClasses.get(start + fi) as String;
+                Integer fldClsIdx = this.classIdxOf(fldCls);
+                if (fldClsIdx >= 0) {
+                    // Skip self-referential field types to prevent infinite recursion
+                    if (fldClsIdx != clsIdx && fldClsIdx != this.currentReleaseCls) {
+                        Integer saved = this.currentReleaseCls;
+                        this.currentReleaseCls = clsIdx;
                         IRValue fldVal = this.emitFieldLoad(objVal, (fi + 1) * 8);
                         this.emitRelease(fldVal, fldClsIdx, emitDepth + 1);
+                        this.currentReleaseCls = saved;
                     }
                 }
-                currIdx = this.classParents.get(currIdx) as Integer;
             }
-            // Pop from releaseStack
-            this.releaseStack.removeAt(this.releaseStack.length() - 1);
+            currIdx = this.classParents.get(currIdx) as Integer;
         }
 
         this.emitHeapFree(objVal, clsIdx);
