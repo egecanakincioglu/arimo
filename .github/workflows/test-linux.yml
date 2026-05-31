@@ -60,27 +60,31 @@ jobs:
           "$ARC0" build --target linux
           chmod +x arc
 
-      - name: Verify S2→S3 determinism
-        working-directory: arimo
-        run: |
-          cp arc /tmp/arc.s2
-          /tmp/arc.s2 build --target linux
-          cp arc /tmp/arc.s3
-          diff /tmp/arc.s2 /tmp/arc.s3 && echo "DETERMINISTIC" || { echo "FAIL: non-deterministic"; exit 1; }
-
-      - name: Run core test suite
+      - name: Run core test suite (S1)
         working-directory: arimo/test
         run: |
           ARC="../arc"
           FAIL=0
           for f in *.arm; do
             out="${f%.arm}"
+            echo -n "$f → "
             "$ARC" "$f" --target linux 2>&1 | tail -1
             if [ -f "$out" ]; then
-              chmod +x "$out" && ./"$out" >/dev/null 2>&1 || { echo "FAIL: $f"; FAIL=1; }
+              chmod +x "$out" && ./"$out" >/dev/null 2>&1 || { echo "  FAIL: $f (runtime)"; FAIL=1; }
               rm -f "$out"
             else
-              echo "FAIL(compile): $f"; FAIL=1
+              echo "  FAIL(compile): $f"; FAIL=1
             fi
           done
           [ $FAIL -eq 0 ] && echo "All core tests pass" || exit 1
+
+      - name: Verify S2→S3 determinism
+        working-directory: arimo
+        run: |
+          cp arc /tmp/arc.s2
+          echo "=== S2 binary: $(stat -c%s /tmp/arc.s2) bytes ==="
+          echo "=== S2→S3 build ==="
+          /tmp/arc.s2 build --target linux 2>&1
+          echo "=== S3 binary: $(stat -c%s arc 2>/dev/null || echo 'missing') ==="
+          cp arc /tmp/arc.s3 2>/dev/null || { echo "S3 not produced — S2 segfaulted"; exit 1; }
+          diff /tmp/arc.s2 /tmp/arc.s3 && echo "DETERMINISTIC" || { echo "FAIL: non-deterministic"; exit 1; }
