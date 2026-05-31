@@ -1306,8 +1306,18 @@ public class IRLower {
             }
             return IRValue.none();
         }
-        // TODO: Env.args() and Env.exePath() need start function argc/argv setup
-
+        if (class_ == "Env" && method == "args") {
+            // Stub: return empty List<String>. Full argc/argv startup ABI → V1.1.
+            List<IRValue> la = List();
+            String lr = this.newReg();
+            this.emit(IRInstr.call(IRValue.reg(lr, IRType.PTR), "__arimo_list_new", la));
+            return IRValue.reg(lr, IRType.PTR);
+        }
+        if (class_ == "Env" && method == "exePath") {
+            // Stub: return empty string. Full exePath → V1.1.
+            return IRValue.global(this.internStr(""));
+        }
+        // Generic static call fallback
         String fnName = "${class_}__${method}";
         List<IRValue> callArgsFn = List();
         Integer ai = 0;
