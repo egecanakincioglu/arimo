@@ -66,6 +66,7 @@ public class IRLower {
     private classFldCounts : List<Integer>;
     private methodRetNames  : List<String>;
     private methodRetClasses: List<String>;
+    private teardownLabels  : List<String>;
     private curClass       : String;
     private thisReg        : String;
     private linux          : Boolean;
@@ -95,6 +96,7 @@ public class IRLower {
         this.classFldCounts  = List();
         this.methodRetNames  = List();
         this.methodRetClasses = List();
+        this.teardownLabels  = List();
         this.curClass        = "";
         this.thisReg         = "";
         this.irFns.append(IRFunction("__placeholder", IRType.VOID));
@@ -135,6 +137,7 @@ public class IRLower {
         this.classNames.append(cd.name);
         this.classFldStarts.append(start);
         this.classFldCounts.append(count);
+        this.teardownLabels.append("");
         // Track parent class for recursive field release (inheritance chain)
         if (cd.extends_ != "" && cd.extends_.length() > 0) {
             this.classParents.append(this.classIdxOf(cd.extends_));
@@ -465,7 +468,7 @@ public class IRLower {
             if (vci >= 0) {
                 String vr = this.varLookup(vn);
                 if (vr != "") {
-                    this.emitRelease(IRValue.reg(vr, IRType.I64), vci, 0);
+                    this.emitRelease(IRValue.reg(vr, IRType.I64), vci);
                 }
             }
         }
@@ -574,9 +577,96 @@ public class IRLower {
         this.emit(IRInstr.label(nullSkipLbl));
     }
 
+    // ===== Cached teardown routine generation =====
+
+    private needsTeardown(clsIdx: Integer) : Boolean {
+        Integer currIdx = clsIdx;
+        while (currIdx >= 0) {
+            Integer start = this.classFldStarts.get(currIdx) as Integer;
+            Integer count = this.classFldCounts.get(currIdx) as Integer;
+            Integer fi = 0;
+            while (fi < count) {
+                String fldCls = this.allFieldClasses.get(start + fi) as String;
+                if (this.classIdxOf(fldCls) >= 0) { return true; }
+                fi = fi + 1;
+            }
+            currIdx = this.classParents.get(currIdx) as Integer;
+        }
+        return false;
+    }
+
+    private emitTeardownBody(clsIdx: Integer) {
+        // obj parameter = first param (RDI on Linux, RCX on Windows)
+        IRValue objParam = IRValue.reg("obj", IRType.PTR);
+
+        Integer currIdx = clsIdx;
+        while (currIdx >= 0) {
+            Integer start = this.classFldStarts.get(currIdx) as Integer;
+            Integer count = this.classFldCounts.get(currIdx) as Integer;
+            Integer fi = count;
+            while (fi > 0) {
+                fi = fi - 1;
+                String fldCls = this.allFieldClasses.get(start + fi) as String;
+                Integer fldClsIdx = this.classIdxOf(fldCls);
+                if (fldClsIdx >= 0) {
+                    // Load field value
+                    IRValue fldVal = this.emitFieldLoad(objParam, (fi + 1) * 8);
+
+                    // Null guard for field
+                    String fldSkipLbl = this.newLabel("td_fld_skip");
+                    this.emit(IRInstr.cmp(fldVal, IRValue.ofInt(0, IRType.I64)));
+                    this.emit(IRInstr.branch(IROpcode.JE, fldSkipLbl));
+
+                    // Decrement field refcount
+                    IRValue fldRC = this.emitFieldLoad(fldVal, this.refCountOff(fldClsIdx));
+                    String nr = this.newReg();
+                    IRValue newRC = IRValue.reg(nr, IRType.I64);
+                    this.emit(IRInstr.binop(IROpcode.SUB, newRC, fldRC, IRValue.ofInt(1, IRType.I64)));
+                    this.emitFieldStore(fldVal, this.refCountOff(fldClsIdx), newRC);
+
+                    // Conditional free: only when field refcount reaches 0
+                    this.emit(IRInstr.cmp(newRC, IRValue.ofInt(0, IRType.I64)));
+                    String freeSkipLbl = this.newLabel("td_free_skip");
+                    this.emit(IRInstr.branch(IROpcode.JNE, freeSkipLbl));
+
+                    // CALL child teardown (may be same class → recursive, safe via rc guard)
+                    String childTd = this.teardownLabels.get(fldClsIdx) as String;
+                    if (childTd != "") {
+                        List<IRValue> args = List();
+                        args.append(fldVal);
+                        String dr = this.newReg();
+                        this.emit(IRInstr.call(IRValue.reg(dr, IRType.I64), childTd, args));
+                    }
+
+                    // Heap free child
+                    this.emitHeapFree(fldVal, fldClsIdx);
+                    this.emit(IRInstr.label(freeSkipLbl));
+                    this.emit(IRInstr.label(fldSkipLbl));
+                }
+            }
+            currIdx = this.classParents.get(currIdx) as Integer;
+        }
+
+        this.emit(IRInstr.retVoid());
+    }
+
+    private generateTeardownRoutines() {
+        Integer i = 0;
+        while (i < this.classNames.length()) {
+            if (this.needsTeardown(i)) {
+                String label = "__arimo_td_${i}";
+                this.teardownLabels.set(i, label);
+                this.beginFn(label, IRType.VOID);
+                this.addParamToLast("obj", IRType.PTR);
+                this.emitTeardownBody(i);
+            }
+            i = i + 1;
+        }
+    }
+
     // ===== ARC release helper =====
 
-    private emitRelease(objVal: IRValue, clsIdx: Integer, emitDepth: Integer) {
+    private emitRelease(objVal: IRValue, clsIdx: Integer) {
         // Null guard: release(null) is no-op (prevents SIGSEGV on x=null → scope exit)
         String nullSkipLbl = this.newLabel("rel_null_skip");
         this.emit(IRInstr.cmp(objVal, IRValue.ofInt(0, IRType.I64)));
@@ -594,26 +684,14 @@ public class IRLower {
         String freeSkipLbl = this.newLabel("rel_free_skip");
         this.emit(IRInstr.branch(IROpcode.JNE, freeSkipLbl));
 
-        // Recursive field release — walk inheritance chain, release ref-type fields.
-        // Guard: depth limit prevents stack overflow from deeply nested or
-        // self-referential types (Expr.left:Expr, Stmt.expr:Expr etc.).
-        if (emitDepth < 12) {
-            Integer currIdx = clsIdx;
-            while (currIdx >= 0) {
-                Integer start = this.classFldStarts.get(currIdx) as Integer;
-                Integer count = this.classFldCounts.get(currIdx) as Integer;
-                Integer fi = count;
-                while (fi > 0) {
-                    fi = fi - 1;
-                    String fldCls = this.allFieldClasses.get(start + fi) as String;
-                    Integer fldClsIdx = this.classIdxOf(fldCls);
-                    if (fldClsIdx >= 0) {
-                        IRValue fldVal = this.emitFieldLoad(objVal, (fi + 1) * 8);
-                        this.emitRelease(fldVal, fldClsIdx, emitDepth + 1);
-                    }
-                }
-                currIdx = this.classParents.get(currIdx) as Integer;
-            }
+        // Cached teardown routine: field teardown generated once per class,
+        // called via runtime CALL (replaces exponential inline expansion).
+        String tdLabel = this.teardownLabels.get(clsIdx) as String;
+        if (tdLabel != "") {
+            List<IRValue> tdArgs = List();
+            tdArgs.append(objVal);
+            String tdReg = this.newReg();
+            this.emit(IRInstr.call(IRValue.reg(tdReg, IRType.I64), tdLabel, tdArgs));
         }
 
         this.emitHeapFree(objVal, clsIdx);
@@ -1054,7 +1132,7 @@ public class IRLower {
                     String oldCls = this.varClassOf(expr.left.strVal);
                     Integer oldClsIdx = this.classIdxOf(oldCls);
                     if (oldClsIdx >= 0) {
-                        this.emitRelease(IRValue.reg(vReg, IRType.I64), oldClsIdx, 0);
+                        this.emitRelease(IRValue.reg(vReg, IRType.I64), oldClsIdx);
                     }
                     IRValue dst = IRValue.reg(vReg, IRType.I64);
                     this.emit(IRInstr.mov(dst, rv));
@@ -1085,7 +1163,7 @@ public class IRLower {
                     Integer oldFldClsIdx = this.classIdxOf(oldFldCls);
                     if (oldFldClsIdx >= 0) {
                         IRValue oldVal = this.emitFieldLoad(objVal, fldOff);
-                        this.emitRelease(oldVal, oldFldClsIdx, 0);
+                        this.emitRelease(oldVal, oldFldClsIdx);
                     }
                 }
                 this.emitFieldStore(objVal, fldOff, rv2);
@@ -2710,6 +2788,7 @@ public class IRLower {
 
     public lower(modules: List<ArimoModule>) {
         this.registerClasses(modules);
+        this.generateTeardownRoutines();
         this.internStr("\n");
         Integer i = 0;
         while (i < modules.length()) {
