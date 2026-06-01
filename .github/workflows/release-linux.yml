@@ -50,11 +50,15 @@ jobs:
             arimo-bootstrap/target
           key: linux-v1-${{ hashFiles('arimo-bootstrap/Cargo.lock') }}
 
+      # ── Stage 0: bootstrap compiler ──────────────────────────────────────
+
       - name: Build Stage 0 (bootstrap)
         working-directory: arimo-bootstrap
         run: cargo build --release --target x86_64-unknown-linux-gnu
 
-      - name: Build Stage 1 (self-hosted Linux)
+      # ── Stage 1: S1 → S2 (bootstrap compiles arc source) ─────────────────
+
+      - name: Build S2 (bootstrap → self-hosted)
         working-directory: arimo
         run: |
           ARC0="../arimo-bootstrap/target/x86_64-unknown-linux-gnu/release/arc"
@@ -62,16 +66,105 @@ jobs:
           cp -r stdlib "../arimo-bootstrap/target/x86_64-unknown-linux-gnu/release/"
           "$ARC0" build --target linux
           chmod +x arc
-          cp arc ../arc-linux
+          cp arc /tmp/arc.s2
+          echo "S2 size: $(stat -c%s /tmp/arc.s2) bytes"
 
-      - name: Run test suite (smoke test)
+      # ── Stage 2: S2 → S3 (self-hosted compiles itself) ───────────────────
+
+      - name: Build S3 (self-hosted → self-hosted)
+        working-directory: arimo
+        run: |
+          rm -f arc
+          /tmp/arc.s2 build --target linux
+          chmod +x arc
+          cp arc /tmp/arc.s3
+          echo "S3 size: $(stat -c%s /tmp/arc.s3) bytes"
+
+      # ── Stage 3: S3 → S4 (verify determinism) ────────────────────────────
+
+      - name: Build S4 (determinism check)
+        working-directory: arimo
+        run: |
+          rm -f arc
+          /tmp/arc.s3 build --target linux
+          chmod +x arc
+          cp arc /tmp/arc.s4
+          echo "S4 size: $(stat -c%s /tmp/arc.s4) bytes"
+
+      - name: Verify S3 == S4 (determinism)
+        run: |
+          diff /tmp/arc.s3 /tmp/arc.s4 && echo "✅ S3 == S4 DETERMINISTIC" || {
+            echo "❌ FAIL: S3 ≠ S4 — non-deterministic output"
+            echo "S3 SHA256: $(sha256sum /tmp/arc.s3 | awk '{print $1}')"
+            echo "S4 SHA256: $(sha256sum /tmp/arc.s4 | awk '{print $1}')"
+            exit 1
+          }
+
+      # ── Verify S3 is static + self-contained ─────────────────────────────
+
+      - name: Verify static binary (no libc dependency)
+        run: |
+          RELEASE_BIN=/tmp/arc.s3
+          echo "=== file ==="
+          file "$RELEASE_BIN"
+
+          echo "=== ldd ==="
+          if ldd "$RELEASE_BIN" 2>&1 | grep -q "not a dynamic executable"; then
+            echo "✅ ldd: not a dynamic executable"
+          elif ldd "$RELEASE_BIN" 2>&1 | grep -q "statically linked"; then
+            echo "✅ ldd: statically linked"
+          else
+            LDD_OUT=$(ldd "$RELEASE_BIN" 2>&1)
+            if echo "$LDD_OUT" | grep -qE "libc\.|libpthread|libm\.|libdl\.|ld-linux"; then
+              echo "❌ FAIL: binary has dynamic library dependencies"
+              echo "$LDD_OUT"
+              exit 1
+            fi
+            echo "ldd output: $LDD_OUT"
+          fi
+
+          echo "=== readelf -l (check for INTERP segment) ==="
+          if readelf -l "$RELEASE_BIN" 2>/dev/null | grep -q "INTERP"; then
+            echo "❌ FAIL: binary has INTERP segment (dynamic linker required)"
+            readelf -l "$RELEASE_BIN" | grep "INTERP\|LOAD\|DYNAMIC"
+            exit 1
+          else
+            echo "✅ No INTERP segment — static binary"
+          fi
+
+          echo "=== readelf -d (check for dynamic section) ==="
+          if readelf -d "$RELEASE_BIN" 2>/dev/null | grep -q "NEEDED"; then
+            echo "❌ FAIL: binary has NEEDED entries (shared library dependencies)"
+            readelf -d "$RELEASE_BIN"
+            exit 1
+          else
+            echo "✅ No NEEDED entries — self-contained"
+          fi
+
+          echo ""
+          echo "=== Static verification PASSED ==="
+          echo "Release binary: $(stat -c%s "$RELEASE_BIN") bytes"
+          echo "SHA256: $(sha256sum "$RELEASE_BIN" | awk '{print $1}')"
+
+      # ── Smoke test ───────────────────────────────────────────────────────
+
+      - name: Smoke test (compile hello.arm)
         working-directory: arimo/test
         run: |
-          ARC="/home/runner/work/arimo/arimo/arimo/arc"
+          RELEASE_BIN=/tmp/arc.s3
           cp -r ../stdlib /tmp/
-          "$ARC" hello.arm --target linux 2>&1 | tail -1
-          chmod +x hello && ./hello
-          echo "Smoke test passed"
+          "$RELEASE_BIN" hello.arm --target linux 2>&1
+          if [ -f hello ]; then
+            chmod +x hello
+            OUTPUT=$(./hello 2>&1)
+            echo "hello output: $OUTPUT"
+            echo "✅ Smoke test passed"
+          else
+            echo "❌ Smoke test failed: hello binary not produced"
+            exit 1
+          fi
+
+      # ── Package ──────────────────────────────────────────────────────────
 
       - name: Install packaging tools
         run: |
@@ -83,9 +176,10 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           VERSION="${TAG#v}"
+          RELEASE_BIN=/tmp/arc.s3
 
           mkdir -p dist/arimo-linux-x64/stdlib
-          cp arc dist/arimo-linux-x64/
+          cp "$RELEASE_BIN" dist/arimo-linux-x64/arc
           cp -r stdlib/. dist/arimo-linux-x64/stdlib/
 
           cat > dist/arimo-linux-x64/install.sh << 'INSTALL'
@@ -109,7 +203,7 @@ jobs:
 
           mkdir -p pkg-root/usr/local/bin
           mkdir -p pkg-root/usr/local/lib/arimo/stdlib
-          cp arc pkg-root/usr/local/bin/arc
+          cp "$RELEASE_BIN" pkg-root/usr/local/bin/arc
           cp -r stdlib/. pkg-root/usr/local/lib/arimo/stdlib/
 
           fpm -s dir -t deb -n arimo -v "${VERSION}" --architecture amd64 \
@@ -125,6 +219,44 @@ jobs:
             --maintainer "Egecan Akıncıoğlu <dev@egecanakincioglu.com>" \
             --license "AGPL-3.0" --prefix / -C pkg-root \
             -p "dist/arimo-${TAG}-linux-x64.rpm" .
+
+          echo "=== Packaged files ==="
+          ls -la dist/
+
+      # ── Verify packaged binary is static ─────────────────────────────────
+
+      - name: Verify packaged tar.gz contains static binary
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          TARBALL="arimo/dist/arimo-${TAG}-linux-x64.tar.gz"
+
+          mkdir -p /tmp/verify-release
+          tar xzf "$TARBALL" -C /tmp/verify-release
+
+          PACKAGED_BIN=/tmp/verify-release/arimo-linux-x64/arc
+
+          echo "=== Verifying packaged binary ==="
+          file "$PACKAGED_BIN"
+
+          if file "$PACKAGED_BIN" | grep -q "dynamically linked"; then
+            echo "❌ FAIL: Packaged binary is dynamically linked!"
+            exit 1
+          fi
+
+          if readelf -l "$PACKAGED_BIN" 2>/dev/null | grep -q "INTERP"; then
+            echo "❌ FAIL: Packaged binary has INTERP segment!"
+            exit 1
+          fi
+
+          ldd "$PACKAGED_BIN" 2>&1 | grep -q "not a dynamic executable" || {
+            echo "❌ FAIL: Packaged binary has dynamic dependencies!"
+            exit 1
+          }
+
+          echo "✅ Packaged binary is static and self-contained"
+          sha256sum "$PACKAGED_BIN"
+
+      # ── Upload ───────────────────────────────────────────────────────────
 
       - name: Upload to GitHub Release
         env:
