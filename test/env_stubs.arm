@@ -1,0 +1,21 @@
+package test;
+
+import arimo.env.Env;
+
+public class EnvStubTest {
+    public static main() : Void {
+        // Env.args() stub — must not SIGSEGV, returns empty list
+        List<String> a = Env.args();
+
+        // Env.exePath() stub — must not SIGSEGV, returns empty string
+        String p = Env.exePath();
+
+        // Env.platform() — must not SIGSEGV
+        String pl = Env.platform();
+
+        IO.println("Env.args OK");
+        IO.println("Env.exePath OK");
+        IO.println("Env.platform OK");
+        IO.println("Env stubs PASS");
+    }
+}
