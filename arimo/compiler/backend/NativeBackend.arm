@@ -23,6 +23,7 @@ import arimo.compiler.backend.IRLower;
 import arimo.compiler.backend.IRToX64;
 import arimo.compiler.backend.IRFunction;
 import arimo.compiler.backend.RegAlloc;
+import arimo.compiler.backend.SafeRegAlloc;
 import arimo.compiler.backend.X64Encoder;
 import arimo.compiler.backend.PEWriter;
 import arimo.compiler.backend.ELFWriter;
@@ -33,18 +34,24 @@ public class NativeBackend {
     private ra      : RegAlloc;
     private pe      : PEWriter;
     private elf     : ELFWriter;
-    private linux   : Boolean;
+    private linux           : Boolean;
+    private useSafeRegAlloc : Boolean;
 
     public constructor(linux: Boolean) {
-        this.linux   = linux;
-        this.lowerer = IRLower(linux);
-        this.enc     = X64Encoder();
-        this.ra      = RegAlloc();
-        this.pe      = PEWriter(this.enc);
-        this.elf     = ELFWriter(this.enc);
+        this.linux           = linux;
+        this.lowerer         = IRLower(linux);
+        this.enc             = X64Encoder();
+        this.ra              = RegAlloc();
+        this.pe              = PEWriter(this.enc);
+        this.elf             = ELFWriter(this.enc);
+        this.useSafeRegAlloc = false;
         if (!linux) {
             this.setupImports();
         }
+    }
+
+    public setSafeRegAlloc(enabled: Boolean) {
+        this.useSafeRegAlloc = enabled;
     }
 
     private setupImports() {
@@ -61,6 +68,10 @@ public class NativeBackend {
         this.lowerer.lower(modules);
 
         IRToX64 irx = IRToX64(this.enc, this.ra, this.linux);
+        if (this.useSafeRegAlloc) {
+            SafeRegAlloc sra = SafeRegAlloc();
+            irx.setSafeRegAlloc(sra);
+        }
 
         Integer entryOff = 0;
         Integer fi = 0;
@@ -71,6 +82,11 @@ public class NativeBackend {
             fi = fi + 1;
         }
 
+        if (this.enc.hasError) {
+            IO.println("arc: build failed — errors detected during code generation");
+            return;
+        }
+
         Integer si = 0;
         if (this.linux) {
             while (si < this.lowerer.strNames.length()) {
@@ -79,7 +95,18 @@ public class NativeBackend {
                 this.elf.addString(nm, ct);
                 si = si + 1;
             }
+            Integer bi = 0;
+            while (bi < this.lowerer.bssNames.length()) {
+                String bnm = this.lowerer.bssNames.get(bi) as String;
+                Integer bsz = this.lowerer.bssSizes.get(bi) as Integer;
+                this.elf.addBss(bnm, bsz);
+                bi = bi + 1;
+            }
             List<Integer> elfBytes = this.elf.build(entryOff);
+            if (this.enc.hasError) {
+                IO.println("arc: build failed — unresolved labels or fixup errors");
+                return;
+            }
             this.elf.writeTo(outPath, elfBytes);
         } else {
             while (si < this.lowerer.strNames.length()) {
@@ -89,6 +116,10 @@ public class NativeBackend {
                 si = si + 1;
             }
             List<Integer> peBytes = this.pe.build(entryOff);
+            if (this.enc.hasError) {
+                IO.println("arc: build failed — unresolved labels or fixup errors");
+                return;
+            }
             this.pe.writeTo(outPath, peBytes);
         }
     }

@@ -21,6 +21,7 @@ package arimo.compiler.backend;
 import arimo.compiler.backend.X64Reg;
 import arimo.compiler.backend.X64Encoder;
 import arimo.compiler.backend.RegAlloc;
+import arimo.compiler.backend.SafeRegAlloc;
 import arimo.compiler.backend.IRFunction;
 import arimo.compiler.backend.IRInstr;
 import arimo.compiler.backend.IRValue;
@@ -34,15 +35,23 @@ public class IRToX64 {
     private curName    : String;
     private frame      : Integer;
     private savedCount : Integer;
-    private linux      : Boolean;
+    private linux           : Boolean;
+    private useSafeRegAlloc : Boolean;
+    private safeRa          : SafeRegAlloc;
 
     public constructor(enc: X64Encoder, ra: RegAlloc, linux: Boolean) {
-        this.enc        = enc;
-        this.ra         = ra;
-        this.curName    = "";
-        this.frame      = 0;
-        this.savedCount = 0;
-        this.linux      = linux;
+        this.enc             = enc;
+        this.ra              = ra;
+        this.curName         = "";
+        this.frame           = 0;
+        this.savedCount      = 0;
+        this.linux           = linux;
+        this.useSafeRegAlloc = false;
+    }
+
+    public setSafeRegAlloc(sra: SafeRegAlloc) {
+        this.safeRa          = sra;
+        this.useSafeRegAlloc = true;
     }
 
     private argRegs() : List<Integer> {
@@ -144,6 +153,76 @@ public class IRToX64 {
         }
     }
 
+    // ===== SafeRegAlloc helpers (P4) =====
+
+    // safeLoadVal: load IR value into given scratch register from stack slot.
+    // Always stack-canonical — no physReg fast path.
+    private safeLoadVal(val: IRValue, scratchReg: Integer) : Integer {
+        if (val.kind == IRValueKind.IMM_INT) {
+            this.enc.movRI(scratchReg, val.immInt);
+            return scratchReg;
+        }
+        if (val.kind == IRValueKind.REG) {
+            this.safeRa.assertKnown(val.name);
+            this.safeRa.assertWritten(val.name);
+            Integer off = this.safeRa.slotOffsetByName(val.name);
+            this.enc.movRMem(scratchReg, X64Reg.RBP, off);
+            return scratchReg;
+        }
+        if (val.kind == IRValueKind.GLOBAL) {
+            this.enc.leaRip(scratchReg, val.name);
+            return scratchReg;
+        }
+        this.enc.xorZero(scratchReg);
+        return scratchReg;
+    }
+
+    // safeStoreDst: store result from scratch register to its canonical stack slot.
+    // Marks slot written. After this call, value is on stack and scratchReg is dead.
+    private safeStoreDst(name: String, srcReg: Integer) {
+        this.safeRa.assertKnown(name);
+        Integer off = this.safeRa.slotOffsetByName(name);
+        this.enc.movMemR(X64Reg.RBP, off, srcReg);
+        this.safeRa.markValueWritten(name);
+    }
+
+    // safeSlotOffset: delegate to SafeRegAlloc.slotOffsetByName.
+    private safeSlotOffset(name: String) : Integer {
+        return this.safeRa.slotOffsetByName(name);
+    }
+
+    // safeBeginInstr: clean scratch state before emitting an instruction.
+    // Checks invariant: no dirty scratch regs from previous instruction.
+    private safeBeginInstr() {
+        this.safeRa.assertClean();
+        this.safeRa.resetScratch();
+    }
+
+    // safeEndInstr: ensure scratch state is clean after instruction emission.
+    // Resets scratch cursor, then verifies invariant: dirty=false, sci=0.
+    private safeEndInstr() {
+        this.safeRa.resetScratch();
+        this.safeRa.assertClean();
+    }
+
+    // safeLoadArg: load IR value directly into a specific register.
+    // Does NOT use scratch pool — used for CALL/SYSCALL arg setup where
+    // the target register is an ABI arg reg that will be clobbered by the call.
+    private safeLoadArg(val: IRValue, targetReg: Integer) {
+        if (val.kind == IRValueKind.IMM_INT) {
+            this.enc.movRI(targetReg, val.immInt);
+        } else if (val.kind == IRValueKind.REG) {
+            this.safeRa.assertKnown(val.name);
+            this.safeRa.assertWritten(val.name);
+            Integer off = this.safeRa.slotOffsetByName(val.name);
+            this.enc.movRMem(targetReg, X64Reg.RBP, off);
+        } else if (val.kind == IRValueKind.GLOBAL) {
+            this.enc.leaRip(targetReg, val.name);
+        } else {
+            this.enc.xorZero(targetReg);
+        }
+    }
+
     private emitBinop(op: Integer, instr: IRInstr) {
         IRValue a = instr.operands.get(0) as IRValue;
         IRValue b = instr.operands.get(1) as IRValue;
@@ -191,7 +270,83 @@ public class IRToX64 {
         return used;
     }
 
+    // ===== SafeRegAlloc emitFunction (P5) =====
+
+    private emitFunctionSafe(fn: IRFunction) {
+        this.safeRa.allocate(fn);
+        Integer frameSize = this.safeRa.frameSize();
+        this.frame      = frameSize;
+        this.curName    = fn.name;
+        this.savedCount = 0;   // no callee-saved tracking in safe mode
+
+        this.enc.defineLabel(fn.name);
+
+        // _start raw prologue (Linux): capture argc/argv from initial stack
+        if (this.linux && fn.name == "_start") {
+            this.enc.movRMem(X64Reg.RAX, X64Reg.RSP, 0);        // rax = [rsp] = argc
+            this.enc.leaRip(X64Reg.R11, "__arimo_argc");
+            this.enc.movMemR(X64Reg.R11, 0, X64Reg.RAX);         // [__arimo_argc] = argc
+            this.enc.leaMem(X64Reg.R10, X64Reg.RSP, 8);          // r10 = rsp + 8
+            this.enc.leaRip(X64Reg.R11, "__arimo_argv");
+            this.enc.movMemR(X64Reg.R11, 0, X64Reg.R10);         // [__arimo_argv] = argv
+        }
+
+        if (!this.linux && fn.name == "_start") {
+            this.enc.subRI(X64Reg.RSP, 8);
+        }
+
+        // Standard prologue — no callee-saved register saves
+        this.enc.pushR(X64Reg.RBP);
+        this.enc.movRR(X64Reg.RBP, X64Reg.RSP);
+        if (frameSize > 0) {
+            this.enc.subRI(X64Reg.RSP, frameSize);
+        }
+
+        // Save incoming register parameters (0..5 on Linux, 0..3 on Windows)
+        List<Integer> paramArgRegs = this.argRegs();
+        Integer pi = 0;
+        while (pi < fn.params.length() && pi < paramArgRegs.length()) {
+            IRParam param = fn.params.get(pi) as IRParam;
+            Integer argReg = paramArgRegs.get(pi) as Integer;
+            this.safeStoreDst(param.name, argReg);
+            pi = pi + 1;
+        }
+        // Save incoming stack parameters (beyond register count).
+        // Stack args are at [RBP+16], [RBP+24], ... (above return addr and saved RBP).
+        while (pi < fn.params.length()) {
+            IRParam param = fn.params.get(pi) as IRParam;
+            Integer stackOff = 16 + (pi - paramArgRegs.length()) * 8;
+            this.enc.movRMem(X64Reg.RAX, X64Reg.RBP, stackOff);
+            this.safeStoreDst(param.name, X64Reg.RAX);
+            pi = pi + 1;
+        }
+        this.safeRa.markAllParamsWritten(fn);
+
+        // Body: instruction emission loop
+        Integer i = 0;
+        while (i < fn.instrs.length()) {
+            this.safeBeginInstr();
+            this.emitInstrSafe(fn.instrs.get(i) as IRInstr);
+            this.safeEndInstr();
+            i = i + 1;
+        }
+
+        // Epilog — simple: no callee-saved restores
+        this.enc.defineLabel("${fn.name}__epilog");
+        if (frameSize > 0) {
+            this.enc.addRI(X64Reg.RSP, frameSize);
+        }
+        this.enc.popR(X64Reg.RBP);
+        this.enc.ret();
+    }
+
     public emitFunction(fn: IRFunction) {
+        // ===== SafeRegAlloc mode (P5) =====
+        if (this.useSafeRegAlloc) {
+            this.emitFunctionSafe(fn);
+            return;
+        }
+
         this.ra.allocate(fn);
         Integer spillBytes = this.ra.totalSpillBytes() * 8;
 
@@ -213,6 +368,20 @@ public class IRToX64 {
         this.savedCount = N;
 
         this.enc.defineLabel(fn.name);
+
+        // _start raw prologue (Linux): capture argc/argv from initial stack
+        if (this.linux && fn.name == "_start") {
+            // [rsp] = argc, [rsp+8] = argv[0], [rsp+16] = argv[1], ...
+            // Read argc → @__arimo_argc
+            this.enc.movRMem(X64Reg.RAX, X64Reg.RSP, 0);        // rax = [rsp] = argc
+            this.enc.leaRip(X64Reg.R11, "__arimo_argc");
+            this.enc.movMemR(X64Reg.R11, 0, X64Reg.RAX);         // [__arimo_argc] = argc
+            // Read argv ptr → @__arimo_argv
+            this.enc.leaMem(X64Reg.R10, X64Reg.RSP, 8);          // r10 = rsp + 8
+            this.enc.leaRip(X64Reg.R11, "__arimo_argv");
+            this.enc.movMemR(X64Reg.R11, 0, X64Reg.R10);         // [__arimo_argv] = argv
+        }
+
         if (!this.linux && fn.name == "_start") {
             this.enc.subRI(X64Reg.RSP, 8);
         }
@@ -247,6 +416,17 @@ public class IRToX64 {
 
         Integer i = 0;
         while (i < fn.instrs.length()) {
+            // Emit spill saves: store values whose regs were reassigned at this position
+            Integer si = 0;
+            while (si < this.ra.spillPoss.length()) {
+                if (this.ra.spillPoss.get(si) as Integer == i) {
+                    Integer slot  = this.ra.spillSaves.get(si) as Integer;
+                    Integer preg = this.ra.spillRegs.get(si) as Integer;
+                    this.enc.movMemR(X64Reg.RBP, this.spillOff(slot), preg);
+                }
+                si = si + 1;
+            }
+
             IRInstr instr = fn.instrs.get(i) as IRInstr;
             this.emitInstr(instr);
             i = i + 1;
@@ -398,6 +578,11 @@ public class IRToX64 {
         }
 
         if (op == IROpcode.SYSCALL) {
+            // Save caller-saved regs used for syscall args (r8/r9/r10 may hold live IR values)
+            this.enc.pushR(X64Reg.R8);
+            this.enc.pushR(X64Reg.R9);
+            this.enc.pushR(X64Reg.R10);
+
             Integer sysNum = instr.ty;
             List<Integer> scRegs = this.syscallArgRegs();
             Integer sargc = instr.operands.length();
@@ -425,6 +610,11 @@ public class IRToX64 {
             if (!instr.dst.isNone() && instr.dst.kind == IRValueKind.REG) {
                 this.storeDst(instr.dst.name, X64Reg.RAX);
             }
+
+            // Restore caller-saved regs (reverse order)
+            this.enc.popR(X64Reg.R10);
+            this.enc.popR(X64Reg.R9);
+            this.enc.popR(X64Reg.R8);
             return;
         }
 
@@ -480,11 +670,311 @@ public class IRToX64 {
             } else {
                 callTarget = instr.label;
             }
+            // Save caller-saved regs that may hold live IR values (R8/R9 in alloc pool)
+            this.enc.pushR(X64Reg.R8);
+            this.enc.pushR(X64Reg.R9);
             this.enc.callRel(callTarget);
+            this.enc.popR(X64Reg.R9);
+            this.enc.popR(X64Reg.R8);
             if (!instr.dst.isNone() && instr.dst.kind == IRValueKind.REG) {
                 this.storeDst(instr.dst.name, X64Reg.RAX);
             }
             return;
         }
+    }
+
+    // ===== SafeRegAlloc emitInstr (P6-A) =====
+
+    private emitInstrSafe(instr: IRInstr) {
+        Integer op = instr.op;
+
+        // --- Control flow (no register usage) ---
+
+        if (op == IROpcode.LABEL) { this.enc.defineLabel(instr.label); return; }
+        if (op == IROpcode.JMP)   { this.enc.jmp(instr.label); return; }
+        if (op == IROpcode.JE)    { this.enc.je(instr.label);  return; }
+        if (op == IROpcode.JNE)   { this.enc.jne(instr.label); return; }
+        if (op == IROpcode.JG)    { this.enc.jg(instr.label);  return; }
+        if (op == IROpcode.JL)    { this.enc.jl(instr.label);  return; }
+        if (op == IROpcode.JGE)   { this.enc.jge(instr.label); return; }
+        if (op == IROpcode.JLE)   { this.enc.jle(instr.label); return; }
+        if (op == IROpcode.JZ)    { this.enc.jz(instr.label);  return; }
+        if (op == IROpcode.JNZ)   { this.enc.jnz(instr.label); return; }
+
+        // --- RET ---
+
+        if (op == IROpcode.RET) {
+            if (instr.operands.length() > 0) {
+                IRValue rv = instr.operands.get(0) as IRValue;
+                // Load return value directly into RAX (not in scratch pool)
+                if (rv.kind == IRValueKind.IMM_INT) {
+                    this.enc.movRI(X64Reg.RAX, rv.immInt);
+                } else if (rv.kind == IRValueKind.REG) {
+                    this.safeRa.assertKnown(rv.name);
+                    Integer off = this.safeRa.slotOffsetByName(rv.name);
+                    this.enc.movRMem(X64Reg.RAX, X64Reg.RBP, off);
+                } else if (rv.kind == IRValueKind.GLOBAL) {
+                    this.enc.leaRip(X64Reg.RAX, rv.name);
+                } else {
+                    this.enc.xorZero(X64Reg.RAX);
+                }
+            }
+            this.enc.jmp("${this.curName}__epilog");
+            return;
+        }
+
+        // --- MOV ---
+
+        if (op == IROpcode.MOV) {
+            Integer sr = this.safeRa.allocScratch();
+            IRValue src = instr.operands.get(0) as IRValue;
+            sr = this.safeLoadVal(src, sr);
+            this.safeStoreDst(instr.dst.name, sr);
+            return;
+        }
+
+        // --- Integer BINOP: ADD SUB MUL AND OR XOR ---
+
+        if (op == IROpcode.ADD || op == IROpcode.SUB ||
+            op == IROpcode.AND || op == IROpcode.OR  || op == IROpcode.XOR ||
+            op == IROpcode.MUL) {
+            List<Integer> regs = this.safeRa.allocScratch3();
+            IRValue a = instr.operands.get(0) as IRValue;
+            IRValue b = instr.operands.get(1) as IRValue;
+            Integer ra = this.safeLoadVal(a, regs.get(0) as Integer);
+            Integer rb = this.safeLoadVal(b, regs.get(1) as Integer);
+            Integer dr = regs.get(2) as Integer;
+            if (dr != ra) { this.enc.movRR(dr, ra); }
+            if (op == IROpcode.ADD) { this.enc.addRR(dr, rb); }
+            else if (op == IROpcode.SUB) { this.enc.subRR(dr, rb); }
+            else if (op == IROpcode.AND) { this.enc.andRR(dr, rb); }
+            else if (op == IROpcode.OR)  { this.enc.orRR(dr, rb);  }
+            else if (op == IROpcode.XOR) { this.enc.xorRR(dr, rb); }
+            else if (op == IROpcode.MUL) { this.enc.imulRR(dr, rb); }
+            this.safeStoreDst(instr.dst.name, dr);
+            return;
+        }
+
+        // --- DIV / MOD (uses RAX:RDX implicitly, not in scratch pool) ---
+
+        if (op == IROpcode.DIV || op == IROpcode.MOD) {
+            List<Integer> regs = this.safeRa.allocScratch2();
+            IRValue a = instr.operands.get(0) as IRValue;
+            IRValue b = instr.operands.get(1) as IRValue;
+            // Load dividend into a scratch, then move to RAX
+            Integer ra = this.safeLoadVal(a, regs.get(0) as Integer);
+            this.enc.movRR(X64Reg.RAX, ra);
+            this.enc.cqo();
+            // Load divisor into scratch, use as idiv operand
+            Integer rb = this.safeLoadVal(b, regs.get(1) as Integer);
+            this.enc.idivR(rb);
+            if (op == IROpcode.DIV) {
+                this.safeStoreDst(instr.dst.name, X64Reg.RAX);
+            } else {
+                this.safeStoreDst(instr.dst.name, X64Reg.RDX);
+            }
+            return;
+        }
+
+        // --- SHL / SHR (shift amount must be in CL; use RAX as temp) ---
+
+        if (op == IROpcode.SHL || op == IROpcode.SHR) {
+            List<Integer> regs = this.safeRa.allocScratch2();
+            IRValue a = instr.operands.get(0) as IRValue;
+            IRValue b = instr.operands.get(1) as IRValue;
+            // Load value into scratch, then move to RAX (safe temp)
+            Integer ra = this.safeLoadVal(a, regs.get(0) as Integer);
+            this.enc.movRR(X64Reg.RAX, ra);
+            // Load shift amount, move to CL (RCX)
+            Integer rb = this.safeLoadVal(b, regs.get(1) as Integer);
+            if (rb != X64Reg.RCX) { this.enc.movRR(X64Reg.RCX, rb); }
+            if (op == IROpcode.SHL) { this.enc.shlRCL(X64Reg.RAX); }
+            else                    { this.enc.shrRCL(X64Reg.RAX); }
+            this.safeStoreDst(instr.dst.name, X64Reg.RAX);
+            return;
+        }
+
+        // --- NEG ---
+
+        if (op == IROpcode.NEG) {
+            Integer sr = this.safeRa.allocScratch();
+            IRValue src = instr.operands.get(0) as IRValue;
+            sr = this.safeLoadVal(src, sr);
+            this.enc.negR(sr);
+            this.safeStoreDst(instr.dst.name, sr);
+            return;
+        }
+
+        // --- NOT ---
+
+        if (op == IROpcode.NOT) {
+            Integer sr = this.safeRa.allocScratch();
+            IRValue src = instr.operands.get(0) as IRValue;
+            sr = this.safeLoadVal(src, sr);
+            this.enc.notR(sr);
+            this.safeStoreDst(instr.dst.name, sr);
+            return;
+        }
+
+        // --- CMP ---
+
+        if (op == IROpcode.CMP) {
+            List<Integer> regs = this.safeRa.allocScratch2();
+            IRValue a = instr.operands.get(0) as IRValue;
+            IRValue b = instr.operands.get(1) as IRValue;
+            Integer ra = this.safeLoadVal(a, regs.get(0) as Integer);
+            Integer rb = this.safeLoadVal(b, regs.get(1) as Integer);
+            this.enc.cmpRR(ra, rb);
+            // CMP has no dst — flags are set, consumed by following branch
+            return;
+        }
+
+        // --- ALLOC (stack allocation pointer) ---
+
+        if (op == IROpcode.ALLOC) {
+            Integer sr = this.safeRa.allocScratch();
+            this.enc.leaMem(sr, X64Reg.RSP, 0);
+            this.safeStoreDst(instr.dst.name, sr);
+            return;
+        }
+
+        // --- LOAD (memory read) ---
+
+        if (op == IROpcode.LOAD) {
+            List<Integer> regs = this.safeRa.allocScratch2();
+            IRValue ptr = instr.operands.get(0) as IRValue;
+            Integer pr  = this.safeLoadVal(ptr, regs.get(0) as Integer);
+            Integer dr  = regs.get(1) as Integer;
+            if (instr.ty == IRType.I8) {
+                this.enc.movzxByteMem(dr, pr);
+            } else {
+                this.enc.movRMemBase(dr, pr);
+            }
+            this.safeStoreDst(instr.dst.name, dr);
+            return;
+        }
+
+        // --- STORE (memory write) ---
+
+        if (op == IROpcode.STORE) {
+            List<Integer> regs = this.safeRa.allocScratch2();
+            IRValue val = instr.operands.get(0) as IRValue;
+            IRValue ptr = instr.operands.get(1) as IRValue;
+            Integer vr  = this.safeLoadVal(val, regs.get(0) as Integer);
+            Integer pr  = this.safeLoadVal(ptr, regs.get(1) as Integer);
+            if (instr.ty == IRType.I8) {
+                this.enc.movByteMemR(pr, vr);
+            } else {
+                this.enc.movMemBaseR(pr, vr);
+            }
+            // STORE has no dst — value written to memory
+            return;
+        }
+
+        // --- Type conversions: ITOP PTOI ZEXT SEXT TRUNC ---
+
+        if (op == IROpcode.ITOP || op == IROpcode.PTOI ||
+            op == IROpcode.ZEXT || op == IROpcode.SEXT || op == IROpcode.TRUNC) {
+            Integer sr = this.safeRa.allocScratch();
+            IRValue src = instr.operands.get(0) as IRValue;
+            sr = this.safeLoadVal(src, sr);
+            this.safeStoreDst(instr.dst.name, sr);
+            return;
+        }
+
+        // --- SYSCALL ---
+
+        if (op == IROpcode.SYSCALL) {
+            Integer sysNum = instr.ty;
+            List<Integer> scRegs = this.syscallArgRegs();
+            Integer sargc = instr.operands.length();
+            Integer si = 0;
+            while (si < sargc && si < scRegs.length()) {
+                IRValue sarg = instr.operands.get(si) as IRValue;
+                Integer sreg = scRegs.get(si) as Integer;
+                this.safeLoadArg(sarg, sreg);
+                si = si + 1;
+            }
+            if (sargc > scRegs.length()) {
+                this.enc.hasError = true;
+                IO.println("arc: [FAIL] SafeRegAlloc: SYSCALL too many args (${sargc}) in fn ${this.curName}");
+            }
+            this.enc.movRI(X64Reg.RAX, sysNum);
+            this.enc.syscall();
+            if (!instr.dst.isNone() && instr.dst.kind == IRValueKind.REG) {
+                this.safeStoreDst(instr.dst.name, X64Reg.RAX);
+            }
+            return;
+        }
+
+        // --- CALL ---
+
+        if (op == IROpcode.CALL) {
+            List<Integer> argRegsLocal = this.argRegs();
+            Integer argc = instr.operands.length();
+            Integer ai = 0;
+            while (ai < argc && ai < argRegsLocal.length()) {
+                IRValue arg = instr.operands.get(ai) as IRValue;
+                Integer areg = argRegsLocal.get(ai) as Integer;
+                this.safeLoadArg(arg, areg);
+                ai = ai + 1;
+            }
+            // Stack args (>reg count): write to [RSP+off] and align RSP to 16 before CALL.
+            // Linux ABI: args 7+ at [RSP+0],[RSP+8],... before call (→ [RSP+8],[RSP+16],... after).
+            Integer stackArgStart = argRegsLocal.length();
+            Integer stackArgCount = argc - stackArgStart;
+            Integer stackBytes    = 0;
+            Integer padBytes      = 0;
+            if (stackArgCount > 0) {
+                stackBytes = stackArgCount * 8;
+                if (stackBytes % 16 != 0) { padBytes = 8; }
+                Integer totalSub = stackBytes + padBytes;
+                if (totalSub > 0) { this.enc.subRI(X64Reg.RSP, totalSub); }
+                Integer si = 0;
+                while (si < stackArgCount) {
+                    IRValue sarg = instr.operands.get(stackArgStart + si) as IRValue;
+                    Integer soff = si * 8;
+                    if (sarg.kind == IRValueKind.IMM_INT) {
+                        this.enc.movRI(X64Reg.RAX, sarg.immInt);
+                        this.enc.movMemR(X64Reg.RSP, soff, X64Reg.RAX);
+                    } else if (sarg.kind == IRValueKind.REG) {
+                        this.safeRa.assertKnown(sarg.name);
+                        Integer slOff = this.safeRa.slotOffsetByName(sarg.name);
+                        this.enc.movRMem(X64Reg.RAX, X64Reg.RBP, slOff);
+                        this.enc.movMemR(X64Reg.RSP, soff, X64Reg.RAX);
+                    } else if (sarg.kind == IRValueKind.GLOBAL) {
+                        this.enc.leaRip(X64Reg.RAX, sarg.name);
+                        this.enc.movMemR(X64Reg.RSP, soff, X64Reg.RAX);
+                    }
+                    si = si + 1;
+                }
+            }
+            String callTarget = "";
+            if (instr.label.startsWith("__ext__")) {
+                String extName = instr.label.substring(7, instr.label.length());
+                if (this.linux) {
+                    callTarget = extName;
+                } else {
+                    callTarget = "${extName}__thunk";
+                }
+            } else {
+                callTarget = instr.label;
+            }
+            // In safe mode, no live IR values in registers — no R8/R9 push/pop needed
+            this.enc.callRel(callTarget);
+            // Clean up stack args after call
+            if (stackBytes + padBytes > 0) {
+                this.enc.addRI(X64Reg.RSP, stackBytes + padBytes);
+            }
+            if (!instr.dst.isNone() && instr.dst.kind == IRValueKind.REG) {
+                this.safeStoreDst(instr.dst.name, X64Reg.RAX);
+            }
+            return;
+        }
+
+        // --- Unsupported opcode in safe mode ---
+
+        this.enc.hasError = true;
+        IO.println("arc: [FAIL] SafeRegAlloc: unsupported opcode ${IROpcode.name(op)} (${op}) in fn ${this.curName}");
     }
 }
