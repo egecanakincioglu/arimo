@@ -83,7 +83,7 @@ public class Parser {
 
     private advance() : Token {
         Token t = this.peek();
-        if (this.pos < this.tokens.length()) { this.pos++; }
+        if (this.pos < this.tokens.length()) { this.pos = this.pos + 1; }
         return t;
     }
 
@@ -447,9 +447,9 @@ public class Parser {
         Boolean ok = false;
         while (depth > 0 && !this.check(TokenKind.EOF)) {
             Integer k = this.peek().kind;
-            if (k == TokenKind.LPAREN)  { depth++; this.advance(); }
+            if (k == TokenKind.LPAREN)  { depth = depth + 1; this.advance(); }
             else if (k == TokenKind.RPAREN) {
-                depth--;
+                depth = depth - 1;
                 this.advance();
                 if (depth == 0) {
                     if (this.check(TokenKind.ARROW)) { ok = true; }
@@ -1396,7 +1396,7 @@ public class Parser {
             if (an == "Sealed")       { isSealed    = true; }
             if (an == "Immutable")    { isImmutable = true; }
             if (an == "Packed")       { isPacked    = true; }
-            ai++;
+            ai = ai + 1;
         }
 
         Integer vis      = Visibility.PUBLIC;

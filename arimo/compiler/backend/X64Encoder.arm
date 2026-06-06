@@ -45,6 +45,7 @@ public class X64Encoder {
     public  jmpFixLbls  : List<String>;
     public  ripFixOffs  : List<Integer>;
     public  ripFixLbls  : List<String>;
+    public  hasError    : Boolean;
 
     public constructor() {
         this.buf        = List();
@@ -54,6 +55,7 @@ public class X64Encoder {
         this.jmpFixLbls = List();
         this.ripFixOffs = List();
         this.ripFixLbls = List();
+        this.hasError   = false;
     }
 
     public size() : Integer {
@@ -143,6 +145,12 @@ public class X64Encoder {
             Integer off   = this.jmpFixOffs.get(i) as Integer;
             String  lbl   = this.jmpFixLbls.get(i) as String;
             Integer target = this.labelOffset(lbl);
+            if (target < 0) {
+                IO.println("arc: [FAIL] unresolved label: ${lbl} — fixup at buffer offset ${off}");
+                this.hasError = true;
+                i = i + 1;
+                continue;
+            }
             Integer rel32  = target - (off + 4);
             this.buf.set(off,     rel32         & 0xFF);
             this.buf.set(off + 1, (rel32 >> 8)  & 0xFF);

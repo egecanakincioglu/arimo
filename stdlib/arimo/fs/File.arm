@@ -18,7 +18,6 @@ public class File {
     public static exists(path: String) : Boolean {
         RawPtr<Void> f = fopen(path, "r");
         if (f == null) { return false; }
-        fclose(f);
         return true;
     }
 

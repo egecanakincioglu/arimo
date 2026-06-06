@@ -27,18 +27,20 @@ import arimo.compiler.backend.IRValue;
 import arimo.compiler.backend.IRValueKind;
 
 public class LiveInterval {
-    public name  : String;
-    public start : Integer;
-    public end   : Integer;
-    public reg   : Integer;
-    public spill : Integer;
+    public name        : String;
+    public start       : Integer;
+    public end         : Integer;
+    public reg         : Integer;
+    public spill       : Integer;
+    public spilledFrom : Integer;
 
     public constructor(name: String, start: Integer) {
-        this.name  = name;
-        this.start = start;
-        this.end   = start;
-        this.reg   = -1;
-        this.spill = -1;
+        this.name        = name;
+        this.start       = start;
+        this.end         = start;
+        this.reg         = -1;
+        this.spill       = -1;
+        this.spilledFrom = -1;
     }
 
     public isSpilled() : Boolean { return this.spill >= 0; }
@@ -50,12 +52,18 @@ public class RegAlloc {
     private freePool   : List<Integer>;
     private active     : List<Integer>;
     private spillCount : Integer;
+    public  spillSaves : List<Integer>;  // spill slot index
+    public  spillRegs  : List<Integer>;  // physical reg holding value
+    public  spillPoss  : List<Integer>;  // instruction position where spill occurred
 
     public constructor() {
         this.ivals      = List();
         this.freePool   = List();
         this.active     = List();
         this.spillCount = 0;
+        this.spillSaves = List();
+        this.spillRegs  = List();
+        this.spillPoss  = List();
     }
 
     public totalSpillBytes() : Integer { return this.spillCount * 8; }
@@ -268,6 +276,11 @@ public class RegAlloc {
                     Integer candIdx = this.active.get(spillPos) as Integer;
                     LiveInterval cand = this.ivals.get(candIdx) as LiveInterval;
                     if (cand.end > iv.end) {
+                        cand.spilledFrom = cand.reg;
+                        // Record spill: save cand.reg to spill slot at iv.start
+                        this.spillSaves.append(cand.spill);
+                        this.spillRegs.append(cand.reg);
+                        this.spillPoss.append(iv.start);
                         iv.reg      = cand.reg;
                         cand.reg    = -1;
                         cand.spill  = this.allocSpill();
