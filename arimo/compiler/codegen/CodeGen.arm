@@ -95,13 +95,13 @@ public class CodeGen {
 
     private nextReg() : String {
         Integer n = this.counter;
-        this.counter++;
+        this.counter = counter + 1;
         return "%t${n}";
     }
 
     private nextLabel() : String {
         Integer n = this.labelCnt;
-        this.labelCnt++;
+        this.labelCnt = labelCnt + 1;
         return "L${n}";
     }
 
@@ -185,14 +185,14 @@ public class CodeGen {
             else if (c == "\"") { r = r.concat("\\22"); }
             else if (c == "\\") { r = r.concat("\\5C"); }
             else                { r = r.concat(c); }
-            i++;
+            i = i + 1;
         }
         return r;
     }
 
     private emitStrConst(s: String) : String {
         Integer idx = this.strIdx;
-        this.strIdx++;
+        this.strIdx = strIdx + 1;
         Integer len = s.length() + 1;
         String esc  = this.escapeStr(s);
         String prefix = "@.str.${idx} = private constant [${len} x i8] c\"";
@@ -230,7 +230,7 @@ public class CodeGen {
 
     private defineVar(name: String, llt: String) : String {
         Integer n = this.counter;
-        this.counter++;
+        this.counter = counter + 1;
         String reg = "%v${n}";
         this.emit("${reg} = alloca ${llt}");
         this.varNames.append(name);
@@ -242,7 +242,7 @@ public class CodeGen {
 
     private defineVarWithElem(name: String, llt: String, elemCls: String) : String {
         Integer n = this.counter;
-        this.counter++;
+        this.counter = counter + 1;
         String reg = "%v${n}";
         this.emit("${reg} = alloca ${llt}");
         this.varNames.append(name);
@@ -256,7 +256,7 @@ public class CodeGen {
         Integer i = this.varNames.length() - 1;
         while (i >= 0) {
             if (this.varNames.get(i) == name) { return this.varElemClass.get(i); }
-            i--;
+            i = i - 1;
         }
         return "";
     }
@@ -265,7 +265,7 @@ public class CodeGen {
         Integer i = this.varNames.length() - 1;
         while (i >= 0) {
             if (this.varNames.get(i) == name) { return this.varRegs.get(i); }
-            i--;
+            i = i - 1;
         }
         return "";
     }
@@ -274,7 +274,7 @@ public class CodeGen {
         Integer i = this.varNames.length() - 1;
         while (i >= 0) {
             if (this.varNames.get(i) == name) { return this.varLLTys.get(i); }
-            i--;
+            i = i - 1;
         }
         return "i8*";
     }
@@ -287,7 +287,7 @@ public class CodeGen {
         while (i < allLen) {
             FieldDecl fd = all.get(i) as FieldDecl;
             if (!fd.isStatic) { res.append(fd); }
-            i++;
+            i = i + 1;
         }
         return res;
     }
@@ -304,7 +304,7 @@ public class CodeGen {
         while (i < fs.length()) {
             FieldDecl fd = fs.get(i) as FieldDecl;
             if (fd.name == fieldName) { return i + 1; }
-            i++;
+            i = i + 1;
         }
         return -1;
     }
@@ -315,7 +315,7 @@ public class CodeGen {
         while (i < fs.length()) {
             FieldDecl fd = fs.get(i) as FieldDecl;
             if (fd.name == fieldName) { return this.llvmTy(fd.ty); }
-            i++;
+            i = i + 1;
         }
         return "i8*";
     }
@@ -424,7 +424,7 @@ public class CodeGen {
             Boolean found = false;
             while (ci < this.tc.constNames.length()) {
                 if (this.tc.constNames.get(ci) == name) { found = true; }
-                if (!found) { ci++; }
+                if (!found) { ci = ci + 1; }
                 if (found) { ci = this.tc.constNames.length(); }
             }
             if (found) {
@@ -460,7 +460,7 @@ public class CodeGen {
                     if (sf.isStatic && sf.name == e.field && sf.init != null) {
                         return this.emitExpr(sf.init);
                     }
-                    sfi++;
+                    sfi = sfi + 1;
                 }
             }
             return "0";
@@ -522,7 +522,7 @@ public class CodeGen {
                                         fi = fds.length();
                                     }
                                 }
-                                fi++;
+                                fi = fi + 1;
                             }
                         }
                     }
@@ -672,7 +672,7 @@ public class CodeGen {
                 String at2 = this.inferExprLLTy(e.args.get(si));
                 if (argStr2.length() > 0) { argStr2 = argStr2.concat(", "); }
                 argStr2 = argStr2.concat("${at2} ${av2}");
-                si++;
+                si = si + 1;
             }
             if (retLLTy == "void") {
                 this.emit("call void @${n}__${e.method}(${argStr2})");
@@ -701,7 +701,7 @@ public class CodeGen {
             String av = this.emitExpr(args.get(i));
             String at = this.inferExprLLTy(args.get(i));
             argStr = argStr.concat(", ${at} ${av}");
-            i++;
+            i = i + 1;
         }
         if (retLLTy == "void") {
             this.emit("call void @${cls}__${method}(${argStr})");
@@ -729,7 +729,7 @@ public class CodeGen {
             String at = this.inferExprLLTy(e.args.get(i));
             if (argStr.length() > 0) { argStr = argStr.concat(", "); }
             argStr = argStr.concat("${at} ${av}");
-            i++;
+            i = i + 1;
         }
         if (retLLTy == "void") {
             this.emit("call void @${cls}__${method}(${argStr})");
@@ -759,7 +759,7 @@ public class CodeGen {
                     String at = this.inferExprLLTy(e.args.get(ei));
                     if (eArgStr.length() > 0) { eArgStr = eArgStr.concat(", "); }
                     eArgStr = eArgStr.concat("${at} ${av}");
-                    ei++;
+                    ei = ei + 1;
                 }
                 if (retLLTy == "void") {
                     this.emit("call void @${cls}(${eArgStr})");
@@ -777,7 +777,7 @@ public class CodeGen {
             String at = this.inferExprLLTy(e.args.get(i));
             if (argStr.length() > 0) { argStr = argStr.concat(", "); }
             argStr = argStr.concat("${at} ${av}");
-            i++;
+            i = i + 1;
         }
         String r = this.nextReg();
         this.emit("${r} = call %${cls}* @${cls}__new(${argStr})");
@@ -840,7 +840,7 @@ public class CodeGen {
                 while (fsi < fsf.length()) {
                     FieldDecl fd = fsf.get(fsi) as FieldDecl;
                     if (fd.isStatic && fd.name == e.field) { return this.llvmTy(fd.ty); }
-                    fsi++;
+                    fsi = fsi + 1;
                 }
             }
             return "i64";
@@ -1164,7 +1164,7 @@ public class CodeGen {
             this.emit("store i8* ${bc}, i8** ${resReg}");
             this.emitBr(endL);
             this.emitLabel(nextL);
-            i++;
+            i = i + 1;
         }
         this.emitBr(endL);
         this.emitLabel(endL);
@@ -1206,7 +1206,7 @@ public class CodeGen {
                 this.emit("${r} = call i8* @__arimo_str_concat(i8* ${acc}, i8* ${pv})");
                 acc = r;
             }
-            i++;
+            i = i + 1;
         }
         return acc;
     }
@@ -1584,7 +1584,7 @@ public class CodeGen {
                     this.emitBr(endL);
                     falseL = eiNext;
                     if (eiNext != endL) { this.emitLabel(eiNext); }
-                    ei++;
+                    ei = ei + 1;
                 }
                 if (hasElse) {
                     this.pushScope();
@@ -1720,7 +1720,7 @@ public class CodeGen {
                 this.popScope();
                 this.emitBr(endL);
                 if (nextL != endL) { this.emitLabel(nextL); }
-                i++;
+                i = i + 1;
             }
             this.emitLabel(endL);
             Integer last = this.loopExits.length() - 1;
@@ -1741,7 +1741,7 @@ public class CodeGen {
                     if (llt != "void") { this.emit("store ${llt} null, ${llt}* ${reg}"); }
                     this.emitStmts(cc.body);
                     this.popScope();
-                    i++;
+                    i = i + 1;
                 }
             }
             if (s.finallyBody.length() > 0) {
@@ -1785,7 +1785,7 @@ public class CodeGen {
         Integer i = 0;
         while (i < stmts.length()) {
             this.emitStmt(stmts.get(i));
-            i++;
+            i = i + 1;
         }
         }
     }
@@ -1805,7 +1805,7 @@ public class CodeGen {
             String pt = this.llvmTy(p.ty);
             if (paramStr.length() > 0) { paramStr = paramStr.concat(", "); }
             paramStr = paramStr.concat("${pt} %p.${p.name}");
-            i++;
+            i = i + 1;
         }
         String sig = "define %${c.name}* @${c.name}__new(${paramStr})";
         this.curFn      = "";
@@ -1836,7 +1836,7 @@ public class CodeGen {
             String pt  = this.llvmTy(p.ty);
             String reg = this.defineVar(p.name, pt);
             this.emit("store ${pt} %p.${p.name}, ${pt}* ${reg}");
-            j++;
+            j = j + 1;
         }
         this.emitStmts(ctor.body);
         this.emit("ret %${c.name}* ${self}");
@@ -1852,7 +1852,7 @@ public class CodeGen {
             String pt = this.llvmTy(p.ty);
             if (paramStr.length() > 0) { paramStr = paramStr.concat(", "); }
             paramStr = paramStr.concat("${pt} %p.${p.name}");
-            pi++;
+            pi = pi + 1;
         }
         String sig = "define %${ed.name}* @${ed.name}__new(${paramStr})";
         this.curFn = ""; this.selfType = ed.name; this.retTyStr = "%${ed.name}*";
@@ -1874,7 +1874,7 @@ public class CodeGen {
             String pt = this.llvmTy(p.ty);
             String reg = this.defineVar(p.name, pt);
             this.emit("store ${pt} %p.${p.name}, ${pt}* ${reg}");
-            pi2++;
+            pi2 = pi2 + 1;
         }
         this.emitStmts(ctor.body);
         this.emit("ret %${ed.name}* ${self}");
@@ -1891,7 +1891,7 @@ public class CodeGen {
             String pt = this.llvmTy(p.ty);
             if (paramStr.length() > 0) { paramStr = paramStr.concat(", "); }
             paramStr = paramStr.concat("${pt} %p.${p.name}");
-            i++;
+            i = i + 1;
         }
         String retTy = "void";
         if (m.returnTy != null) { retTy = this.llvmTy(m.returnTy); }
@@ -1912,7 +1912,7 @@ public class CodeGen {
             String pt = this.llvmTy(p.ty);
             String reg = this.defineVar(p.name, pt);
             this.emit("store ${pt} %p.${p.name}, ${pt}* ${reg}");
-            j++;
+            j = j + 1;
         }
         this.emitStmts(m.body);
         if (retTy == "void") { this.emit("ret void"); }
@@ -1935,7 +1935,7 @@ public class CodeGen {
             while (i < fields.length()) {
                 FieldDecl fd = fields.get(i) as FieldDecl;
                 fieldTypes = fieldTypes.concat(", ").concat(this.llvmTy(fd.ty));
-                i++;
+                i = i + 1;
             }
             this.addHeader("%${cn.name} = type { ${fieldTypes} }");
             Integer fi = 0;
@@ -1950,7 +1950,7 @@ public class CodeGen {
                     }
                     this.addHeader("@${cn.name}__${f.name} = global ${llt} ${init}");
                 }
-                fi++;
+                fi = fi + 1;
             }
         }
     }
@@ -1963,7 +1963,7 @@ public class CodeGen {
             while (i < en.variants.length()) {
                 EnumVariant ev = en.variants.get(i) as EnumVariant;
                 this.addHeader("@${en.name}__${ev.name} = constant i64 ${i}");
-                i++;
+                i = i + 1;
             }
         }
     }
@@ -2053,13 +2053,13 @@ public class CodeGen {
                     String pt = this.llvmTy(p.ty);
                     if (paramStr.length() > 0) { paramStr = paramStr.concat(", "); }
                     paramStr = paramStr.concat(pt);
-                    j++;
+                    j = j + 1;
                 }
                 if (fn.isVariadic) { paramStr = paramStr.concat(", ..."); }
                 String retTy = "void";
                 if (fn.returnTy != null) { retTy = this.llvmTy(fn.returnTy); }
                 this.addHeader("declare ${retTy} @${fn.name}(${paramStr})");
-                i++;
+                i = i + 1;
             }
         }
     }
@@ -2080,7 +2080,7 @@ public class CodeGen {
                     while (fi < fields.length()) {
                         FieldDecl sfd = fields.get(fi) as FieldDecl;
                         fts = fts.concat(", ").concat(this.llvmTy(sfd.ty));
-                        fi++;
+                        fi = fi + 1;
                     }
                     this.addHeader("%${sdn.name} = type { ${fts} }");
                 }
@@ -2095,7 +2095,7 @@ public class CodeGen {
                     while (fi < efields.length()) {
                         FieldDecl efd = efields.get(fi) as FieldDecl;
                         fts = fts.concat(", ").concat(this.llvmTy(efd.ty));
-                        fi++;
+                        fi = fi + 1;
                     }
                     this.addHeader("%${edn.name} = type { ${fts} }");
                 }
@@ -2121,7 +2121,7 @@ public class CodeGen {
                     this.addHeader("@${cnam} = private constant i64 ${cex.intVal}");
                 }
             }
-            i++;
+            i = i + 1;
         }
     }
 
@@ -2130,7 +2130,7 @@ public class CodeGen {
         Integer mi = 0;
         while (mi < c.methods.length()) {
             this.emitMethod(c.name, c.methods.get(mi));
-            mi++;
+            mi = mi + 1;
         }
         if (c.ctor == null) {
             Integer sz = this.structByteSize(c.name);
@@ -2158,7 +2158,7 @@ public class CodeGen {
             Integer mi2 = 0;
             while (mi2 < c.methods.length()) {
                 if (c.methods.get(mi2).name == "main" && c.methods.get(mi2).isStatic) { hasMain = 1; }
-                mi2++;
+                mi2 = mi2 + 1;
             }
             if (hasMain == 1) { this.entryClass = c.name; }
         }
@@ -2179,7 +2179,7 @@ public class CodeGen {
                     Integer mi = 0;
                     while (mi < ed.methods.length()) {
                         this.emitMethod(ed.name, ed.methods.get(mi));
-                        mi++;
+                        mi = mi + 1;
                     }
                 }
             }
@@ -2189,11 +2189,11 @@ public class CodeGen {
                     Integer mi = 0;
                     while (mi < ext.methods.length()) {
                         this.emitMethod(ext.target, ext.methods.get(mi));
-                        mi++;
+                        mi = mi + 1;
                     }
                 }
             }
-            j++;
+            j = j + 1;
         }
     }
 
@@ -2217,13 +2217,13 @@ public class CodeGen {
         Integer m = 0;
         while (m < modules.length()) {
             this.emitTypeDecls(modules.get(m));
-            m++;
+            m = m + 1;
         }
         this.addHeader("");
         Integer m2 = 0;
         while (m2 < modules.length()) {
             this.emitFunctionBodies(modules.get(m2));
-            m2++;
+            m2 = m2 + 1;
         }
         this.emitMainBridge();
         return this.header.concat(this.strConsts).concat(this.rtFuncs).concat(this.body);
@@ -2241,7 +2241,7 @@ public class CodeGen {
                 if (it2.kind == ItemKind.CLASS && it2.classDecl != null) {
                     if (it2.classDecl.name == cname) { inMod = true; }
                 }
-                mi2++;
+                mi2 = mi2 + 1;
             }
             if (!inMod) {
                 List<FieldDecl> cfields = this.nonStaticFields(cname);
@@ -2250,11 +2250,11 @@ public class CodeGen {
                 while (cfi < cfields.length()) {
                     FieldDecl cfd = cfields.get(cfi) as FieldDecl;
                     cfts = cfts.concat(", ").concat(this.llvmTy(cfd.ty));
-                    cfi++;
+                    cfi = cfi + 1;
                 }
                 this.addHeader("%${cname} = type { ${cfts} }");
             }
-            ci++;
+            ci = ci + 1;
         }
         this.emitRuntimeFunctions();
         this.emitTypeDecls(module);

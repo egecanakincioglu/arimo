@@ -27,19 +27,28 @@ extern "C" {
 }
 
 public class ELFWriter {
-    private enc      : X64Encoder;
-    private strNames : List<String>;
-    private strConts : List<String>;
+    private enc       : X64Encoder;
+    private strNames  : List<String>;
+    private strConts  : List<String>;
+    private bssLabels : List<String>;
+    private bssSizes  : List<Integer>;
 
     public constructor(enc: X64Encoder) {
-        this.enc      = enc;
-        this.strNames = List();
-        this.strConts = List();
+        this.enc       = enc;
+        this.strNames  = List();
+        this.strConts  = List();
+        this.bssLabels = List();
+        this.bssSizes  = List();
     }
 
     public addString(name: String, content: String) {
         this.strNames.append(name);
         this.strConts.append(content);
+    }
+
+    public addBss(name: String, size: Integer) {
+        this.bssLabels.append(name);
+        this.bssSizes.append(size);
     }
 
     private alignTo(v: Integer, a: Integer) : Integer {
@@ -114,8 +123,23 @@ public class ELFWriter {
             strCursor = strCursor + c.length() + 1;
             si = si + 1;
         }
-        Integer dataSize = strCursor;
-        if (dataSize == 0) { dataSize = 8; }
+        // Align data cursor to 8 bytes for BSS globals
+        Integer dataCursor = strCursor;
+        if (dataCursor == 0) { dataCursor = 8; }
+        Integer dataAligned = this.alignTo(dataCursor, 8);
+
+        // Precompute BSS offsets (relative to start of .data segment)
+        List<Integer> bssOffsets = List();
+        Integer bssCursor = dataAligned - strCursor;  // offset from string end
+        Integer bi = 0;
+        while (bi < this.bssLabels.length()) {
+            bssOffsets.append(dataAligned + bi * 8);  // each BSS slot 8-byte aligned
+            bi = bi + 1;
+        }
+        Integer bssTotal = this.bssLabels.length() * 8;
+        Integer dataFileSize = dataAligned;      // what goes in the file
+        Integer dataMemSize  = dataAligned + bssTotal;  // virtual size includes BSS
+        if (dataMemSize == 0) { dataFileSize = 8; dataMemSize = 8; }
 
         Integer textPadded   = this.alignTo(codeSize, pageSize);
         Integer dataFileOff  = textFileOff + textPadded;
@@ -125,7 +149,7 @@ public class ELFWriter {
         // Apply intra-.text jump fixups
         this.enc.applyFixups();
 
-        // Apply RIP fixups (string references: LEA [rip+str_label])
+        // Apply RIP fixups (string references and BSS globals: LEA [rip+label])
         Integer ripN   = this.enc.ripFixOffs.length();
         Integer bufLen = this.enc.buf.length();
         Integer ri = 0;
@@ -133,19 +157,29 @@ public class ELFWriter {
             Integer ripOff = this.enc.ripFixOffs.get(ri) as Integer;
             String  ripLbl = this.enc.ripFixLbls.get(ri) as String;
             ri = ri + 1;
-            Integer strOff = -1;
+            Integer tgtOff = -1;
+            // Search string labels
             Integer sj = 0;
             while (sj < S) {
                 String nm = this.strNames.get(sj) as String;
-                if (nm == ripLbl) { strOff = strOffsets.get(sj) as Integer; }
+                if (nm == ripLbl) { tgtOff = strOffsets.get(sj) as Integer; }
                 sj = sj + 1;
             }
-            if (strOff < 0) {
+            // Search BSS labels
+            if (tgtOff < 0) {
+                Integer bk = 0;
+                while (bk < this.bssLabels.length()) {
+                    String bnm = this.bssLabels.get(bk) as String;
+                    if (bnm == ripLbl) { tgtOff = bssOffsets.get(bk) as Integer; }
+                    bk = bk + 1;
+                }
+            }
+            if (tgtOff < 0) {
                 IO.println("arc: [warn] ELF: missing label ${ripLbl}");
             } else if (ripOff + 3 >= bufLen) {
                 IO.println("arc: [warn] ELF: bounds ripOff=${ripOff} bufLen=${bufLen}");
             } else {
-                Integer targetVA = dataVA + strOff;
+                Integer targetVA = dataVA + tgtOff;
                 Integer ripRVA   = textVA + ripOff + 4;
                 Integer rel32    = targetVA - ripRVA;
                 List<Integer> buf = this.enc.buf;
@@ -197,8 +231,8 @@ public class ELFWriter {
         this.w64(file, dataFileOff);    // p_offset
         this.w64(file, dataVA);         // p_vaddr
         this.w64(file, dataVA);         // p_paddr
-        this.w64(file, dataSize);       // p_filesz
-        this.w64(file, dataSize);       // p_memsz
+        this.w64(file, dataFileSize);   // p_filesz (string data, no BSS in file)
+        this.w64(file, dataMemSize);    // p_memsz  (includes BSS — kernel zero-fills)
         this.w64(file, pageSize);       // p_align
 
         // Pad headers to textFileOff (0x1000)
@@ -220,7 +254,11 @@ public class ELFWriter {
             this.wStr(file, cs);
             sq = sq + 1;
         }
-        if (S == 0) { this.wPad(file, 8); }
+        // Pad to alignment boundary (8-byte for BSS globals)
+        if (dataAligned > strCursor) {
+            this.wPad(file, dataAligned - strCursor);
+        }
+        if (dataFileSize <= 8 && S == 0) { this.wPad(file, 8); }
 
         return file;
     }

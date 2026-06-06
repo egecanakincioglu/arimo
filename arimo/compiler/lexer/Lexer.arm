@@ -34,10 +34,6 @@ public class Lexer {
         this.len    = source.length();
         this.line   = 1;
         this.col    = 1;
-        // Strip UTF-8 BOM (0xEF 0xBB 0xBF = 239 187 191)
-        if (this.len >= 3 && source.charCodeAt(0) == 239 && source.charCodeAt(1) == 187 && source.charCodeAt(2) == 191) {
-            this.pos = 3;
-        }
     }
 
 
@@ -55,9 +51,9 @@ public class Lexer {
     private advance() : String {
         if (this.pos >= this.len) { return ""; }
         String ch = this.source.substring(this.pos, this.pos + 1);
-        this.pos++;
-        if (ch == "\n") { this.line++; this.col = 1; }
-        else            { this.col++; }
+        this.pos = this.pos + 1;
+        if (ch == "\n") { this.line = this.line + 1; this.col = 1; }
+        else            { this.col = this.col + 1; }
         return ch;
     }
 
@@ -133,7 +129,7 @@ public class Lexer {
         Integer i = 0;
         while (i < s.length()) {
             result = result * 16 + this.hexCharVal(s.substring(i, i + 1));
-            i++;
+            i = i + 1;
         }
         return result;
     }
@@ -144,7 +140,7 @@ public class Lexer {
         while (i < s.length()) {
             result = result * 2;
             if (s.substring(i, i + 1) == "1") { result = result + 1; }
-            i++;
+            i = i + 1;
         }
         return result;
     }
@@ -374,11 +370,11 @@ public class Lexer {
                 this.advance();
                 this.readString(tokens);
             } else if (ch == "{") {
-                depth++;
+                depth = depth + 1;
                 this.advance();
                 tokens.append(Token.ofSimple(TokenKind.LBRACE, sl, sc));
             } else if (ch == "}") {
-                depth--;
+                depth = depth - 1;
                 this.advance();
                 if (depth == 0) {
                     done = true;

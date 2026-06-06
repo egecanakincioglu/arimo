@@ -134,7 +134,7 @@ public class TypeChecker {
                     ExternFnDecl fn = ext.decls.get(j);
                     this.externFnNames.append(fn.name);
                     this.externFns.append(fn);
-                    j++;
+                    j = j + 1;
                 }
             } else if (item.kind == ItemKind.ALIAS) {
                 this.aliasNames.append(item.aliasDecl.name);
@@ -149,7 +149,7 @@ public class TypeChecker {
                 this.constNames.append(item.constName);
                 this.constTypes.append(item.constType);
             }
-            i++;
+            i = i + 1;
         }
     }
 
@@ -166,7 +166,7 @@ public class TypeChecker {
             } else if (item.kind == ItemKind.EXTENSION) {
                 this.checkExtension(item.extDecl);
             }
-            i++;
+            i = i + 1;
         }
     }
 
@@ -176,7 +176,7 @@ public class TypeChecker {
         Integer i = 0;
         while (i < c.methods.length()) {
             this.checkMethod(c.methods.get(i));
-            i++;
+            i = i + 1;
         }
     }
 
@@ -186,7 +186,7 @@ public class TypeChecker {
         Integer i = 0;
         while (i < e.methods.length()) {
             this.checkMethod(e.methods.get(i));
-            i++;
+            i = i + 1;
         }
     }
 
@@ -195,7 +195,7 @@ public class TypeChecker {
         Integer i = 0;
         while (i < s.methods.length()) {
             this.checkMethod(s.methods.get(i));
-            i++;
+            i = i + 1;
         }
     }
 
@@ -204,7 +204,7 @@ public class TypeChecker {
         Integer i = 0;
         while (i < e.methods.length()) {
             this.checkMethod(e.methods.get(i));
-            i++;
+            i = i + 1;
         }
     }
 
@@ -214,7 +214,7 @@ public class TypeChecker {
         while (i < ctor.params.length()) {
             Param p = ctor.params.get(i);
             this.define(p.name, p.ty);
-            i++;
+            i = i + 1;
         }
         this.checkStmts(ctor.body);
         this.popScope();
@@ -228,7 +228,7 @@ public class TypeChecker {
         while (i < m.params.length()) {
             Param p = m.params.get(i);
             this.define(p.name, p.ty);
-            i++;
+            i = i + 1;
         }
         this.checkStmts(m.body);
         this.popScope();
@@ -239,7 +239,7 @@ public class TypeChecker {
         Integer i = 0;
         while (i < stmts.length()) {
             this.checkStmt(stmts.get(i));
-            i++;
+            i = i + 1;
         }
     }
 
@@ -260,7 +260,7 @@ public class TypeChecker {
                     this.pushScope();
                     this.checkStmts(s.elseIfs.get(i).body);
                     this.popScope();
-                    i++;
+                    i = i + 1;
                 }
             }
             if (s.elseBody.length() > 0) {
@@ -293,7 +293,7 @@ public class TypeChecker {
                     this.pushScope();
                     this.checkStmts(s.cases.get(i).body);
                     this.popScope();
-                    i++;
+                    i = i + 1;
                 }
             }
 
@@ -309,7 +309,7 @@ public class TypeChecker {
                     this.define(cc.name, cc.exType);
                     this.checkStmts(cc.body);
                     this.popScope();
-                    i++;
+                    i = i + 1;
                 }
             }
             if (s.finallyBody.length() > 0) {
@@ -348,7 +348,7 @@ public class TypeChecker {
             ScopeFrame frame = this.scopeStack.get(i) as ScopeFrame;
             AstType? ty = frame.lookup(name);
             if (ty != null) { return ty; }
-            i--;
+            i = i - 1;
         }
         return null;
     }
@@ -357,7 +357,7 @@ public class TypeChecker {
         Integer i = 0;
         while (i < this.classNames.length()) {
             if (this.classNames.get(i) == name) { return this.classItems.get(i); }
-            i++;
+            i = i + 1;
         }
         return null;
     }
@@ -366,7 +366,7 @@ public class TypeChecker {
         Integer i = 0;
         while (i < this.enumNames.length()) {
             if (this.enumNames.get(i) == name) { return this.enumItems.get(i); }
-            i++;
+            i = i + 1;
         }
         return null;
     }
@@ -375,7 +375,7 @@ public class TypeChecker {
         Integer i = 0;
         while (i < this.structNames.length()) {
             if (this.structNames.get(i) == name) { return this.structItems.get(i); }
-            i++;
+            i = i + 1;
         }
         return null;
     }
@@ -384,7 +384,7 @@ public class TypeChecker {
         Integer i = 0;
         while (i < this.exNames.length()) {
             if (this.exNames.get(i) == name) { return this.exItems.get(i); }
-            i++;
+            i = i + 1;
         }
         return null;
     }
@@ -393,7 +393,7 @@ public class TypeChecker {
         Integer i = 0;
         while (i < this.ifaceNames.length()) {
             if (this.ifaceNames.get(i) == name) { return this.ifaceItems.get(i); }
-            i++;
+            i = i + 1;
         }
         return null;
     }
@@ -402,7 +402,7 @@ public class TypeChecker {
         Integer i = 0;
         while (i < this.externFnNames.length()) {
             if (this.externFnNames.get(i) == name) { return this.externFns.get(i); }
-            i++;
+            i = i + 1;
         }
         return null;
     }
@@ -411,7 +411,7 @@ public class TypeChecker {
         Integer i = 0;
         while (i < this.extNames.length()) {
             if (this.extNames.get(i) == target) { return this.extItems.get(i); }
-            i++;
+            i = i + 1;
         }
         return null;
     }
@@ -420,7 +420,7 @@ public class TypeChecker {
         Integer i = 0;
         while (i < this.unionNames.length()) {
             if (this.unionNames.get(i) == name) { return this.unionItems.get(i); }
-            i++;
+            i = i + 1;
         }
         return null;
     }
@@ -429,7 +429,7 @@ public class TypeChecker {
         Integer i = 0;
         while (i < this.aliasNames.length()) {
             if (this.aliasNames.get(i) == name) { return this.aliasTypes.get(i); }
-            i++;
+            i = i + 1;
         }
         return null;
     }
@@ -456,14 +456,14 @@ public class TypeChecker {
                 while (i < pf.length()) {
                     FieldDecl pfd = pf.get(i) as FieldDecl;
                     result.append(pfd);
-                    i++;
+                    i = i + 1;
                 }
             }
             Integer i = 0;
             while (i < cn.fields.length()) {
                 FieldDecl cfd = cn.fields.get(i) as FieldDecl;
                 result.append(cfd);
-                i++;
+                i = i + 1;
             }
         } else {
             ExceptionDecl? ex = this.findException(name);
@@ -475,14 +475,14 @@ public class TypeChecker {
                     while (i < pf.length()) {
                         FieldDecl pfd = pf.get(i) as FieldDecl;
                         result.append(pfd);
-                        i++;
+                        i = i + 1;
                     }
                 }
                 Integer i = 0;
                 while (i < exn.fields.length()) {
                     FieldDecl exfd = exn.fields.get(i) as FieldDecl;
                     result.append(exfd);
-                    i++;
+                    i = i + 1;
                 }
             } else {
                 StructDecl? s = this.findStruct(name);
@@ -492,7 +492,7 @@ public class TypeChecker {
                     while (i < sn.fields.length()) {
                         FieldDecl sfd = sn.fields.get(i) as FieldDecl;
                         result.append(sfd);
-                        i++;
+                        i = i + 1;
                     }
                 } else {
                     UnionDecl? u = this.findUnion(name);
@@ -502,7 +502,7 @@ public class TypeChecker {
                         while (i < un.fields.length()) {
                             FieldDecl ufd = un.fields.get(i) as FieldDecl;
                             result.append(ufd);
-                            i++;
+                            i = i + 1;
                         }
                     }
                 }
@@ -517,7 +517,7 @@ public class TypeChecker {
         while (i < fields.length()) {
             FieldDecl fd = fields.get(i) as FieldDecl;
             if (fd.name == fieldName) { return i; }
-            i++;
+            i = i + 1;
         }
         return -1;
     }
@@ -530,7 +530,7 @@ public class TypeChecker {
             while (i < cn.methods.length()) {
                 MethodDecl md = cn.methods.get(i) as MethodDecl;
                 if (md.name == methodName) { return md; }
-                i++;
+                i = i + 1;
             }
             if (cn.extends_ != "") { return this.findMethodOn(cn.extends_, methodName); }
         }
@@ -541,7 +541,7 @@ public class TypeChecker {
             while (i < exn.methods.length()) {
                 MethodDecl md = exn.methods.get(i) as MethodDecl;
                 if (md.name == methodName) { return md; }
-                i++;
+                i = i + 1;
             }
         }
         StructDecl? s = this.findStruct(className);
@@ -551,7 +551,7 @@ public class TypeChecker {
             while (i < sn.methods.length()) {
                 MethodDecl md = sn.methods.get(i) as MethodDecl;
                 if (md.name == methodName) { return md; }
-                i++;
+                i = i + 1;
             }
         }
         ExtensionDecl? ext = this.findExtension(className);
@@ -561,7 +561,7 @@ public class TypeChecker {
             while (i < extn.methods.length()) {
                 MethodDecl md = extn.methods.get(i) as MethodDecl;
                 if (md.name == methodName) { return md; }
-                i++;
+                i = i + 1;
             }
         }
         return null;
@@ -583,7 +583,7 @@ public class TypeChecker {
             while (ei < en.variants.length()) {
                 EnumVariant ev = en.variants.get(ei) as EnumVariant;
                 if (ev.name == variantName) { return ei; }
-                ei++;
+                ei = ei + 1;
             }
         }
         return -1;
