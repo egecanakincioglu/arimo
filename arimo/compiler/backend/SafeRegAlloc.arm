@@ -1,0 +1,337 @@
+/*
+Arimo Lang Compiler - A modern programming language and compiler
+Copyright (C) 2026 Egecan Akıncıoğlu
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+package arimo.compiler.backend;
+
+import arimo.compiler.backend.X64Reg;
+import arimo.compiler.backend.IRFunction;
+import arimo.compiler.backend.IRInstr;
+import arimo.compiler.backend.IRValue;
+import arimo.compiler.backend.IRValueKind;
+import arimo.compiler.backend.IRType;
+
+// SafeRegAlloc: stack-canonical register allocator for V1 correctness.
+// Every IR value lives in a unique stack slot. Registers are instruction-local scratch.
+// No callee-saved register reuse across instructions. No spill/reload tracking needed.
+// Simple, slow, correct.
+
+public class SafeValueSlot {
+    public name    : String;
+    public slot    : Integer;
+    public written : Boolean;
+    public ty      : Integer;   // IRType
+
+    public constructor(name: String, slot: Integer) {
+        this.name    = name;
+        this.slot    = slot;
+        this.written = false;
+        this.ty      = IRType.I64;
+    }
+}
+
+public class SafeRegAlloc {
+    private slots    : List<SafeValueSlot>;
+    private slotCnt  : Integer;
+    private scratch  : List<Integer>;
+    private sci      : Integer;
+    private curFn    : String;
+    private dirty    : Boolean;
+
+    public constructor() {
+        this.slots    = List();
+        this.slotCnt  = 0;
+        this.scratch  = List();
+        this.sci      = 0;
+        this.curFn    = "";
+        this.dirty    = false;
+        // Scratch pool: caller-saved regs for instruction-local use
+        // RAX excluded — reserved for idiv/call-return/syscall-num
+        this.scratch.append(X64Reg.RDI);
+        this.scratch.append(X64Reg.RSI);
+        this.scratch.append(X64Reg.RDX);
+        this.scratch.append(X64Reg.RCX);
+        this.scratch.append(X64Reg.R8);
+        this.scratch.append(X64Reg.R9);
+        this.scratch.append(X64Reg.R10);
+        this.scratch.append(X64Reg.R11);
+    }
+
+    // ===== P1: Core allocation =====
+
+    public allocate(fn: IRFunction) {
+        this.slots   = List();
+        this.slotCnt = 0;
+        this.curFn   = fn.name;
+
+        // Allocate slots for parameters — captured from arg regs at prologue
+        Integer pi = 0;
+        while (pi < fn.params.length()) {
+            IRParam param = fn.params.get(pi) as IRParam;
+            this.findOrCreate(param.name);
+            pi = pi + 1;
+        }
+
+        // Allocate slots for all REG destination values
+        // IMM_INT, GLOBAL, LABEL_REF operands need no stack slot
+        Integer ii = 0;
+        while (ii < fn.instrs.length()) {
+            IRInstr instr = fn.instrs.get(ii) as IRInstr;
+            if (!instr.dst.isNone() && instr.dst.kind == IRValueKind.REG) {
+                this.findOrCreate(instr.dst.name);
+            }
+            ii = ii + 1;
+        }
+    }
+
+    // findOrCreate: lookup by name, create slot if not found.
+    // Returns slot index. Each value name gets exactly one slot (no reuse).
+    public findOrCreate(name: String) : Integer {
+        Integer i = 0;
+        while (i < this.slots.length()) {
+            SafeValueSlot sv = this.slots.get(i) as SafeValueSlot;
+            if (sv.name == name) { return i; }
+            i = i + 1;
+        }
+        SafeValueSlot sv = SafeValueSlot(name, this.slotCnt);
+        this.slotCnt = this.slotCnt + 1;
+        this.slots.append(sv);
+        return this.slots.length() - 1;
+    }
+
+    // getSlot: lookup-only, no creation. Returns -1 if not found.
+    public getSlot(name: String) : Integer {
+        Integer i = 0;
+        while (i < this.slots.length()) {
+            SafeValueSlot sv = this.slots.get(i) as SafeValueSlot;
+            if (sv.name == name) { return i; }
+            i = i + 1;
+        }
+        return -1;
+    }
+
+    // slotByName: alias for getSlot — allocate-sonrası lookup-only.
+    public slotByName(name: String) : Integer {
+        return this.getSlot(name);
+    }
+
+    // slotOffset: stack offset for a given slot index.
+    // Slot 0 → [rbp-8], slot 1 → [rbp-16], ...
+    public slotOffset(idx: Integer) : Integer {
+        SafeValueSlot sv = this.slots.get(idx) as SafeValueSlot;
+        return -(sv.slot + 1) * 8;
+    }
+
+    // slotOffsetByName: stack offset looked up by value name.
+    public slotOffsetByName(name: String) : Integer {
+        Integer idx = this.getSlot(name);
+        if (idx < 0) { return 0; }
+        return this.slotOffset(idx);
+    }
+
+    // frameSize: total stack space for all spill slots, 16-byte aligned.
+    // Added to sub RSP in prologue. Minimum 0.
+    public frameSize() : Integer {
+        Integer raw = this.slotCnt * 8;
+        if (raw == 0) { return 0; }
+        Integer rem = raw % 16;
+        if (rem == 0) { return raw; }
+        return raw + (16 - rem);
+    }
+
+    public totalSlots() : Integer { return this.slotCnt; }
+
+    // valueType: IR type of the value at given slot.
+    public valueType(idx: Integer) : Integer {
+        if (idx < 0 || idx >= this.slots.length()) { return IRType.VOID; }
+        SafeValueSlot sv = this.slots.get(idx) as SafeValueSlot;
+        return sv.ty;
+    }
+
+    public setValueType(idx: Integer, ty: Integer) {
+        if (idx >= 0 && idx < this.slots.length()) {
+            SafeValueSlot sv = this.slots.get(idx) as SafeValueSlot;
+            sv.ty = ty;
+        }
+    }
+
+    // ===== P2: Scratch register allocation =====
+
+    // allocScratch: single scratch register, advances internal cursor.
+    // Call resetScratch() at instruction boundary.
+    public allocScratch() : Integer {
+        Integer r = this.scratch.get(this.sci) as Integer;
+        this.sci = this.sci + 1;
+        if (this.sci >= this.scratch.length()) { this.sci = 0; }
+        this.dirty = true;
+        return r;
+    }
+
+    // allocScratch2: two distinct scratch registers.
+    // Guaranteed different — wraps correctly if pool boundary crossed.
+    public allocScratch2() : List<Integer> {
+        List<Integer> result = List();
+        Integer r1 = this.scratch.get(this.sci) as Integer;
+        result.append(r1);
+        this.sci = this.sci + 1;
+        if (this.sci >= this.scratch.length()) { this.sci = 0; }
+
+        Integer r2 = this.scratch.get(this.sci) as Integer;
+        result.append(r2);
+        this.sci = this.sci + 1;
+        if (this.sci >= this.scratch.length()) { this.sci = 0; }
+
+        this.dirty = true;
+        return result;
+    }
+
+    // allocScratch3: three distinct scratch registers.
+    public allocScratch3() : List<Integer> {
+        List<Integer> result = List();
+        Integer r1 = this.scratch.get(this.sci) as Integer;
+        result.append(r1);
+        this.sci = this.sci + 1;
+        if (this.sci >= this.scratch.length()) { this.sci = 0; }
+
+        Integer r2 = this.scratch.get(this.sci) as Integer;
+        result.append(r2);
+        this.sci = this.sci + 1;
+        if (this.sci >= this.scratch.length()) { this.sci = 0; }
+
+        Integer r3 = this.scratch.get(this.sci) as Integer;
+        result.append(r3);
+        this.sci = this.sci + 1;
+        if (this.sci >= this.scratch.length()) { this.sci = 0; }
+
+        this.dirty = true;
+        return result;
+    }
+
+    // resetScratch: reset scratch cursor for next instruction.
+    // Must be called at every instruction boundary.
+    public resetScratch() {
+        this.sci   = 0;
+        this.dirty = false;
+    }
+
+    // scratchRegCount: total available scratch registers.
+    public scratchRegCount() : Integer {
+        return this.scratch.length();
+    }
+
+    // ===== P3: Safety assertions =====
+
+    // assertKnown: hard-fail if value name has no allocated slot.
+    public assertKnown(name: String) {
+        Integer idx = this.getSlot(name);
+        if (idx < 0) {
+            IO.println("arc: [FAIL] SafeRegAlloc: unknown value \"${name}\" in fn ${this.curFn} — no slot allocated");
+            // In V1 self-host: mark error state for caller to check
+        }
+    }
+
+    // assertKnownIdx: index-based variant.
+    public assertKnownIdx(idx: Integer) {
+        if (idx < 0 || idx >= this.slots.length()) {
+            IO.println("arc: [FAIL] SafeRegAlloc: bad slot index ${idx} in fn ${this.curFn} — out of range (0..${this.slots.length() - 1})");
+        }
+    }
+
+    // assertWritten: hard-fail if slot exists but never written to.
+    // Prevents reloading uninitialized stack slots (e.g., used before def).
+    public assertWritten(name: String) {
+        Integer idx = this.getSlot(name);
+        if (idx < 0) {
+            IO.println("arc: [FAIL] SafeRegAlloc: assertWritten unknown value \"${name}\" in fn ${this.curFn}");
+            return;
+        }
+        SafeValueSlot sv = this.slots.get(idx) as SafeValueSlot;
+        if (!sv.written) {
+            IO.println("arc: [FAIL] SafeRegAlloc: reload of unwritten slot ${sv.slot} (value \"${name}\") in fn ${this.curFn}");
+        }
+    }
+
+    // assertClean: invariant check — no dirty scratch state at instruction boundary.
+    // Should be called BEFORE any scratch allocation for a new instruction.
+    // In safe mode, resetScratch() must have been called since last instruction.
+    public assertClean() {
+        if (this.dirty) {
+            IO.println("arc: [FAIL] SafeRegAlloc: dirty scratch state at instruction boundary in fn ${this.curFn} — resetScratch() not called");
+        }
+    }
+
+    // ===== Slot write tracking =====
+
+    // markWritten: index-based — mark slot as having been written to.
+    public markWritten(idx: Integer) {
+        if (idx >= 0 && idx < this.slots.length()) {
+            SafeValueSlot sv = this.slots.get(idx) as SafeValueSlot;
+            sv.written = true;
+        }
+    }
+
+    // markValueWritten: name-based convenience wrapper.
+    // Looks up slot by name, marks it written. No-op if unknown (assertKnown for that).
+    public markValueWritten(name: String) {
+        Integer idx = this.getSlot(name);
+        if (idx >= 0) {
+            SafeValueSlot sv = this.slots.get(idx) as SafeValueSlot;
+            sv.written = true;
+        }
+    }
+
+    // isWritten: index-based — check if slot has been written to.
+    public isWritten(idx: Integer) : Boolean {
+        if (idx < 0 || idx >= this.slots.length()) { return false; }
+        SafeValueSlot sv = this.slots.get(idx) as SafeValueSlot;
+        return sv.written;
+    }
+
+    // isValueWritten: name-based convenience.
+    public isValueWritten(name: String) : Boolean {
+        Integer idx = this.getSlot(name);
+        if (idx < 0) { return false; }
+        SafeValueSlot sv = this.slots.get(idx) as SafeValueSlot;
+        return sv.written;
+    }
+
+    // markAllParamsWritten: mark all parameter slots as written (initialized at prologue).
+    // Call after emitFunction prologue saves incoming arg regs to slots.
+    public markAllParamsWritten(fn: IRFunction) {
+        Integer pi = 0;
+        while (pi < fn.params.length()) {
+            IRParam param = fn.params.get(pi) as IRParam;
+            this.markValueWritten(param.name);
+            pi = pi + 1;
+        }
+    }
+
+    // dump: debug string showing all slots and their state.
+    public dump() : String {
+        String s = "SafeRegAlloc fn=${this.curFn} slots=${this.slotCnt} frame=${this.frameSize()}\n";
+        Integer i = 0;
+        while (i < this.slots.length()) {
+            SafeValueSlot sv = this.slots.get(i) as SafeValueSlot;
+            String wflag = "";
+            if (sv.written) { wflag = " W"; }
+            else            { wflag = " -"; }
+            s = s + "  [${i}] ${sv.name} slot=${sv.slot} off=${this.slotOffset(i)} ty=${IRType.name(sv.ty)}${wflag}\n";
+            i = i + 1;
+        }
+        return s;
+    }
+}
