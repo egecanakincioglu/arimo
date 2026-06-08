@@ -166,6 +166,7 @@ public class IRToX64 {
             this.safeRa.assertKnown(val.name);
             this.safeRa.assertWritten(val.name);
             Integer off = this.safeRa.slotOffsetByName(val.name);
+            if (off == 0) { this.safeRa.errorCode = 3; }
             this.enc.movRMem(scratchReg, X64Reg.RBP, off);
             return scratchReg;
         }
@@ -182,6 +183,7 @@ public class IRToX64 {
     private safeStoreDst(name: String, srcReg: Integer) {
         this.safeRa.assertKnown(name);
         Integer off = this.safeRa.slotOffsetByName(name);
+        if (off == 0) { this.safeRa.errorCode = 3; }
         this.enc.movMemR(X64Reg.RBP, off, srcReg);
         this.safeRa.markValueWritten(name);
     }
@@ -278,6 +280,11 @@ public class IRToX64 {
         this.frame      = frameSize;
         this.curName    = fn.name;
         this.savedCount = 0;   // no callee-saved tracking in safe mode
+
+        // DEBUG: flag large frames (potential slot explosion)
+        if (frameSize > 1024) {
+            IO.println("SAFEDBG BIGFRAME fn=${fn.name} slots=${this.safeRa.totalSlots()} frame=${frameSize}");
+        }
 
         this.enc.defineLabel(fn.name);
 

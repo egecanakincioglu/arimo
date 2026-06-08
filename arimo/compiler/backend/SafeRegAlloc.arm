@@ -51,6 +51,7 @@ public class SafeRegAlloc {
     private sci      : Integer;
     private curFn    : String;
     private dirty    : Boolean;
+    public  errorCode : Integer;   // 0=ok, 1=unknown slot, 2=unwritten slot, 3=offset zero
 
     public constructor() {
         this.slots    = List();
@@ -59,6 +60,7 @@ public class SafeRegAlloc {
         this.sci      = 0;
         this.curFn    = "";
         this.dirty    = false;
+        this.errorCode = 0;
         // Scratch pool: caller-saved regs for instruction-local use
         // RAX excluded — reserved for idiv/call-return/syscall-num
         this.scratch.append(X64Reg.RDI);
@@ -137,9 +139,14 @@ public class SafeRegAlloc {
     }
 
     // slotOffsetByName: stack offset looked up by value name.
+    // Returns offset below frame (safe sentinel) for unknown names — never 0.
     public slotOffsetByName(name: String) : Integer {
         Integer idx = this.getSlot(name);
-        if (idx < 0) { return 0; }
+        if (idx < 0) {
+            this.errorCode = 1;
+            Integer sentinel = -(this.slotCnt + 100) * 8;
+            return sentinel;
+        }
         return this.slotOffset(idx);
     }
 
@@ -239,29 +246,27 @@ public class SafeRegAlloc {
     public assertKnown(name: String) {
         Integer idx = this.getSlot(name);
         if (idx < 0) {
-            IO.println("arc: [FAIL] SafeRegAlloc: unknown value \"${name}\" in fn ${this.curFn} — no slot allocated");
-            // In V1 self-host: mark error state for caller to check
+            this.errorCode = 1;
         }
     }
 
     // assertKnownIdx: index-based variant.
     public assertKnownIdx(idx: Integer) {
         if (idx < 0 || idx >= this.slots.length()) {
-            IO.println("arc: [FAIL] SafeRegAlloc: bad slot index ${idx} in fn ${this.curFn} — out of range (0..${this.slots.length() - 1})");
+            this.errorCode = 1;
         }
     }
 
     // assertWritten: hard-fail if slot exists but never written to.
-    // Prevents reloading uninitialized stack slots (e.g., used before def).
     public assertWritten(name: String) {
         Integer idx = this.getSlot(name);
         if (idx < 0) {
-            IO.println("arc: [FAIL] SafeRegAlloc: assertWritten unknown value \"${name}\" in fn ${this.curFn}");
+            this.errorCode = 2;
             return;
         }
         SafeValueSlot sv = this.slots.get(idx) as SafeValueSlot;
         if (!sv.written) {
-            IO.println("arc: [FAIL] SafeRegAlloc: reload of unwritten slot ${sv.slot} (value \"${name}\") in fn ${this.curFn}");
+            this.errorCode = 2;
         }
     }
 

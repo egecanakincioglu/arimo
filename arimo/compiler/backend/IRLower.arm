@@ -66,15 +66,20 @@ public class IRLower {
     private allFieldClasses: List<String>;
     private classFldStarts : List<Integer>;
     private classFldCounts : List<Integer>;
+    private allStaticFieldNames  : List<String>;
+    private classStaticFldStarts : List<Integer>;
+    private classStaticFldCounts : List<Integer>;
     private methodRetNames  : List<String>;
     private methodRetClasses: List<String>;
     private teardownLabels  : List<String>;
     private curClass       : String;
     private thisReg        : String;
     private linux          : Boolean;
+    private loweringError  : Boolean;
 
     public constructor(linux: Boolean) {
         this.linux = linux;
+        this.loweringError  = false;
         this.irFns           = List();
         this.strNames        = List();
         this.strConts        = List();
@@ -98,6 +103,9 @@ public class IRLower {
         this.allFieldClasses = List();
         this.classFldStarts  = List();
         this.classFldCounts  = List();
+        this.allStaticFieldNames   = List();
+        this.classStaticFldStarts  = List();
+        this.classStaticFldCounts  = List();
         this.methodRetNames  = List();
         this.methodRetClasses = List();
         this.teardownLabels  = List();
@@ -105,6 +113,8 @@ public class IRLower {
         this.thisReg         = "";
         this.irFns.append(IRFunction("__placeholder", IRType.VOID));
     }
+
+    public hasLoweringError() : Boolean { return this.loweringError; }
 
     // ===== Class layout registration =====
 
@@ -128,6 +138,8 @@ public class IRLower {
         if (this.classIdxOf(cd.name) >= 0) { return; }
         Integer start = this.allFieldNames.length();
         Integer count = 0;
+        Integer stStart = this.allStaticFieldNames.length();
+        Integer stCount = 0;
         Integer fi = 0;
         while (fi < cd.fields.length()) {
             FieldDecl fd = cd.fields.get(fi) as FieldDecl;
@@ -135,12 +147,17 @@ public class IRLower {
                 this.allFieldNames.append(fd.name);
                 this.allFieldClasses.append(this.tyToClass(fd.ty));
                 count = count + 1;
+            } else {
+                this.allStaticFieldNames.append(fd.name);
+                stCount = stCount + 1;
             }
             fi = fi + 1;
         }
         this.classNames.append(cd.name);
         this.classFldStarts.append(start);
         this.classFldCounts.append(count);
+        this.classStaticFldStarts.append(stStart);
+        this.classStaticFldCounts.append(stCount);
         this.teardownLabels.append("");
         // Track parent class for recursive field release (inheritance chain)
         if (cd.extends_ != "" && cd.extends_.length() > 0) {
@@ -543,6 +560,14 @@ public class IRLower {
     }
 
     private emitFieldPtr(objVal: IRValue, offset: Integer) : IRValue {
+        if (objVal.kind == IRValueKind.IMM_INT && objVal.immInt == 0) {
+            IO.println("arc: [FAIL] SafeRegAlloc null field base offset=${offset} class=${this.curClass}");
+            this.loweringError = true;
+            String dummyR = this.newReg();
+            IRValue dummyV = IRValue.reg(dummyR, IRType.PTR);
+            this.emit(IRInstr.mov(dummyV, IRValue.ofInt(1, IRType.I64)));
+            return dummyV;
+        }
         String pReg = this.newReg();
         IRValue pDst = IRValue.reg(pReg, IRType.PTR);
         // Compute field pointer via MOV + ADD
@@ -988,6 +1013,28 @@ public class IRLower {
         }
 
         if (expr.kind == ExprKind.FIELD) {
+            if (expr.object.kind == ExprKind.IDENT) {
+                Integer stClsIdx = this.classIdxOf(expr.object.strVal);
+                if (stClsIdx >= 0) {
+                    Integer stFldIdx = this.fieldIdxOf(stClsIdx, expr.field);
+                    if (stFldIdx >= 0) {
+                        String stR = this.newReg();
+                        this.emit(IRInstr.mov(IRValue.reg(stR, IRType.I64), IRValue.ofInt(stFldIdx, IRType.I64)));
+                        return IRValue.reg(stR, IRType.I64);
+                    }
+                    Integer stStart = this.classStaticFldStarts.get(stClsIdx) as Integer;
+                    Integer stCount = this.classStaticFldCounts.get(stClsIdx) as Integer;
+                    Integer sfi = 0;
+                    while (sfi < stCount) {
+                        if (this.allStaticFieldNames.get(stStart + sfi) as String == expr.field) {
+                            String stR = this.newReg();
+                            this.emit(IRInstr.mov(IRValue.reg(stR, IRType.I64), IRValue.ofInt(sfi, IRType.I64)));
+                            return IRValue.reg(stR, IRType.I64);
+                        }
+                        sfi = sfi + 1;
+                    }
+                }
+            }
             IRValue objVal = this.lowerExpr(expr.object);
             String objCls  = this.inferClass(expr.object);
             Integer clsIdx = this.classIdxOf(objCls);
@@ -1607,6 +1654,11 @@ public class IRLower {
             if (!libcRes.isNone()) { return libcRes; }
         }
         Integer clsIdx = this.classIdxOf(class_);
+        // If class_ is not a registered class, parser generated CTOR for what
+        // is actually a static method call on the current class (e.g. foo() → T.foo()).
+        if (clsIdx < 0 && this.curClass != "") {
+            return this.lowerStaticCall(this.curClass, class_, args);
+        }
         Integer sz = 16;
         if (clsIdx >= 0) { sz = this.classSizeBytes(clsIdx); }
         IRValue objPtr = this.emitHeapAlloc(IRValue.ofInt(sz, IRType.I64));
@@ -1637,8 +1689,15 @@ public class IRLower {
             if (obj.strVal == "Env") {
                 return this.lowerStaticCall("Env", method, args);
             }
+            if (obj.strVal == "File") {
+                return this.lowerStaticCall("File", method, args);
+            }
+            if (obj.strVal == "Process") {
+                return this.lowerStaticCall("Process", method, args);
+            }
             // Static method call on known class: ClassName.method()
-            if (this.classIdxOf(obj.strVal) >= 0) {
+            // Guarded by varLookup — only redirect if name is NOT a local variable.
+            if (this.varLookup(obj.strVal) == "" && this.classIdxOf(obj.strVal) >= 0) {
                 return this.lowerStaticCall(obj.strVal, method, args);
             }
         }
@@ -3000,6 +3059,7 @@ public class IRLower {
         this.generateToLower();
         this.generateSystem();
         this.generateBuildArgs();
+        this.generateFileExists();
         this.generateStartFn();
     }
 
@@ -3185,5 +3245,27 @@ public class IRLower {
         // execve failed → fall through to error
         this.emit(IRInstr.label("sy_err"));
         this.emit(IRInstr.ret(IRValue.ofInt(-1, IRType.I64)));
+    }
+
+    private generateFileExists() {
+        this.beginFn("File__exists", IRType.I64);
+        this.addParamToLast("path", IRType.PTR);
+        this.resetFnContext(); this.emit(IRInstr.label("entry"));
+        IRValue pathV = IRValue.reg("path", IRType.PTR);
+        String modeR = this.newReg(); IRValue modeV = IRValue.reg(modeR, IRType.PTR);
+        this.emit(IRInstr.mov(modeV, IRValue.global(this.internStr("r"))));
+        List<IRValue> foArgs = List(); foArgs.append(pathV); foArgs.append(modeV);
+        String fR = this.newReg(); IRValue fV = IRValue.reg(fR, IRType.I64);
+        this.emit(IRInstr.call(fV, "__arimo_fopen", foArgs));
+        String eqL  = this.newLabel("fe_fail"); String endL = this.newLabel("fe_end");
+        String retR = this.newReg(); IRValue retV = IRValue.reg(retR, IRType.I64);
+        this.emit(IRInstr.cmp(fV, IRValue.ofInt(0, IRType.I64)));
+        this.emit(IRInstr.branch(IROpcode.JE, eqL));
+        this.emit(IRInstr.mov(retV, IRValue.ofInt(1, IRType.I64)));
+        this.emit(IRInstr.jmp(endL));
+        this.emit(IRInstr.label(eqL));
+        this.emit(IRInstr.mov(retV, IRValue.ofInt(0, IRType.I64)));
+        this.emit(IRInstr.label(endL));
+        this.emit(IRInstr.ret(retV));
     }
 }
