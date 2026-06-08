@@ -310,6 +310,14 @@ public class IRLower {
     private isIntegerExpr(expr: Expr) : Boolean {
         if (expr.kind == ExprKind.INT_LIT)  { return true; }
         if (expr.kind == ExprKind.BOOL_LIT) { return true; }
+        if (expr.kind == ExprKind.IDENT) {
+            String cls = this.varClassOf(expr.strVal);
+            return cls == "Integer" || cls == "Boolean";
+        }
+        if (expr.kind == ExprKind.FIELD) {
+            String cls = this.inferClass(expr);
+            return cls == "Integer" || cls == "Boolean";
+        }
         if (expr.kind == ExprKind.BINOP) {
             Integer bop = expr.op;
             if (bop == BinaryOp.ADD || bop == BinaryOp.SUB ||
