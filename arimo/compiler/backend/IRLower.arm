@@ -1695,6 +1695,11 @@ public class IRLower {
             if (obj.strVal == "Process") {
                 return this.lowerStaticCall("Process", method, args);
             }
+            // Static method call on known class: ClassName.method()
+            // Guarded by varLookup — only redirect if name is NOT a local variable.
+            if (this.varLookup(obj.strVal) == "" && this.classIdxOf(obj.strVal) >= 0) {
+                return this.lowerStaticCall(obj.strVal, method, args);
+            }
         }
 
         IRValue objVal = this.lowerExpr(obj);
