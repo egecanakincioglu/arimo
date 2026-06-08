@@ -1451,6 +1451,30 @@ public class IRLower {
             this.emit(IRInstr.load(IRValue.reg(a0Reg, IRType.PTR), IRValue.reg(avReg, IRType.PTR), IRType.PTR));
             return IRValue.reg(a0Reg, IRType.PTR);
         }
+        // Process.exec(cmd) → __arimo_system (fork+execve+waitpid)
+        if (class_ == "Process" && method == "exec") {
+            IRValue cmdVal = this.lowerExpr(args.get(0) as Expr);
+            String retR = this.newReg();
+            List<IRValue> sArgs = List(); sArgs.append(cmdVal);
+            this.emit(IRInstr.call(IRValue.reg(retR, IRType.I64), "__arimo_system", sArgs));
+            return IRValue.reg(retR, IRType.I64);
+        }
+        // File.write(path, content) → File__write wrapper (open + write + close)
+        if (class_ == "File" && method == "write") {
+            IRValue pathVal    = this.lowerExpr(args.get(0) as Expr);
+            IRValue contentVal = this.lowerExpr(args.get(1) as Expr);
+            List<IRValue> fwArgs = List(); fwArgs.append(pathVal); fwArgs.append(contentVal);
+            this.emit(IRInstr.call(IRValue.reg(this.newReg(), IRType.VOID), "File__write", fwArgs));
+            return IRValue.none();
+        }
+        // File.read(path) → File__read wrapper (open + read + close)
+        if (class_ == "File" && method == "read") {
+            IRValue pathVal = this.lowerExpr(args.get(0) as Expr);
+            String retR = this.newReg();
+            List<IRValue> frArgs = List(); frArgs.append(pathVal);
+            this.emit(IRInstr.call(IRValue.reg(retR, IRType.PTR), "File__read", frArgs));
+            return IRValue.reg(retR, IRType.PTR);
+        }
         // Generic static call fallback
         String fnName = "${class_}__${method}";
         List<IRValue> callArgsFn = List();
@@ -3060,6 +3084,8 @@ public class IRLower {
         this.generateSystem();
         this.generateBuildArgs();
         this.generateFileExists();
+        this.generateFileRead();
+        this.generateFileWrite();
         this.generateStartFn();
     }
 
@@ -3267,5 +3293,137 @@ public class IRLower {
         this.emit(IRInstr.mov(retV, IRValue.ofInt(0, IRType.I64)));
         this.emit(IRInstr.label(endL));
         this.emit(IRInstr.ret(retV));
+    }
+
+    // generateFileWrite: native File__write(path, content) → Void helper.
+    // Opens path write-truncate, writes content via strlen+write syscall, closes.
+    private generateFileWrite() {
+        this.beginFn("File__write", IRType.VOID);
+        this.addParamToLast("path",    IRType.PTR);
+        this.addParamToLast("content", IRType.PTR);
+        this.resetFnContext(); this.emit(IRInstr.label("entry"));
+        IRValue pathV    = IRValue.reg("path",    IRType.PTR);
+        IRValue contentV = IRValue.reg("content", IRType.PTR);
+
+        // fd = __arimo_fopen(path, "w")
+        String modeR = this.newReg(); IRValue modeV = IRValue.reg(modeR, IRType.PTR);
+        this.emit(IRInstr.mov(modeV, IRValue.global(this.internStr("w"))));
+        List<IRValue> foArgs = List(); foArgs.append(pathV); foArgs.append(modeV);
+        String fdR = this.newReg(); IRValue fdV = IRValue.reg(fdR, IRType.I64);
+        this.emit(IRInstr.call(fdV, "__arimo_fopen", foArgs));
+
+        // if fd == 0 → return
+        this.emit(IRInstr.cmp(fdV, IRValue.ofInt(0, IRType.I64)));
+        this.emit(IRInstr.branch(IROpcode.JE, "fw_done"));
+
+        // len = strlen(content)
+        String lenR = this.newReg(); IRValue lenV = IRValue.reg(lenR, IRType.I64);
+        List<IRValue> slArgs = List(); slArgs.append(contentV);
+        this.emit(IRInstr.call(lenV, "__arimo_strlen", slArgs));
+
+        // write(fd, content, len) → syscall 1
+        List<IRValue> wrArgs = List(); wrArgs.append(fdV);
+        wrArgs.append(contentV); wrArgs.append(lenV);
+        String wrR = this.newReg();
+        this.emit(IRInstr.syscall(IRValue.reg(wrR, IRType.I64), 1, wrArgs));
+
+        // close(fd) → syscall 3
+        List<IRValue> clArgs = List(); clArgs.append(fdV);
+        String clR = this.newReg();
+        this.emit(IRInstr.syscall(IRValue.reg(clR, IRType.I64), 3, clArgs));
+
+        this.emit(IRInstr.label("fw_done"));
+        this.emit(IRInstr.retVoid());
+    }
+
+    // generateFileRead: native File__read(path) → PTR helper.
+    // Opens path read-only, reads entire file into mmap-allocated buffer,
+    // null-terminates, returns pointer. Returns empty string on any error.
+    private generateFileRead() {
+        this.beginFn("File__read", IRType.PTR);
+        this.addParamToLast("path", IRType.PTR);
+        this.resetFnContext(); this.emit(IRInstr.label("entry"));
+        IRValue pathV = IRValue.reg("path", IRType.PTR);
+
+        // fd = __arimo_fopen(path, "r")
+        String modeR = this.newReg(); IRValue modeV = IRValue.reg(modeR, IRType.PTR);
+        this.emit(IRInstr.mov(modeV, IRValue.global(this.internStr("r"))));
+        List<IRValue> foArgs = List(); foArgs.append(pathV); foArgs.append(modeV);
+        String fdR = this.newReg(); IRValue fdV = IRValue.reg(fdR, IRType.I64);
+        this.emit(IRInstr.call(fdV, "__arimo_fopen", foArgs));
+
+        // if fd == 0 → return ""
+        String emptyR = this.newReg(); IRValue emptyV = IRValue.reg(emptyR, IRType.PTR);
+        this.emit(IRInstr.mov(emptyV, IRValue.global(this.internStr(""))));
+        this.emit(IRInstr.cmp(fdV, IRValue.ofInt(0, IRType.I64)));
+        this.emit(IRInstr.branch(IROpcode.JE, "fr_done_empty"));
+
+        // size = lseek(fd, 0, SEEK_END=2)  → syscall 8
+        List<IRValue> lseArgs = List(); lseArgs.append(fdV);
+        lseArgs.append(IRValue.ofInt(0, IRType.I64));
+        lseArgs.append(IRValue.ofInt(2, IRType.I64));
+        String szR = this.newReg(); IRValue szV = IRValue.reg(szR, IRType.I64);
+        this.emit(IRInstr.syscall(szV, 8, lseArgs));
+
+        // if size < 0 → close and return ""
+        this.emit(IRInstr.cmp(szV, IRValue.ofInt(0, IRType.I64)));
+        this.emit(IRInstr.branch(IROpcode.JL, "fr_bad"));
+
+        // lseek(fd, 0, SEEK_SET=0) → rewind
+        List<IRValue> lse2Args = List(); lse2Args.append(fdV);
+        lse2Args.append(IRValue.ofInt(0, IRType.I64));
+        lse2Args.append(IRValue.ofInt(0, IRType.I64));
+        String igR = this.newReg();
+        this.emit(IRInstr.syscall(IRValue.reg(igR, IRType.I64), 8, lse2Args));
+
+        // allocSize = size + 1 (null terminator), minimum 1
+        String asR = this.newReg(); IRValue asV = IRValue.reg(asR, IRType.I64);
+        this.emit(IRInstr.binop(IROpcode.ADD, asV, szV, IRValue.ofInt(1, IRType.I64)));
+
+        // buf = mmap(0, allocSize, PROT_RW=3, MAP_PRIVATE|ANON=34, -1, 0) → syscall 9
+        List<IRValue> mmArgs = List();
+        mmArgs.append(IRValue.ofInt(0, IRType.I64));
+        mmArgs.append(asV);
+        mmArgs.append(IRValue.ofInt(3, IRType.I64));
+        mmArgs.append(IRValue.ofInt(34, IRType.I64));
+        mmArgs.append(IRValue.ofInt(-1, IRType.I64));
+        mmArgs.append(IRValue.ofInt(0, IRType.I64));
+        String bufR = this.newReg(); IRValue bufV = IRValue.reg(bufR, IRType.PTR);
+        this.emit(IRInstr.syscall(bufV, 9, mmArgs));
+
+        // if buf == 0 (mmap failed) → close and return ""
+        this.emit(IRInstr.cmp(bufV, IRValue.ofInt(0, IRType.I64)));
+        this.emit(IRInstr.branch(IROpcode.JE, "fr_bad"));
+
+        // n = read(fd, buf, size) → syscall 0
+        List<IRValue> rdArgs = List(); rdArgs.append(fdV);
+        rdArgs.append(bufV); rdArgs.append(szV);
+        String nR = this.newReg(); IRValue nV = IRValue.reg(nR, IRType.I64);
+        this.emit(IRInstr.syscall(nV, 0, rdArgs));
+
+        // close(fd) → syscall 3
+        List<IRValue> clArgs = List(); clArgs.append(fdV);
+        String clR = this.newReg();
+        this.emit(IRInstr.syscall(IRValue.reg(clR, IRType.I64), 3, clArgs));
+
+        // if n < 0 → return ""
+        this.emit(IRInstr.cmp(nV, IRValue.ofInt(0, IRType.I64)));
+        this.emit(IRInstr.branch(IROpcode.JL, "fr_done_empty"));
+
+        // buf[n] = 0 → null-terminate
+        String offR = this.newReg(); IRValue offV = IRValue.reg(offR, IRType.PTR);
+        this.emit(IRInstr.binop(IROpcode.ADD, offV, bufV, nV));
+        this.emit(IRInstr.store(IRValue.ofInt(0, IRType.I8), offV, IRType.I8));
+
+        // return buf
+        this.emit(IRInstr.ret(bufV));
+
+        // Error/empty paths
+        this.emit(IRInstr.label("fr_bad"));
+        List<IRValue> cl2Args = List(); cl2Args.append(fdV);
+        String cl2R = this.newReg();
+        this.emit(IRInstr.syscall(IRValue.reg(cl2R, IRType.I64), 3, cl2Args));
+        this.emit(IRInstr.label("fr_done_empty"));
+        this.emit(IRInstr.ret(emptyV));
     }
 }

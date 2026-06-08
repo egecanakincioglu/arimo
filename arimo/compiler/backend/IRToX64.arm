@@ -167,6 +167,9 @@ public class IRToX64 {
             this.safeRa.assertWritten(val.name);
             Integer off = this.safeRa.slotOffsetByName(val.name);
             if (off == 0) { this.safeRa.errorCode = 3; }
+            if (this.curName.contains("tokenize")) {
+                IO.println("SAFEDBG LOAD fn=${this.curName} name=${val.name} off=${off}");
+            }
             this.enc.movRMem(scratchReg, X64Reg.RBP, off);
             return scratchReg;
         }
@@ -184,6 +187,9 @@ public class IRToX64 {
         this.safeRa.assertKnown(name);
         Integer off = this.safeRa.slotOffsetByName(name);
         if (off == 0) { this.safeRa.errorCode = 3; }
+        if (this.curName.contains("tokenize")) {
+            IO.println("SAFEDBG STORE fn=${this.curName} name=${name} off=${off}");
+        }
         this.enc.movMemR(X64Reg.RBP, off, srcReg);
         this.safeRa.markValueWritten(name);
     }
@@ -284,6 +290,15 @@ public class IRToX64 {
         // DEBUG: flag large frames (potential slot explosion)
         if (frameSize > 1024) {
             IO.println("SAFEDBG BIGFRAME fn=${fn.name} slots=${this.safeRa.totalSlots()} frame=${frameSize}");
+        }
+        // DEBUG: slot dump for tokenize
+        if (fn.name.contains("tokenize")) {
+            IO.println("SAFEDBG SLOTS fn=${fn.name} slots=${this.safeRa.totalSlots()} frame=${frameSize}");
+            Integer sdi = 0;
+            while (sdi < this.safeRa.totalSlots()) {
+                IO.println("SAFEDBG SLOT idx=${sdi} off=${this.safeRa.slotOffset(sdi)}");
+                sdi = sdi + 1;
+            }
         }
 
         this.enc.defineLabel(fn.name);
@@ -508,7 +523,8 @@ public class IRToX64 {
             Integer sr = this.loadVal(src);
             Integer dr = this.dstReg(instr.dst.name);
             if (dr != sr) { this.enc.movRR(dr, sr); }
-            this.enc.notR(dr);
+            this.enc.movRI(X64Reg.R11, 1);
+            this.enc.xorRR(dr, X64Reg.R11);
             this.flushDst(instr.dst.name, dr);
             return;
         }
@@ -694,6 +710,34 @@ public class IRToX64 {
 
     private emitInstrSafe(instr: IRInstr) {
         Integer op = instr.op;
+        if ((this.curName.contains("tokenize") || this.curName.contains("main") || this.curName.contains("T__main")) && (op == IROpcode.CMP || op == IROpcode.JE || op == IROpcode.XOR || op == IROpcode.ADD ||
+            op == IROpcode.JNE || op == IROpcode.JMP || op == IROpcode.MOV)) {
+            String opName = "?";
+            if (op == IROpcode.CMP) { opName = "CMP"; }
+            if (op == IROpcode.JE)  { opName = "JE";  }
+            if (op == IROpcode.JNE) { opName = "JNE"; }
+            if (op == IROpcode.JMP) { opName = "JMP"; }
+            if (op == IROpcode.MOV) { opName = "MOV"; }
+            if (op == IROpcode.XOR) { opName = "XOR"; }
+            if (op == IROpcode.ADD) { opName = "ADD"; }
+            String dName = "";
+            if (!instr.dst.isNone() && instr.dst.kind == IRValueKind.REG) { dName = instr.dst.name; }
+            String aName = "";
+            if (instr.operands.length() > 0) {
+                IRValue a = instr.operands.get(0) as IRValue;
+                if (a.kind == IRValueKind.REG) { aName = a.name; }
+                else if (a.kind == IRValueKind.IMM_INT) { aName = "IMM(${a.immInt})"; }
+            }
+            String bName = "";
+            if (instr.operands.length() > 1) {
+                IRValue b = instr.operands.get(1) as IRValue;
+                if (b.kind == IRValueKind.REG) { bName = b.name; }
+                else if (b.kind == IRValueKind.IMM_INT) { bName = "IMM(${b.immInt})"; }
+            }
+            String lbl = "";
+            if (instr.label.length() > 0) { lbl = " lbl=${instr.label}"; }
+            IO.println("SAFEDBG IR fn=${this.curName} op=${opName} dst=${dName} a=${aName} b=${bName}${lbl}");
+        }
 
         // --- Control flow (no register usage) ---
 
@@ -812,13 +856,15 @@ public class IRToX64 {
             return;
         }
 
-        // --- NOT ---
+        // --- NOT (boolean: XOR with 1, not bitwise NOT) ---
 
         if (op == IROpcode.NOT) {
-            Integer sr = this.safeRa.allocScratch();
+            List<Integer> regs = this.safeRa.allocScratch2();
             IRValue src = instr.operands.get(0) as IRValue;
-            sr = this.safeLoadVal(src, sr);
-            this.enc.notR(sr);
+            Integer sr  = this.safeLoadVal(src, regs.get(0) as Integer);
+            Integer one = regs.get(1) as Integer;
+            this.enc.movRI(one, 1);
+            this.enc.xorRR(sr, one);
             this.safeStoreDst(instr.dst.name, sr);
             return;
         }
