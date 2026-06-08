@@ -789,9 +789,28 @@ public class IRToX64 {
         if (op == IROpcode.ADD || op == IROpcode.SUB ||
             op == IROpcode.AND || op == IROpcode.OR  || op == IROpcode.XOR ||
             op == IROpcode.MUL) {
-            List<Integer> regs = this.safeRa.allocScratch3();
             IRValue a = instr.operands.get(0) as IRValue;
             IRValue b = instr.operands.get(1) as IRValue;
+            // ADD with IMM_INT: use LEA to encode displacement directly.
+            if (op == IROpcode.ADD && b.kind == IRValueKind.IMM_INT) {
+                List<Integer> regs = this.safeRa.allocScratch2();
+                Integer ra = this.safeLoadVal(a, regs.get(0) as Integer);
+                Integer dr = regs.get(1) as Integer;
+                this.enc.leaMem(dr, ra, b.immInt);
+                this.safeStoreDst(instr.dst.name, dr);
+                return;
+            }
+            // SUB with IMM_INT: use subRI to avoid scratch register for immediate.
+            if (op == IROpcode.SUB && b.kind == IRValueKind.IMM_INT) {
+                List<Integer> regs = this.safeRa.allocScratch2();
+                Integer ra = this.safeLoadVal(a, regs.get(0) as Integer);
+                Integer dr = regs.get(1) as Integer;
+                if (dr != ra) { this.enc.movRR(dr, ra); }
+                this.enc.subRI(dr, b.immInt);
+                this.safeStoreDst(instr.dst.name, dr);
+                return;
+            }
+            List<Integer> regs = this.safeRa.allocScratch3();
             Integer ra = this.safeLoadVal(a, regs.get(0) as Integer);
             Integer rb = this.safeLoadVal(b, regs.get(1) as Integer);
             Integer dr = regs.get(2) as Integer;
@@ -872,13 +891,19 @@ public class IRToX64 {
         // --- CMP ---
 
         if (op == IROpcode.CMP) {
-            List<Integer> regs = this.safeRa.allocScratch2();
             IRValue a = instr.operands.get(0) as IRValue;
             IRValue b = instr.operands.get(1) as IRValue;
+            // CMP with IMM: use cmpRI to avoid scratch register for the immediate
+            if (b.kind == IRValueKind.IMM_INT) {
+                Integer sr = this.safeRa.allocScratch();
+                Integer ra = this.safeLoadVal(a, sr);
+                this.enc.cmpRI(ra, b.immInt);
+                return;
+            }
+            List<Integer> regs = this.safeRa.allocScratch2();
             Integer ra = this.safeLoadVal(a, regs.get(0) as Integer);
             Integer rb = this.safeLoadVal(b, regs.get(1) as Integer);
             this.enc.cmpRR(ra, rb);
-            // CMP has no dst — flags are set, consumed by following branch
             return;
         }
 
