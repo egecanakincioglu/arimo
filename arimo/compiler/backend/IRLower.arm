@@ -1451,6 +1451,14 @@ public class IRLower {
             this.emit(IRInstr.load(IRValue.reg(a0Reg, IRType.PTR), IRValue.reg(avReg, IRType.PTR), IRType.PTR));
             return IRValue.reg(a0Reg, IRType.PTR);
         }
+        // Process.exec(cmd) → __arimo_system (fork+execve+waitpid)
+        if (class_ == "Process" && method == "exec") {
+            IRValue cmdVal = this.lowerExpr(args.get(0) as Expr);
+            String retR = this.newReg();
+            List<IRValue> sArgs = List(); sArgs.append(cmdVal);
+            this.emit(IRInstr.call(IRValue.reg(retR, IRType.I64), "__arimo_system", sArgs));
+            return IRValue.reg(retR, IRType.I64);
+        }
         // File.write(path, content) → File__write wrapper (open + write + close)
         if (class_ == "File" && method == "write") {
             IRValue pathVal    = this.lowerExpr(args.get(0) as Expr);
