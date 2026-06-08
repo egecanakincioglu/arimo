@@ -1451,6 +1451,14 @@ public class IRLower {
             this.emit(IRInstr.load(IRValue.reg(a0Reg, IRType.PTR), IRValue.reg(avReg, IRType.PTR), IRType.PTR));
             return IRValue.reg(a0Reg, IRType.PTR);
         }
+        // File.write(path, content) → File__write wrapper (open + write + close)
+        if (class_ == "File" && method == "write") {
+            IRValue pathVal    = this.lowerExpr(args.get(0) as Expr);
+            IRValue contentVal = this.lowerExpr(args.get(1) as Expr);
+            List<IRValue> fwArgs = List(); fwArgs.append(pathVal); fwArgs.append(contentVal);
+            this.emit(IRInstr.call(IRValue.reg(this.newReg(), IRType.VOID), "File__write", fwArgs));
+            return IRValue.none();
+        }
         // File.read(path) → File__read wrapper (open + read + close)
         if (class_ == "File" && method == "read") {
             IRValue pathVal = this.lowerExpr(args.get(0) as Expr);
@@ -3069,6 +3077,7 @@ public class IRLower {
         this.generateBuildArgs();
         this.generateFileExists();
         this.generateFileRead();
+        this.generateFileWrite();
         this.generateStartFn();
     }
 
@@ -3276,6 +3285,47 @@ public class IRLower {
         this.emit(IRInstr.mov(retV, IRValue.ofInt(0, IRType.I64)));
         this.emit(IRInstr.label(endL));
         this.emit(IRInstr.ret(retV));
+    }
+
+    // generateFileWrite: native File__write(path, content) → Void helper.
+    // Opens path write-truncate, writes content via strlen+write syscall, closes.
+    private generateFileWrite() {
+        this.beginFn("File__write", IRType.VOID);
+        this.addParamToLast("path",    IRType.PTR);
+        this.addParamToLast("content", IRType.PTR);
+        this.resetFnContext(); this.emit(IRInstr.label("entry"));
+        IRValue pathV    = IRValue.reg("path",    IRType.PTR);
+        IRValue contentV = IRValue.reg("content", IRType.PTR);
+
+        // fd = __arimo_fopen(path, "w")
+        String modeR = this.newReg(); IRValue modeV = IRValue.reg(modeR, IRType.PTR);
+        this.emit(IRInstr.mov(modeV, IRValue.global(this.internStr("w"))));
+        List<IRValue> foArgs = List(); foArgs.append(pathV); foArgs.append(modeV);
+        String fdR = this.newReg(); IRValue fdV = IRValue.reg(fdR, IRType.I64);
+        this.emit(IRInstr.call(fdV, "__arimo_fopen", foArgs));
+
+        // if fd == 0 → return
+        this.emit(IRInstr.cmp(fdV, IRValue.ofInt(0, IRType.I64)));
+        this.emit(IRInstr.branch(IROpcode.JE, "fw_done"));
+
+        // len = strlen(content)
+        String lenR = this.newReg(); IRValue lenV = IRValue.reg(lenR, IRType.I64);
+        List<IRValue> slArgs = List(); slArgs.append(contentV);
+        this.emit(IRInstr.call(lenV, "__arimo_strlen", slArgs));
+
+        // write(fd, content, len) → syscall 1
+        List<IRValue> wrArgs = List(); wrArgs.append(fdV);
+        wrArgs.append(contentV); wrArgs.append(lenV);
+        String wrR = this.newReg();
+        this.emit(IRInstr.syscall(IRValue.reg(wrR, IRType.I64), 1, wrArgs));
+
+        // close(fd) → syscall 3
+        List<IRValue> clArgs = List(); clArgs.append(fdV);
+        String clR = this.newReg();
+        this.emit(IRInstr.syscall(IRValue.reg(clR, IRType.I64), 3, clArgs));
+
+        this.emit(IRInstr.label("fw_done"));
+        this.emit(IRInstr.retVoid());
     }
 
     // generateFileRead: native File__read(path) → PTR helper.
