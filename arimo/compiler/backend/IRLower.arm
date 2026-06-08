@@ -1654,6 +1654,11 @@ public class IRLower {
             if (!libcRes.isNone()) { return libcRes; }
         }
         Integer clsIdx = this.classIdxOf(class_);
+        // If class_ is not a registered class, parser generated CTOR for what
+        // is actually a static method call on the current class (e.g. foo() → T.foo()).
+        if (clsIdx < 0 && this.curClass != "") {
+            return this.lowerStaticCall(this.curClass, class_, args);
+        }
         Integer sz = 16;
         if (clsIdx >= 0) { sz = this.classSizeBytes(clsIdx); }
         IRValue objPtr = this.emitHeapAlloc(IRValue.ofInt(sz, IRType.I64));
